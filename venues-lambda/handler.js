@@ -44,6 +44,7 @@ exports.handler = async (event, context) => {
     path: event.path,
     pathParameters: event.pathParameters
   });
+  console.log('🚀 CI/CD test deployment');
 
   context.callbackWaitsForEmptyEventLoop = false;
 
