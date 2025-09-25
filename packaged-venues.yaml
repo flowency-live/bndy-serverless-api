@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: BNDY Venues Lambda Function - First deployment test
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+Resources:
+  BndyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName:
+        Ref: Stage
+      EndpointConfiguration: EDGE
+  VenuesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://bndy-deployment-artifacts-1758805276/8ce8cf28b61d713629fd2de677757922
+      Handler: handler.handler
+      Runtime: nodejs18.x
+      MemorySize: 512
+      Timeout: 30
+      Description: BNDY Venues API - handles /api/venues endpoints
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - secretsmanager:GetSecretValue
+          Resource:
+          - arn:aws:secretsmanager:eu-west-2:771551874768:secret:bndy-production-aurora-password-v2*
+      Events:
+        GetAllVenues:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: BndyApi
+            Path: /api/venues
+            Method: get
+        GetVenueById:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: BndyApi
+            Path: /api/venues/{id}
+            Method: get
+Outputs:
+  BndyApiUrl:
+    Description: API Gateway endpoint URL
+    Value:
+      Fn::Sub: https://${BndyApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-ApiUrl

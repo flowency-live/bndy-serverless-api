@@ -1,0 +1,47 @@
+name: Deploy to AWS Lambda
+
+on:
+  push:
+    branches: [master, main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install dependencies for venues-lambda
+      run: |
+        cd venues-lambda && npm ci
+        cd ../auth-lambda && npm ci || true
+        cd ../bands-lambda && npm ci || true
+        cd ../events-lambda && npm ci || true
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: eu-west-2
+
+    - name: Install SAM CLI
+      uses: aws-actions/setup-sam@v2
+
+    - name: Build SAM application
+      run: sam build
+
+    - name: Deploy to AWS
+      run: |
+        sam deploy \
+          --no-confirm-changeset \
+          --no-fail-on-empty-changeset \
+          --stack-name bndy-serverless-api \
+          --s3-bucket ${{ secrets.DEPLOYMENT_BUCKET }} \
+          --capabilities CAPABILITY_IAM \
+          --parameter-overrides Stage=prod

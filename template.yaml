@@ -9,12 +9,6 @@ Globals:
     Environment:
       Variables:
         NODE_ENV: production
-    VpcConfig:
-      SecurityGroupIds:
-        - sg-0123456789abcdef0  # Update with your VPC security group
-      SubnetIds:
-        - subnet-12345678  # Update with your private subnets
-        - subnet-87654321
 
 Parameters:
   Stage:
@@ -32,7 +26,7 @@ Resources:
       Cors:
         AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
         AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Cookie'"
-        AllowOrigin: "'*'"
+        AllowOrigin: "'https://backstage.bndy.co.uk,https://d3cewujswmjafa.cloudfront.net'"
         AllowCredentials: true
 
   # Venues Lambda Function
