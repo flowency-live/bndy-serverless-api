@@ -1,0 +1,12 @@
+{
+  "name": "bndy-serverless-api",
+  "version": "1.0.0",
+  "description": "BNDY Serverless API - Lambda Functions with DynamoDB",
+  "main": "import-venues.js",
+  "dependencies": {
+    "aws-sdk": "^2.1467.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

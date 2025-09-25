@@ -157,6 +157,52 @@ Resources:
             Path: /admin/events/band/{bandId}
             Method: get
 
+  # Artists Lambda Function
+  ArtistsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: artists-lambda/
+      Handler: handler.handler
+      MemorySize: 512
+      Description: BNDY Artists API - handles /api/artists endpoints
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Events:
+        GetAllArtists:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/artists
+            Method: get
+        GetArtistById:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/artists/{id}
+            Method: get
+
+  # Songs Lambda Function
+  SongsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: songs-lambda/
+      Handler: handler.handler
+      MemorySize: 512
+      Description: BNDY Songs API - handles /api/songs endpoints
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Events:
+        GetAllSongs:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/songs
+            Method: get
+        GetSongById:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/songs/{id}
+            Method: get
+
 Outputs:
   BndyApi:
     Description: "API Gateway endpoint URL for BNDY API"
@@ -175,3 +221,15 @@ Outputs:
     Value: !GetAtt AuthFunction.Arn
     Export:
       Name: !Sub "${AWS::StackName}-AuthFunctionArn"
+
+  ArtistsFunctionArn:
+    Description: "Artists Lambda Function ARN"
+    Value: !GetAtt ArtistsFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ArtistsFunctionArn"
+
+  SongsFunctionArn:
+    Description: "Songs Lambda Function ARN"
+    Value: !GetAtt SongsFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-SongsFunctionArn"

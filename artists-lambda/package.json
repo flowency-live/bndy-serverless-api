@@ -1,0 +1,12 @@
+{
+  "name": "bndy-artists-lambda",
+  "version": "1.0.0",
+  "description": "BNDY Artists Lambda Function - DynamoDB Version",
+  "main": "handler.js",
+  "dependencies": {
+    "aws-sdk": "^2.1467.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
