@@ -37,19 +37,7 @@ Resources:
       Handler: handler.handler
       MemorySize: 512
       Description: BNDY Venues API - handles /api/venues endpoints
-      Policies:
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - secretsmanager:GetSecretValue
-              Resource:
-                - "arn:aws:secretsmanager:eu-west-2:771551874768:secret:bndy-production-aurora-password-v2*"
-            - Effect: Allow
-              Action:
-                - rds:DescribeDBClusters
-                - rds:DescribeDBInstances
-              Resource: "*"
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         GetAllVenues:
           Type: Api
@@ -72,19 +60,7 @@ Resources:
       Handler: handler.handler
       MemorySize: 512
       Description: BNDY Authentication API - handles OAuth and sessions
-      Policies:
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - secretsmanager:GetSecretValue
-              Resource:
-                - "arn:aws:secretsmanager:eu-west-2:771551874768:secret:bndy-production-aurora-password-v2*"
-            - Effect: Allow
-              Action:
-                - rds:DescribeDBClusters
-                - rds:DescribeDBInstances
-              Resource: "*"
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         AuthGoogle:
           Type: Api
@@ -113,19 +89,7 @@ Resources:
       Handler: handler.handler
       MemorySize: 512
       Description: BNDY Bands/Artists API - handles band management
-      Policies:
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - secretsmanager:GetSecretValue
-              Resource:
-                - "arn:aws:secretsmanager:eu-west-2:771551874768:secret:bndy-production-aurora-password-v2*"
-            - Effect: Allow
-              Action:
-                - rds:DescribeDBClusters
-                - rds:DescribeDBInstances
-              Resource: "*"
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         CreateBand:
           Type: Api
@@ -160,19 +124,7 @@ Resources:
       Handler: handler.handler
       MemorySize: 512
       Description: BNDY Events API - handles calendar and event management
-      Policies:
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - secretsmanager:GetSecretValue
-              Resource:
-                - "arn:aws:secretsmanager:eu-west-2:771551874768:secret:bndy-production-aurora-password-v2*"
-            - Effect: Allow
-              Action:
-                - rds:DescribeDBClusters
-                - rds:DescribeDBInstances
-              Resource: "*"
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         GetPublicEvents:
           Type: Api
