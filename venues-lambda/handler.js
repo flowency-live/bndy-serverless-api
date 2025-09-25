@@ -1,42 +1,8 @@
-// BNDY Venues Lambda Function
+// BNDY Venues Lambda Function - DynamoDB Version
 // Handles: /api/venues, /api/venues/:id
 
-const { Pool } = require('pg');
 const AWS = require('aws-sdk');
-
-const secretsManager = new AWS.SecretsManager({ region: 'eu-west-2' });
-let pool;
-
-async function getDbConnection() {
-  if (pool) return pool;
-
-  console.log('🔄 Venues Lambda: Initializing database connection...');
-
-  try {
-    const secretResponse = await secretsManager.getSecretValue({
-      SecretId: 'bndy-production-aurora-password-v2'
-    }).promise();
-
-    const secret = JSON.parse(secretResponse.SecretString);
-    const { username, password } = secret;
-
-    const connectionString = `postgresql://${username}:${encodeURIComponent(password)}@bndy-production-cluster.cluster-ch2q4a408jrc.eu-west-2.rds.amazonaws.com:3306/bndy`;
-
-    pool = new Pool({
-      connectionString,
-      max: 2,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
-      ssl: false
-    });
-
-    console.log('✅ Venues Lambda: Database connection established');
-    return pool;
-  } catch (error) {
-    console.error('❌ Venues Lambda: Database connection failed:', error);
-    throw error;
-  }
-}
+const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 
 exports.handler = async (event, context) => {
   console.log('🎯 Venues Lambda: Request received', {
@@ -44,20 +10,18 @@ exports.handler = async (event, context) => {
     path: event.path,
     pathParameters: event.pathParameters
   });
-  console.log('🚀 CI/CD test deployment');
+  console.log('🚀 DynamoDB version - FAST AS FUCK');
 
   context.callbackWaitsForEmptyEventLoop = false;
 
   try {
-    const pool = await getDbConnection();
-
     // Route requests
     if (event.httpMethod === 'GET' && event.path === '/api/venues') {
-      return await handleGetAllVenues(pool);
+      return await handleGetAllVenues();
     }
 
     if (event.httpMethod === 'GET' && event.pathParameters?.id) {
-      return await handleGetVenueById(pool, event.pathParameters.id);
+      return await handleGetVenueById(event.pathParameters.id);
     }
 
     return {
@@ -76,59 +40,101 @@ exports.handler = async (event, context) => {
   }
 };
 
-async function handleGetAllVenues(pool) {
-  const result = await pool.query(`
-    SELECT
-      id, name, address,
-      location_object as location,
-      google_place_id as "googlePlaceId",
-      validated, profile_image_url as "profileImageUrl"
-    FROM venues
-    WHERE latitude != 0 AND longitude != 0
-    ORDER BY validated DESC, name ASC
-  `);
+async function handleGetAllVenues() {
+  console.log('📍 Venues Lambda: Scanning all venues from DynamoDB...');
 
-  console.log(`📍 Venues Lambda: Served ${result.rows.length} venues`);
-
-  return {
-    statusCode: 200,
-    headers: getCorsHeaders(),
-    body: JSON.stringify(result.rows)
+  const params = {
+    TableName: 'bndy-venues',
+    ProjectionExpression: 'id, #name, address, latitude, longitude, location_object, google_place_id, validated, profile_image_url',
+    ExpressionAttributeNames: {
+      '#name': 'name'
+    }
   };
+
+  try {
+    const result = await dynamodb.scan(params).promise();
+
+    // Filter venues with valid coordinates (like the PostgreSQL query)
+    const validVenues = result.Items.filter(venue =>
+      venue.latitude && venue.longitude &&
+      venue.latitude !== 0 && venue.longitude !== 0
+    );
+
+    // Transform to match expected API format
+    const formattedVenues = validVenues.map(venue => ({
+      id: venue.id,
+      name: venue.name,
+      address: venue.address,
+      location: venue.location_object || { lat: venue.latitude, lng: venue.longitude },
+      googlePlaceId: venue.google_place_id,
+      validated: venue.validated || false,
+      profileImageUrl: venue.profile_image_url
+    }));
+
+    console.log(`📍 Venues Lambda: Served ${formattedVenues.length} venues (${result.Items.length} total in DB)`);
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify(formattedVenues)
+    };
+  } catch (error) {
+    console.error('❌ DynamoDB scan failed:', error);
+    throw error;
+  }
 }
 
-async function handleGetVenueById(pool, venueId) {
-  const result = await pool.query(`
-    SELECT
-      id, name, address,
-      latitude, longitude,
-      location_object as location,
-      google_place_id as "googlePlaceId",
-      validated, name_variants as "nameVariants",
-      phone, postcode, profile_image_url as "profileImageUrl",
-      facilities, social_media_urls as "socialMediaURLs",
-      standard_ticketed as "standardTicketed",
-      standard_ticket_information as "standardTicketInformation",
-      standard_ticket_url as "standardTicketUrl",
-      created_at as "createdAt",
-      updated_at as "updatedAt"
-    FROM venues
-    WHERE id = $1
-  `, [venueId]);
+async function handleGetVenueById(venueId) {
+  console.log(`📍 Venues Lambda: Getting venue by ID: ${venueId}`);
 
-  if (result.rows.length === 0) {
-    return {
-      statusCode: 404,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Venue not found' })
-    };
-  }
-
-  return {
-    statusCode: 200,
-    headers: getCorsHeaders(),
-    body: JSON.stringify(result.rows[0])
+  const params = {
+    TableName: 'bndy-venues',
+    Key: { id: venueId }
   };
+
+  try {
+    const result = await dynamodb.get(params).promise();
+
+    if (!result.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Venue not found' })
+      };
+    }
+
+    // Transform to match expected API format
+    const venue = {
+      id: result.Item.id,
+      name: result.Item.name,
+      address: result.Item.address,
+      latitude: result.Item.latitude,
+      longitude: result.Item.longitude,
+      location: result.Item.location_object || { lat: result.Item.latitude, lng: result.Item.longitude },
+      googlePlaceId: result.Item.google_place_id,
+      validated: result.Item.validated || false,
+      nameVariants: result.Item.name_variants || [],
+      phone: result.Item.phone || '',
+      postcode: result.Item.postcode || '',
+      profileImageUrl: result.Item.profile_image_url,
+      facilities: result.Item.facilities || [],
+      socialMediaURLs: result.Item.social_media_urls || [],
+      standardTicketed: result.Item.standard_ticketed || false,
+      standardTicketInformation: result.Item.standard_ticket_information || '',
+      standardTicketUrl: result.Item.standard_ticket_url || '',
+      createdAt: result.Item.created_at,
+      updatedAt: result.Item.updated_at
+    };
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify(venue)
+    };
+  } catch (error) {
+    console.error('❌ DynamoDB get failed:', error);
+    throw error;
+  }
 }
 
 function getCorsHeaders() {
