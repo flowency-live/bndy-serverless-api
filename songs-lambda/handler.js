@@ -24,6 +24,18 @@ exports.handler = async (event, context) => {
       return await handleGetSongById(event.pathParameters.id);
     }
 
+    if (event.httpMethod === 'POST' && event.path === '/api/songs') {
+      return await handleCreateSong(JSON.parse(event.body));
+    }
+
+    if (event.httpMethod === 'PUT' && event.pathParameters?.id) {
+      return await handleUpdateSong(event.pathParameters.id, JSON.parse(event.body));
+    }
+
+    if (event.httpMethod === 'DELETE' && event.pathParameters?.id) {
+      return await handleDeleteSong(event.pathParameters.id);
+    }
+
     return {
       statusCode: 404,
       headers: getCorsHeaders(),
@@ -127,6 +139,107 @@ async function handleGetSongById(songId) {
     };
   } catch (error) {
     console.error('❌ DynamoDB get failed:', error);
+    throw error;
+  }
+}
+
+async function handleCreateSong(songData) {
+  console.log('🎶 Songs Lambda: Creating new song');
+
+  const now = new Date().toISOString();
+  const song = {
+    id: require('crypto').randomUUID(),
+    title: songData.title,
+    artistName: songData.artistName || '',
+    duration: songData.duration || null,
+    genre: songData.genre || '',
+    releaseDate: songData.releaseDate || null,
+    album: songData.album || null,
+    spotifyUrl: songData.spotifyUrl || '',
+    appleMusicUrl: songData.appleMusicUrl || '',
+    youtubeUrl: songData.youtubeUrl || '',
+    audioFileUrl: songData.audioFileUrl || '',
+    isFeatured: songData.isFeatured || false,
+    tags: songData.tags || [],
+    createdAt: now,
+    updatedAt: now
+  };
+
+  const params = {
+    TableName: 'bndy-songs',
+    Item: song
+  };
+
+  try {
+    await dynamodb.put(params).promise();
+    return {
+      statusCode: 201,
+      headers: getCorsHeaders(),
+      body: JSON.stringify(song)
+    };
+  } catch (error) {
+    console.error('❌ DynamoDB put failed:', error);
+    throw error;
+  }
+}
+
+async function handleUpdateSong(songId, songData) {
+  console.log(`🎶 Songs Lambda: Updating song: ${songId}`);
+
+  const now = new Date().toISOString();
+
+  const params = {
+    TableName: 'bndy-songs',
+    Key: { id: songId },
+    UpdateExpression: 'SET title = :title, artistName = :artistName, duration = :duration, genre = :genre, releaseDate = :releaseDate, album = :album, spotifyUrl = :spotifyUrl, appleMusicUrl = :appleMusicUrl, youtubeUrl = :youtubeUrl, audioFileUrl = :audioFileUrl, isFeatured = :isFeatured, tags = :tags, updatedAt = :updatedAt',
+    ExpressionAttributeValues: {
+      ':title': songData.title,
+      ':artistName': songData.artistName || '',
+      ':duration': songData.duration || null,
+      ':genre': songData.genre || '',
+      ':releaseDate': songData.releaseDate || null,
+      ':album': songData.album || null,
+      ':spotifyUrl': songData.spotifyUrl || '',
+      ':appleMusicUrl': songData.appleMusicUrl || '',
+      ':youtubeUrl': songData.youtubeUrl || '',
+      ':audioFileUrl': songData.audioFileUrl || '',
+      ':isFeatured': songData.isFeatured || false,
+      ':tags': songData.tags || [],
+      ':updatedAt': now
+    },
+    ReturnValues: 'ALL_NEW'
+  };
+
+  try {
+    const result = await dynamodb.update(params).promise();
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify(result.Attributes)
+    };
+  } catch (error) {
+    console.error('❌ DynamoDB update failed:', error);
+    throw error;
+  }
+}
+
+async function handleDeleteSong(songId) {
+  console.log(`🎶 Songs Lambda: Deleting song: ${songId}`);
+
+  const params = {
+    TableName: 'bndy-songs',
+    Key: { id: songId }
+  };
+
+  try {
+    await dynamodb.delete(params).promise();
+    return {
+      statusCode: 204,
+      headers: getCorsHeaders(),
+      body: ''
+    };
+  } catch (error) {
+    console.error('❌ DynamoDB delete failed:', error);
     throw error;
   }
 }

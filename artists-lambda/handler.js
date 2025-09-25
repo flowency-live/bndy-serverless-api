@@ -24,6 +24,18 @@ exports.handler = async (event, context) => {
       return await handleGetArtistById(event.pathParameters.id);
     }
 
+    if (event.httpMethod === 'POST' && event.path === '/api/artists') {
+      return await handleCreateArtist(JSON.parse(event.body));
+    }
+
+    if (event.httpMethod === 'PUT' && event.pathParameters?.id) {
+      return await handleUpdateArtist(event.pathParameters.id, JSON.parse(event.body));
+    }
+
+    if (event.httpMethod === 'DELETE' && event.pathParameters?.id) {
+      return await handleDeleteArtist(event.pathParameters.id);
+    }
+
     return {
       statusCode: 404,
       headers: getCorsHeaders(),
@@ -131,6 +143,104 @@ async function handleGetArtistById(artistId) {
     };
   } catch (error) {
     console.error('❌ DynamoDB get failed:', error);
+    throw error;
+  }
+}
+
+async function handleCreateArtist(artistData) {
+  console.log('🎵 Artists Lambda: Creating new artist');
+
+  const now = new Date().toISOString();
+  const artist = {
+    id: require('crypto').randomUUID(),
+    name: artistData.name,
+    bio: artistData.bio || '',
+    location: artistData.location || '',
+    genres: artistData.genres || [],
+    facebookUrl: artistData.facebookUrl || '',
+    instagramUrl: artistData.instagramUrl || '',
+    websiteUrl: artistData.websiteUrl || '',
+    socialMediaUrls: artistData.socialMediaUrls || [],
+    profileImageUrl: artistData.profileImageUrl || '',
+    isVerified: artistData.isVerified || false,
+    followerCount: artistData.followerCount || 0,
+    claimedByUserId: artistData.claimedByUserId || null,
+    created_at: now,
+    updated_at: now
+  };
+
+  const params = {
+    TableName: 'bndy-artists',
+    Item: artist
+  };
+
+  try {
+    await dynamodb.put(params).promise();
+    return {
+      statusCode: 201,
+      headers: getCorsHeaders(),
+      body: JSON.stringify(artist)
+    };
+  } catch (error) {
+    console.error('❌ DynamoDB put failed:', error);
+    throw error;
+  }
+}
+
+async function handleUpdateArtist(artistId, artistData) {
+  console.log(`🎵 Artists Lambda: Updating artist: ${artistId}`);
+
+  const now = new Date().toISOString();
+
+  const params = {
+    TableName: 'bndy-artists',
+    Key: { id: artistId },
+    UpdateExpression: 'SET #name = :name, bio = :bio, #location = :location, genres = :genres, isVerified = :isVerified, updated_at = :updated_at',
+    ExpressionAttributeNames: {
+      '#name': 'name',
+      '#location': 'location'
+    },
+    ExpressionAttributeValues: {
+      ':name': artistData.name,
+      ':bio': artistData.bio || '',
+      ':location': artistData.location || '',
+      ':genres': artistData.genres || [],
+      ':isVerified': artistData.isVerified || false,
+      ':updated_at': now
+    },
+    ReturnValues: 'ALL_NEW'
+  };
+
+  try {
+    const result = await dynamodb.update(params).promise();
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify(result.Attributes)
+    };
+  } catch (error) {
+    console.error('❌ DynamoDB update failed:', error);
+    throw error;
+  }
+}
+
+async function handleDeleteArtist(artistId) {
+  console.log(`🎵 Artists Lambda: Deleting artist: ${artistId}`);
+
+  const params = {
+    TableName: 'bndy-artists',
+    Key: { id: artistId }
+  };
+
+  try {
+    await dynamodb.delete(params).promise();
+    return {
+      statusCode: 204,
+      headers: getCorsHeaders(),
+      body: ''
+    };
+  } catch (error) {
+    console.error('❌ DynamoDB delete failed:', error);
     throw error;
   }
 }

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/VSProjects/bndy All Platform Docs/**)",
+      "Bash(aws lambda list-functions:*)",
+      "Read(//c/VSProjects/**)",
+      "Bash(aws lambda update-function-code:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

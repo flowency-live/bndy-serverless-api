@@ -24,6 +24,18 @@ exports.handler = async (event, context) => {
       return await handleGetVenueById(event.pathParameters.id);
     }
 
+    if (event.httpMethod === 'POST' && event.path === '/api/venues') {
+      return await handleCreateVenue(JSON.parse(event.body));
+    }
+
+    if (event.httpMethod === 'PUT' && event.pathParameters?.id) {
+      return await handleUpdateVenue(event.pathParameters.id, JSON.parse(event.body));
+    }
+
+    if (event.httpMethod === 'DELETE' && event.pathParameters?.id) {
+      return await handleDeleteVenue(event.pathParameters.id);
+    }
+
     return {
       statusCode: 404,
       headers: getCorsHeaders(),
@@ -133,6 +145,109 @@ async function handleGetVenueById(venueId) {
     };
   } catch (error) {
     console.error('❌ DynamoDB get failed:', error);
+    throw error;
+  }
+}
+
+async function handleCreateVenue(venueData) {
+  console.log('📍 Venues Lambda: Creating new venue');
+
+  const now = new Date().toISOString();
+  const venue = {
+    id: require('crypto').randomUUID(),
+    name: venueData.name,
+    address: venueData.address,
+    latitude: venueData.latitude || 0,
+    longitude: venueData.longitude || 0,
+    location_object: venueData.location || { lat: venueData.latitude, lng: venueData.longitude },
+    google_place_id: venueData.googlePlaceId || '',
+    validated: venueData.validated || false,
+    name_variants: venueData.nameVariants || [],
+    phone: venueData.phone || '',
+    postcode: venueData.postcode || '',
+    facilities: venueData.facilities || [],
+    social_media_urls: venueData.socialMediaURLs || [],
+    profile_image_url: venueData.profileImageUrl || null,
+    standard_ticketed: venueData.standardTicketed || false,
+    standard_ticket_information: venueData.standardTicketInformation || '',
+    standard_ticket_url: venueData.standardTicketUrl || '',
+    created_at: now,
+    updated_at: now
+  };
+
+  const params = {
+    TableName: 'bndy-venues',
+    Item: venue
+  };
+
+  try {
+    await dynamodb.put(params).promise();
+    return {
+      statusCode: 201,
+      headers: getCorsHeaders(),
+      body: JSON.stringify(venue)
+    };
+  } catch (error) {
+    console.error('❌ DynamoDB put failed:', error);
+    throw error;
+  }
+}
+
+async function handleUpdateVenue(venueId, venueData) {
+  console.log(`📍 Venues Lambda: Updating venue: ${venueId}`);
+
+  const now = new Date().toISOString();
+
+  const params = {
+    TableName: 'bndy-venues',
+    Key: { id: venueId },
+    UpdateExpression: 'SET #name = :name, address = :address, latitude = :latitude, longitude = :longitude, location_object = :location_object, google_place_id = :google_place_id, validated = :validated, updated_at = :updated_at',
+    ExpressionAttributeNames: {
+      '#name': 'name'
+    },
+    ExpressionAttributeValues: {
+      ':name': venueData.name,
+      ':address': venueData.address,
+      ':latitude': venueData.latitude || 0,
+      ':longitude': venueData.longitude || 0,
+      ':location_object': venueData.location || { lat: venueData.latitude, lng: venueData.longitude },
+      ':google_place_id': venueData.googlePlaceId || '',
+      ':validated': venueData.validated || false,
+      ':updated_at': now
+    },
+    ReturnValues: 'ALL_NEW'
+  };
+
+  try {
+    const result = await dynamodb.update(params).promise();
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify(result.Attributes)
+    };
+  } catch (error) {
+    console.error('❌ DynamoDB update failed:', error);
+    throw error;
+  }
+}
+
+async function handleDeleteVenue(venueId) {
+  console.log(`📍 Venues Lambda: Deleting venue: ${venueId}`);
+
+  const params = {
+    TableName: 'bndy-venues',
+    Key: { id: venueId }
+  };
+
+  try {
+    await dynamodb.delete(params).promise();
+    return {
+      statusCode: 204,
+      headers: getCorsHeaders(),
+      body: ''
+    };
+  } catch (error) {
+    console.error('❌ DynamoDB delete failed:', error);
     throw error;
   }
 }

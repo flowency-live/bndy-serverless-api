@@ -51,6 +51,24 @@ Resources:
             RestApiId: !Ref BndyApi
             Path: /api/venues/{id}
             Method: get
+        CreateVenue:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/venues
+            Method: post
+        UpdateVenue:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/venues/{id}
+            Method: put
+        DeleteVenue:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/venues/{id}
+            Method: delete
 
   # Auth Lambda Function
   AuthFunction:
@@ -81,40 +99,6 @@ Resources:
             Path: /api/me
             Method: get
 
-  # Bands Lambda Function
-  BandsFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: bands-lambda/
-      Handler: handler.handler
-      MemorySize: 512
-      Description: BNDY Bands/Artists API - handles band management
-      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
-      Events:
-        CreateBand:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BndyApi
-            Path: /admin/bands
-            Method: post
-        GetUserBands:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BndyApi
-            Path: /admin/bands/user/{userId}
-            Method: get
-        CreateUserBand:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BndyApi
-            Path: /admin/user-bands
-            Method: post
-        GetBandMembers:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BndyApi
-            Path: /admin/bands/{bandId}/members
-            Method: get
 
   # Events Lambda Function
   EventsFunction:
@@ -179,6 +163,24 @@ Resources:
             RestApiId: !Ref BndyApi
             Path: /api/artists/{id}
             Method: get
+        CreateArtist:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/artists
+            Method: post
+        UpdateArtist:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/artists/{id}
+            Method: put
+        DeleteArtist:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/artists/{id}
+            Method: delete
 
   # Songs Lambda Function
   SongsFunction:
@@ -202,6 +204,24 @@ Resources:
             RestApiId: !Ref BndyApi
             Path: /api/songs/{id}
             Method: get
+        CreateSong:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/songs
+            Method: post
+        UpdateSong:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/songs/{id}
+            Method: put
+        DeleteSong:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /api/songs/{id}
+            Method: delete
 
 Outputs:
   BndyApi:
