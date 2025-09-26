@@ -240,7 +240,7 @@ const handleOAuthCallback = async (event) => {
     return {
       statusCode: 302,
       headers: {
-        Location: `${FRONTEND_URL}/auth/success`,
+        Location: `${FRONTEND_URL}/auth-success`,
         'Set-Cookie': cookieOptions
       },
       body: ''
