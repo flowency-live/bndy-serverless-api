@@ -16,7 +16,8 @@ const CLIENT_SECRET = process.env.COGNITO_USER_POOL_CLIENT_SECRET;
 const JWT_SECRET = process.env.JWT_SECRET;
 
 const FRONTEND_URL = 'https://backstage.bndy.co.uk';
-const REDIRECT_URI = `${FRONTEND_URL}/auth/callback`;
+const API_URL = 'https://api.bndy.co.uk';
+const REDIRECT_URI = `${API_URL}/auth/callback`;
 
 // DynamoDB Tables
 const USERS_TABLE = 'bndy-users';
