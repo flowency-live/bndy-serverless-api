@@ -98,7 +98,41 @@ Resources:
             RestApiId: !Ref BndyApi
             Path: /api/me
             Method: get
+        AuthLogout:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /auth/logout
+            Method: post
 
+  # Users Lambda Function
+  UsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: users-lambda/
+      Handler: handler.handler
+      MemorySize: 512
+      Description: BNDY Users API - handles user profile management
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Events:
+        GetUserProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /users/profile
+            Method: get
+        UpdateUserProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /users/profile
+            Method: put
+        ListUsers:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BndyApi
+            Path: /users
+            Method: get
 
   # Events Lambda Function
   EventsFunction:
@@ -241,6 +275,12 @@ Outputs:
     Value: !GetAtt AuthFunction.Arn
     Export:
       Name: !Sub "${AWS::StackName}-AuthFunctionArn"
+
+  UsersFunctionArn:
+    Description: "Users Lambda Function ARN"
+    Value: !GetAtt UsersFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-UsersFunctionArn"
 
   ArtistsFunctionArn:
     Description: "Artists Lambda Function ARN"
