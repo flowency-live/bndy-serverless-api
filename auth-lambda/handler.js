@@ -231,7 +231,7 @@ const handleOAuthCallback = async (event) => {
 
     // Create secure cookie
     const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
-      'HttpOnly; Secure; SameSite=Lax; ' +
+      'HttpOnly; Secure; SameSite=None; ' +
       'Max-Age=604800; Path=/; ' +
       'Domain=.bndy.co.uk';
 
