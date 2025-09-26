@@ -235,12 +235,12 @@ const handleOAuthCallback = async (event) => {
       'Max-Age=604800; Path=/; ' +
       'Domain=.bndy.co.uk';
 
-    console.log('🔐 AUTH CALLBACK: Session created, redirecting to dashboard');
+    console.log('🔐 AUTH CALLBACK: Session created, redirecting to success page');
 
     return {
       statusCode: 302,
       headers: {
-        Location: `${FRONTEND_URL}/dashboard`,
+        Location: `${FRONTEND_URL}/auth/success`,
         'Set-Cookie': cookieOptions
       },
       body: ''
