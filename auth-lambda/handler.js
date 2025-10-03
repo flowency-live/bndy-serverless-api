@@ -10,7 +10,7 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 const cognito = new AWS.CognitoIdentityServiceProvider({ region: 'eu-west-2' });
 
 // Configuration
-const COGNITO_DOMAIN = 'https://eu-west-2lqtkKHs1P.auth.eu-west-2.amazoncognito.com';
+const COGNITO_DOMAIN = 'https://eu-west-2lqtkkhs1p.auth.eu-west-2.amazoncognito.com';
 const CLIENT_ID = process.env.COGNITO_USER_POOL_CLIENT_ID;
 const CLIENT_SECRET = process.env.COGNITO_USER_POOL_CLIENT_SECRET;
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -21,8 +21,6 @@ const REDIRECT_URI = `${API_URL}/auth/callback`;
 
 // DynamoDB Tables
 const USERS_TABLE = 'bndy-users';
-const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
-const ARTISTS_TABLE = 'bndy-artists';
 
 // State storage for OAuth (in production, use DynamoDB with TTL)
 const stateStore = new Map();
@@ -75,40 +73,27 @@ const createResponse = (statusCode, body, cookies = null) => {
 
 // Authentication middleware
 const requireAuth = (event) => {
-  // HTTP API v2 passes cookies in event.cookies array
-  let sessionToken = null;
+  const cookies = parseCookies(event.headers.Cookie || event.headers.cookie);
+  const sessionToken = cookies.bndy_session;
 
-  if (event.cookies && Array.isArray(event.cookies)) {
-    // HTTP API v2 format
-    const cookieString = event.cookies.find(c => c.startsWith('bndy_session='));
-    if (cookieString) {
-      sessionToken = cookieString.split('=')[1];
-    }
-  } else {
-    // Fallback to headers for compatibility
-    const cookies = parseCookies(event.headers?.Cookie || event.headers?.cookie || '');
-    sessionToken = cookies.bndy_session;
-  }
-
-  console.log('[AUTH] Checking authentication', {
-    hasCookie: !!(event.cookies || event.headers?.Cookie),
-    hasSessionToken: !!sessionToken,
-    eventCookies: event.cookies?.length || 0
+  console.log('🔐 AUTH: Checking authentication', {
+    hasCookie: !!event.headers.Cookie,
+    hasSessionToken: !!sessionToken
   });
 
   if (!sessionToken) {
-    console.log('[AUTH] AUTH: No session token found');
+    console.log('🔐 AUTH: No session token found');
     return { error: 'Not authenticated' };
   }
 
   try {
     const session = jwt.verify(sessionToken, JWT_SECRET);
-    console.log('[AUTH] AUTH: User authenticated via session', {
+    console.log('🔐 AUTH: User authenticated via session', {
       userId: session.userId.substring(0, 8) + '...'
     });
     return { user: session };
   } catch (error) {
-    console.error('[AUTH] AUTH: Invalid session token:', error.message);
+    console.error('🔐 AUTH: Invalid session token:', error.message);
     return { error: 'Invalid session' };
   }
 };
@@ -120,7 +105,7 @@ const handleGoogleAuth = (event) => {
   // Store state with expiry
   stateStore.set(state, {
     timestamp: Date.now(),
-    origin: event.headers?.referer || FRONTEND_URL
+    origin: event.headers.referer || FRONTEND_URL
   });
 
   cleanupExpiredStates();
@@ -133,7 +118,7 @@ const handleGoogleAuth = (event) => {
     `state=${state}&` +
     `identity_provider=Google`;
 
-  console.log('[AUTH] AUTH: Initiating Google OAuth flow', {
+  console.log('🔐 AUTH: Initiating Google OAuth flow', {
     state: state.substring(0, 8) + '...',
     redirectUri: REDIRECT_URI
   });
@@ -151,7 +136,7 @@ const handleGoogleAuth = (event) => {
 const handleOAuthCallback = async (event) => {
   const { code, state, error } = event.queryStringParameters || {};
 
-  console.log('[AUTH] AUTH CALLBACK: Received callback', {
+  console.log('🔐 AUTH CALLBACK: Received callback', {
     hasCode: !!code,
     hasState: !!state,
     error,
@@ -161,7 +146,7 @@ const handleOAuthCallback = async (event) => {
   try {
     // Verify state to prevent CSRF
     if (!state || !stateStore.has(state)) {
-      console.error('[AUTH] AUTH CALLBACK: Invalid or expired state');
+      console.error('🔐 AUTH CALLBACK: Invalid or expired state');
       return {
         statusCode: 302,
         headers: { Location: `${FRONTEND_URL}/login?error=invalid_state` },
@@ -172,7 +157,7 @@ const handleOAuthCallback = async (event) => {
     stateStore.delete(state);
 
     if (error) {
-      console.error('[AUTH] AUTH CALLBACK: OAuth error:', error);
+      console.error('🔐 AUTH CALLBACK: OAuth error:', error);
       return {
         statusCode: 302,
         headers: { Location: `${FRONTEND_URL}/login?error=${encodeURIComponent(error)}` },
@@ -181,7 +166,7 @@ const handleOAuthCallback = async (event) => {
     }
 
     if (!code) {
-      console.error('[AUTH] AUTH CALLBACK: No authorization code received');
+      console.error('🔐 AUTH CALLBACK: No authorization code received');
       return {
         statusCode: 302,
         headers: { Location: `${FRONTEND_URL}/login?error=no_code` },
@@ -190,7 +175,7 @@ const handleOAuthCallback = async (event) => {
     }
 
     // Exchange code for tokens
-    console.log('[AUTH] AUTH CALLBACK: Exchanging code for tokens');
+    console.log('🔐 AUTH CALLBACK: Exchanging code for tokens');
 
     const tokenParams = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -209,44 +194,35 @@ const handleOAuthCallback = async (event) => {
     const tokenData = await tokenResponse.json();
     const { access_token, id_token, refresh_token } = tokenData;
 
-    console.log('[AUTH] AUTH CALLBACK: Token exchange successful');
+    console.log('🔐 AUTH CALLBACK: Token exchange successful');
 
     // Decode ID token to get user info
     const decodedIdToken = jwt.decode(id_token);
     const userId = decodedIdToken.sub;
     const email = decodedIdToken.email;
     const username = decodedIdToken['cognito:username'];
-    const picture = decodedIdToken.picture; // Google profile picture URL
-    const name = decodedIdToken.name; // Full name from Google
-    const givenName = decodedIdToken.given_name; // First name
-    const familyName = decodedIdToken.family_name; // Last name
 
-    console.log('[AUTH] AUTH CALLBACK: User authenticated', {
+    console.log('🔐 AUTH CALLBACK: User authenticated', {
       userId: userId.substring(0, 8) + '...',
       email: email ? email.substring(0, 3) + '***' : 'N/A',
-      username,
-      hasPicture: !!picture,
-      hasName: !!name,
-      hasGivenName: !!givenName,
-      hasFamilyName: !!familyName
+      username
     });
 
     // Create or update user in DynamoDB
     await createOrUpdateUser({
       cognitoId: userId,
       email,
-      username,
-      profilePicture: picture,
-      fullName: name,
-      firstName: givenName,
-      lastName: familyName
+      username
     });
 
-    // Create lightweight session (store large tokens separately if needed)
+    // Create secure session
     const sessionData = {
       userId,
       username,
       email,
+      accessToken: access_token,
+      idToken: id_token,
+      refreshToken: refresh_token,
       issuedAt: Date.now()
     };
 
@@ -254,38 +230,25 @@ const handleOAuthCallback = async (event) => {
       expiresIn: '7d'
     });
 
-    // Create secure cookie for cross-site usage with small token
+    // Create secure cookie
     const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
-      'HttpOnly; Secure; SameSite=None; ' +
+      'HttpOnly; Secure; SameSite=Lax; ' +
       'Max-Age=604800; Path=/; ' +
-      'Domain=.bndy.co.uk'
+      'Domain=.bndy.co.uk';
 
-    console.log('[AUTH] AUTH CALLBACK: Session created, setting cookie and redirecting');
-    console.log('[AUTH] AUTH CALLBACK: Cookie being set:', cookieOptions);
+    console.log('🔐 AUTH CALLBACK: Session created, redirecting to success page');
 
-    // Return 200 with HTML redirect instead of 302
-    // This ensures Set-Cookie header is preserved by API Gateway HTTP API v2
     return {
-      statusCode: 200,
+      statusCode: 302,
       headers: {
-        'Content-Type': 'text/html',
-        'Set-Cookie': cookieOptions,
-        ...corsHeaders
+        Location: `${FRONTEND_URL}/auth-success`,
+        'Set-Cookie': cookieOptions
       },
-      body: `<!DOCTYPE html>
-<html>
-<head>
-  <meta http-equiv="refresh" content="0; url=${FRONTEND_URL}/dashboard">
-  <script>window.location.href='${FRONTEND_URL}/dashboard';</script>
-</head>
-<body>
-  <p>Authentication successful. Redirecting...</p>
-</body>
-</html>`
+      body: ''
     };
 
   } catch (error) {
-    console.error('[AUTH] AUTH CALLBACK: Token exchange failed:', error.message);
+    console.error('🔐 AUTH CALLBACK: Token exchange failed:', error.message);
     return {
       statusCode: 302,
       headers: { Location: `${FRONTEND_URL}/login?error=token_exchange_failed` },
@@ -304,7 +267,7 @@ const handleGetMe = async (event) => {
   const { user } = authResult;
 
   try {
-    console.log('[AUTH] API: /api/me called by authenticated user');
+    console.log('🔐 API: /api/me called by authenticated user');
 
     // Get user from DynamoDB
     const userResult = await dynamodb.get({
@@ -313,103 +276,12 @@ const handleGetMe = async (event) => {
     }).promise();
 
     if (!userResult.Item) {
-      console.error('[AUTH] API: User not found in DynamoDB');
+      console.error('🔐 API: User not found in DynamoDB');
       return createResponse(404, { error: 'User not found' });
     }
 
     const dbUser = userResult.Item;
-    console.log('[AUTH] API: User found in DynamoDB');
-
-    // Get user's artist memberships
-    let artistMemberships = [];
-    try {
-      const membershipsResult = await dynamodb.query({
-        TableName: MEMBERSHIPS_TABLE,
-        IndexName: 'user_id-index',
-        KeyConditionExpression: 'user_id = :userId',
-        ExpressionAttributeValues: {
-          ':userId': user.userId
-        }
-      }).promise();
-
-      console.log('[AUTH] API: Found', membershipsResult.Items.length, 'memberships');
-
-      // Batch get artist details for all memberships
-      if (membershipsResult.Items.length > 0) {
-        const artistIds = membershipsResult.Items.map(m => m.artist_id);
-        const artistKeys = artistIds.map(id => ({ id }));
-
-        const artistsResult = await dynamodb.batchGet({
-          RequestItems: {
-            [ARTISTS_TABLE]: {
-              Keys: artistKeys
-            }
-          }
-        }).promise();
-
-        const artists = artistsResult.Responses[ARTISTS_TABLE] || [];
-
-        // Combine memberships with artist data and resolve profile inheritance
-        artistMemberships = membershipsResult.Items.map(membership => {
-          const artist = artists.find(a => a.id === membership.artist_id);
-
-          // Resolve profile with inheritance from user
-          const resolvedDisplayName = membership.display_name || dbUser.display_name || dbUser.username;
-          const resolvedAvatarUrl = membership.avatar_url || dbUser.avatar_url || dbUser.oauth_profile_picture;
-          const resolvedInstrument = membership.instrument || dbUser.instrument || null;
-
-          return {
-            // Membership info
-            id: membership.membership_id,
-            membershipId: membership.membership_id,
-            userId: membership.user_id,
-            artistId: membership.artist_id,
-            role: membership.role,
-            membershipType: membership.membership_type,
-            status: membership.status,
-
-            // Resolved profile (with inheritance)
-            displayName: resolvedDisplayName,
-            avatarUrl: resolvedAvatarUrl,
-            instrument: resolvedInstrument,
-
-            // Customization flags
-            hasCustomDisplayName: membership.display_name !== null && membership.display_name !== undefined,
-            hasCustomAvatar: membership.avatar_url !== null && membership.avatar_url !== undefined,
-            hasCustomInstrument: membership.instrument !== null && membership.instrument !== undefined,
-
-            // UI fields
-            icon: membership.icon,
-            color: membership.color,
-
-            // Permissions
-            permissions: membership.permissions || [],
-
-            // Artist details (for frontend compatibility with "bands" array)
-            name: artist?.name || 'Unknown Artist',
-            artist: artist ? {
-              id: artist.id,
-              name: artist.name,
-              artistType: artist.artist_type || 'band',
-              bio: artist.bio,
-              location: artist.location,
-              genres: artist.genres || [],
-              profileImageUrl: artist.profileImageUrl,
-              isVerified: artist.isVerified || false,
-              memberCount: artist.member_count || 0,
-              createdAt: artist.created_at
-            } : null,
-
-            // Timestamps
-            joinedAt: membership.joined_at,
-            createdAt: membership.created_at
-          };
-        });
-      }
-    } catch (membershipError) {
-      console.error('[AUTH] API: Error fetching memberships:', membershipError);
-      // Don't fail the whole request - just return empty array
-    }
+    console.log('🔐 API: User found in DynamoDB');
 
     const responseData = {
       user: {
@@ -422,12 +294,10 @@ const handleGetMe = async (event) => {
         displayName: dbUser.display_name || null,
         avatarUrl: dbUser.avatar_url || null,
         instrument: dbUser.instrument || null,
-        hometown: dbUser.hometown || null,
         profileCompleted: dbUser.profile_complete || false,
         createdAt: dbUser.created_at
       },
-      artists: artistMemberships, // New field with full membership data
-      bands: artistMemberships, // Backwards compatibility - same data
+      bands: [], // Empty array for now - TODO: Implement artist memberships
       session: {
         issuedAt: user.issuedAt,
         expiresAt: user.exp * 1000
@@ -437,17 +307,16 @@ const handleGetMe = async (event) => {
     return createResponse(200, responseData);
 
   } catch (error) {
-    console.error('[AUTH] API: /api/me error:', error);
+    console.error('🔐 API: /api/me error:', error);
     return createResponse(500, { error: 'Internal server error' });
   }
 };
 
 const handleLogout = (event) => {
-  console.log('[AUTH] AUTH: User logging out');
+  console.log('🔐 AUTH: User logging out');
 
-  const clearCookie = 'bndy_session=; HttpOnly; Secure; SameSite=None; Max-Age=0; Path=/; Domain=.bndy.co.uk';
+  const clearCookie = 'bndy_session=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/; Domain=.bndy.co.uk';
 
-  // HTTP API v2 format - uses headers for Set-Cookie
   return {
     statusCode: 200,
     headers: {
@@ -461,7 +330,7 @@ const handleLogout = (event) => {
 
 // Helper function to create or update user in DynamoDB
 const createOrUpdateUser = async (userData) => {
-  const { cognitoId, email, username, profilePicture, fullName, firstName, lastName } = userData;
+  const { cognitoId, email, username } = userData;
 
   try {
     // Check if user exists
@@ -471,52 +340,26 @@ const createOrUpdateUser = async (userData) => {
     }).promise();
 
     if (existingUser.Item) {
-      console.log('[AUTH] DB: User exists, updating');
-
-      // Build update expression - only update OAuth fields if user hasn't set their own
-      let updateExpression = 'SET email = :email, username = :username, updated_at = :updatedAt';
-      let expressionAttributeValues = {
-        ':email': email,
-        ':username': username,
-        ':updatedAt': new Date().toISOString()
-      };
-
-      // If user doesn't have a custom avatar but OAuth provides one, use it
-      if (profilePicture && (!existingUser.Item.avatar_url || existingUser.Item.avatar_url === existingUser.Item.oauth_profile_picture)) {
-        updateExpression += ', oauth_profile_picture = :oauthPicture';
-        expressionAttributeValues[':oauthPicture'] = profilePicture;
-
-        // If no custom avatar is set, use OAuth picture as avatar
-        if (!existingUser.Item.avatar_url) {
-          updateExpression += ', avatar_url = :avatarUrl';
-          expressionAttributeValues[':avatarUrl'] = profilePicture;
-        }
-      }
-
-      // If user doesn't have names set but OAuth provides them, use them
-      if (firstName && !existingUser.Item.first_name) {
-        updateExpression += ', first_name = :firstName';
-        expressionAttributeValues[':firstName'] = firstName;
-      }
-      if (lastName && !existingUser.Item.last_name) {
-        updateExpression += ', last_name = :lastName';
-        expressionAttributeValues[':lastName'] = lastName;
-      }
+      console.log('🔐 DB: User exists, updating');
 
       // Update existing user
       await dynamodb.update({
         TableName: USERS_TABLE,
         Key: { cognito_id: cognitoId },
-        UpdateExpression: updateExpression,
-        ExpressionAttributeValues: expressionAttributeValues
+        UpdateExpression: 'SET email = :email, username = :username, updated_at = :updatedAt',
+        ExpressionAttributeValues: {
+          ':email': email,
+          ':username': username,
+          ':updatedAt': new Date().toISOString()
+        }
       }).promise();
     } else {
-      console.log('[AUTH] DB: Creating new user');
+      console.log('🔐 DB: Creating new user');
 
       // Generate new user ID
       const userId = crypto.randomUUID();
 
-      // Create new user with OAuth data as defaults
+      // Create new user with profile incomplete
       await dynamodb.put({
         TableName: USERS_TABLE,
         Item: {
@@ -524,11 +367,10 @@ const createOrUpdateUser = async (userData) => {
           user_id: userId,
           email,
           username,
-          first_name: firstName || null,
-          last_name: lastName || null,
+          first_name: null,
+          last_name: null,
           display_name: null,
-          avatar_url: profilePicture || null,
-          oauth_profile_picture: profilePicture || null,
+          avatar_url: null,
           instrument: null,
           profile_complete: false,
           created_at: new Date().toISOString(),
@@ -537,35 +379,21 @@ const createOrUpdateUser = async (userData) => {
       }).promise();
     }
   } catch (error) {
-    console.error('[AUTH] DB: Error creating/updating user:', error);
+    console.error('🔐 DB: Error creating/updating user:', error);
     throw error;
   }
 };
 
 // Main handler
 exports.handler = async (event, context) => {
-  // HTTP API v2 payload format compatibility
-  const method = event.requestContext?.http?.method || event.httpMethod;
-  const path = event.requestContext?.http?.path || event.rawPath || event.path;
-  const routeKey = `${method} ${path}`;
-  const requestId = context.awsRequestId;
-  const functionVersion = context.functionVersion;
-
-  // Enhanced telemetry logging
-  console.log('[AUTH] Auth Lambda: Request received', {
-    requestId,
-    functionVersion,
-    routeKey,
-    method,
-    path,
-    version: event.version || 'v2.0',
-    timestamp: new Date().toISOString(),
-    userAgent: event.headers?.['user-agent'] || 'unknown',
-    sourceIp: event.requestContext?.http?.sourceIp || 'unknown'
+  console.log('🔐 Auth Lambda: Request received', {
+    httpMethod: event.httpMethod,
+    path: event.path,
+    resource: event.resource
   });
 
   // Handle CORS preflight
-  if (method === 'OPTIONS') {
+  if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
       headers: corsHeaders,
@@ -574,65 +402,32 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Route requests (HTTP API v2 format)
-    if (routeKey === 'GET /auth/google') {
+    // Route requests
+    if (event.resource === '/auth/google' && event.httpMethod === 'GET') {
       return handleGoogleAuth(event);
     }
 
-    if (routeKey === 'GET /auth/callback') {
+    if (event.resource === '/auth/callback' && event.httpMethod === 'GET') {
       return await handleOAuthCallback(event);
     }
 
-    if (routeKey === 'GET /api/me') {
+    if (event.resource === '/api/me' && event.httpMethod === 'GET') {
       return await handleGetMe(event);
     }
 
-    if (routeKey === 'POST /auth/logout') {
+    if (event.resource === '/auth/logout' && event.httpMethod === 'POST') {
       return handleLogout(event);
     }
 
-    if (routeKey === 'GET /auth/landing') {
-      // Simple landing page - kept for backward compatibility
-      // Just redirects to dashboard now that cookies work
-      return {
-        statusCode: 200,
-        headers: {
-          'Content-Type': 'text/html',
-          ...corsHeaders
-        },
-        body: `<!DOCTYPE html>
-<html>
-<head>
-  <meta http-equiv="refresh" content="0; url=${FRONTEND_URL}/dashboard">
-  <script>window.location.href='${FRONTEND_URL}/dashboard';</script>
-</head>
-<body>
-  <p>Redirecting to dashboard...</p>
-</body>
-</html>`
-      };
-    }
-
-    // Route not found - Enhanced error logging
-    console.error('[ERROR] Auth Lambda: Route not found', {
-      requestId,
-      routeKey,
-      path,
-      method,
-      availableRoutes: ['GET /auth/google', 'GET /auth/callback', 'GET /api/me', 'POST /auth/logout', 'GET /auth/landing'],
-      timestamp: new Date().toISOString()
-    });
-
+    // Route not found
     return createResponse(404, {
       error: 'Route not found',
-      routeKey,
-      path,
-      method,
-      requestId
+      path: event.path,
+      method: event.httpMethod
     });
 
   } catch (error) {
-    console.error('[AUTH] Auth Lambda: Unexpected error:', error);
+    console.error('🔐 Auth Lambda: Unexpected error:', error);
     return createResponse(500, {
       error: 'Internal server error',
       message: error.message

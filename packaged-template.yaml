@@ -88,7 +88,7 @@ Resources:
   AuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://bndy-lambda-deployments/8e074fbac4dc847c9cf28ad914287813
+      CodeUri: s3://bndy-lambda-deployments/fc93bd658fab7506feafb9495a93c66b
       Handler: handler.handler
       MemorySize: 512
       Description: BNDY Authentication API - handles OAuth and sessions
@@ -294,12 +294,19 @@ Resources:
   MembershipsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://bndy-lambda-deployments/851dfe1596d52a0d890dcdc4d4de3716
+      CodeUri: s3://bndy-lambda-deployments/5068cb449f3bb1995a78681c0371d450
       Handler: handler.handler
       MemorySize: 512
       Description: BNDY Memberships API - handles artist membership management
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
+        GetMyMemberships:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/memberships/me
+            Method: get
         GetArtistMembers:
           Type: HttpApi
           Properties:

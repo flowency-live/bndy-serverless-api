@@ -292,6 +292,12 @@ Resources:
       Description: BNDY Memberships API - handles artist membership management
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
+        GetMyMemberships:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/memberships/me
+            Method: get
         GetArtistMembers:
           Type: HttpApi
           Properties:

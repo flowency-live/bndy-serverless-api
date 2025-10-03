@@ -442,6 +442,86 @@ const handleDeleteMembership = async (event, membershipId) => {
   }
 };
 
+// Get current user's memberships with resolved profiles
+const handleGetMyMemberships = async (event) => {
+  const authResult = requireAuth(event);
+  if (authResult.error) {
+    return createResponse(401, { error: authResult.error });
+  }
+
+  const { user } = authResult;
+
+  try {
+    console.log('[MEMBERSHIPS] Getting memberships for user', { userId: user.userId });
+
+    // Query memberships by user_id
+    const membershipsResult = await dynamodb.query({
+      TableName: MEMBERSHIPS_TABLE,
+      IndexName: 'user_id-index',
+      KeyConditionExpression: 'user_id = :userId',
+      ExpressionAttributeValues: {
+        ':userId': user.userId
+      }
+    }).promise();
+
+    console.log('[MEMBERSHIPS] Found', membershipsResult.Items.length, 'memberships');
+
+    if (membershipsResult.Items.length === 0) {
+      return createResponse(200, { memberships: [], artists: [], bands: [] });
+    }
+
+    // Batch get artist details
+    const artistIds = membershipsResult.Items.map(m => m.artist_id);
+    const artistKeys = artistIds.map(id => ({ id }));
+
+    const artistsResult = await dynamodb.batchGet({
+      RequestItems: {
+        [ARTISTS_TABLE]: {
+          Keys: artistKeys
+        }
+      }
+    }).promise();
+
+    const artists = artistsResult.Responses[ARTISTS_TABLE] || [];
+
+    // Resolve profile inheritance for each membership
+    const resolvedMemberships = await Promise.all(
+      membershipsResult.Items.map(async (membership) => {
+        const resolvedMembership = await resolveMembershipProfile(membership, user.userId);
+        const artist = artists.find(a => a.id === membership.artist_id);
+
+        return {
+          ...resolvedMembership,
+          // Add full artist details
+          name: artist?.name || 'Unknown Artist',
+          artist: artist ? {
+            id: artist.id,
+            name: artist.name,
+            artistType: artist.artist_type || 'band',
+            bio: artist.bio,
+            location: artist.location,
+            genres: artist.genres || [],
+            profileImageUrl: artist.profileImageUrl,
+            isVerified: artist.isVerified || false,
+            memberCount: artist.member_count || 0,
+            createdAt: artist.created_at
+          } : null
+        };
+      })
+    );
+
+    return createResponse(200, {
+      memberships: resolvedMemberships,
+      artists: resolvedMemberships, // Same data, different key
+      bands: resolvedMemberships // Backwards compatibility
+    });
+
+  } catch (error) {
+    console.error('[MEMBERSHIPS] Get my memberships error:', error);
+    return createResponse(500, { error: 'Internal server error' });
+  }
+};
+
 // Main handler
 exports.handler = async (event, context) => {
   const method = event.requestContext?.http?.method || event.httpMethod;
@@ -470,6 +550,10 @@ exports.handler = async (event, context) => {
     const membershipId = event.pathParameters?.membershipId;
 
     // Route requests
+    if (method === 'GET' && path === '/api/memberships/me') {
+      return await handleGetMyMemberships(event);
+    }
+
     if (method === 'GET' && path.includes('/artists/') && path.includes('/members')) {
       return await handleGetArtistMembers(event, artistId);
     }
