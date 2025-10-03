@@ -1,0 +1,15 @@
+{
+  "name": "bndy-uploads-lambda",
+  "version": "1.0.0",
+  "description": "BNDY Uploads Lambda - Presigned URLs for S3 image uploads",
+  "main": "handler.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1000.0",
+    "jsonwebtoken": "^9.0.0"
+  },
+  "author": "BNDY Platform",
+  "license": "ISC"
+}

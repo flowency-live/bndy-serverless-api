@@ -6,9 +6,12 @@ Globals:
   Function:
     Timeout: 30
     Runtime: nodejs18.x
+    Tracing: Active
     Environment:
       Variables:
         NODE_ENV: production
+        JWT_SECRET: 2c7fccb87d98f68d36b19d528aa81a61afacf91058c18ee49738c35b50b81aa5
+        _X_AMZN_TRACE_ID: !Ref "AWS::NoValue"
 
 Parameters:
   Stage:
@@ -17,17 +20,30 @@ Parameters:
     Description: Deployment stage (dev, staging, prod)
 
 Resources:
-  # API Gateway
-  BndyApi:
-    Type: AWS::Serverless::Api
+  # API Gateway - HTTP API v2 (modern, auto-CORS, 70% cheaper)
+  BndyHttpApi:
+    Type: AWS::Serverless::HttpApi
     Properties:
-      StageName: !Ref Stage
-      EndpointConfiguration: EDGE
-      Cors:
-        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
-        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Cookie'"
-        AllowOrigin: "'https://backstage.bndy.co.uk,https://d3cewujswmjafa.cloudfront.net'"
+      StageName: $default
+      CorsConfiguration:
+        AllowOrigins:
+          - https://backstage.bndy.co.uk
+          - https://d3cewujswmjafa.cloudfront.net
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - Cookie
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
         AllowCredentials: true
+        MaxAge: 300
 
   # Venues Lambda Function
   VenuesFunction:
@@ -40,33 +56,33 @@ Resources:
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         GetAllVenues:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/venues
             Method: get
         GetVenueById:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/venues/{id}
             Method: get
         CreateVenue:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/venues
             Method: post
         UpdateVenue:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/venues/{id}
             Method: put
         DeleteVenue:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/venues/{id}
             Method: delete
 
@@ -81,29 +97,41 @@ Resources:
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         AuthGoogle:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /auth/google
             Method: get
+            Auth:
+              Authorizer: NONE
         AuthCallback:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /auth/callback
             Method: get
+            Auth:
+              Authorizer: NONE
         ApiMe:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/me
             Method: get
         AuthLogout:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /auth/logout
             Method: post
+        AuthLanding:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/landing
+            Method: get
+            Auth:
+              Authorizer: NONE
 
   # Users Lambda Function
   UsersFunction:
@@ -116,21 +144,21 @@ Resources:
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         GetUserProfile:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /users/profile
             Method: get
         UpdateUserProfile:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /users/profile
             Method: put
         ListUsers:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /users
             Method: get
 
@@ -145,33 +173,33 @@ Resources:
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         GetPublicEvents:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/events
             Method: get
         CreateEvent:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /admin/events
             Method: post
         UpdateEvent:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /admin/events/{id}
             Method: put
         DeleteEvent:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /admin/events/{id}
             Method: delete
         GetBandEvents:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /admin/events/band/{bandId}
             Method: get
 
@@ -186,33 +214,33 @@ Resources:
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         GetAllArtists:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/artists
             Method: get
         GetArtistById:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/artists/{id}
             Method: get
         CreateArtist:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/artists
             Method: post
         UpdateArtist:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/artists/{id}
             Method: put
         DeleteArtist:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/artists/{id}
             Method: delete
 
@@ -227,42 +255,186 @@ Resources:
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         GetAllSongs:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/songs
             Method: get
         GetSongById:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/songs/{id}
             Method: get
         CreateSong:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/songs
             Method: post
         UpdateSong:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/songs/{id}
             Method: put
         DeleteSong:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId: !Ref BndyApi
+            ApiId: !Ref BndyHttpApi
             Path: /api/songs/{id}
             Method: delete
 
+  # Issues Lambda Function
+  IssuesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: issues-lambda/
+      Handler: handler.handler
+      MemorySize: 512
+      Description: BNDY Issues API - handles /issues endpoints for bug tracking
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Events:
+        CreateIssue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /issues
+            Method: post
+        GetAllIssues:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /issues
+            Method: get
+        UpdateIssue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /issues/{id}
+            Method: put
+        DeleteIssue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /issues/{id}
+            Method: delete
+        BatchUpdateIssues:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /issues/batch
+            Method: post
+
+  # Uploads Lambda Function
+  UploadsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: uploads-lambda/
+      Handler: handler.handler
+      MemorySize: 512
+      Description: BNDY Uploads API - handles S3 presigned URLs for image uploads
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Events:
+        GeneratePresignedUrl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /uploads/presigned-url
+            Method: post
+
+  # DynamoDB Tables
+  IssuesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: bndy-issues
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: issue_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: issue_id
+          KeyType: HASH
+      Tags:
+        - Key: Project
+          Value: BNDY
+        - Key: Environment
+          Value: !Ref Stage
+        - Key: Component
+          Value: Issues
+
+  # CloudWatch Log Groups with retention
+  AuthLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AuthFunction}"
+      RetentionInDays: 30
+
+  UsersLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${UsersFunction}"
+      RetentionInDays: 30
+
+  EventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${EventsFunction}"
+      RetentionInDays: 30
+
+  VenuesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${VenuesFunction}"
+      RetentionInDays: 30
+
+  ArtistsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ArtistsFunction}"
+      RetentionInDays: 30
+
+  SongsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${SongsFunction}"
+      RetentionInDays: 30
+
+  IssuesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${IssuesFunction}"
+      RetentionInDays: 30
+
+  UploadsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${UploadsFunction}"
+      RetentionInDays: 30
+
+  # CloudWatch Alarms for Lambda Errors
+  AuthErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-AuthFunction-Errors"
+      AlarmDescription: "Alarm for Auth Lambda function errors"
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AuthFunction
+
 Outputs:
-  BndyApi:
-    Description: "API Gateway endpoint URL for BNDY API"
-    Value: !Sub "https://${BndyApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/"
+  BndyHttpApi:
+    Description: "HTTP API Gateway endpoint URL for BNDY API"
+    Value: !Sub "https://${BndyHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
     Export:
-      Name: !Sub "${AWS::StackName}-ApiUrl"
+      Name: !Sub "${AWS::StackName}-HttpApiUrl"
 
   VenuesFunctionArn:
     Description: "Venues Lambda Function ARN"
@@ -293,3 +465,35 @@ Outputs:
     Value: !GetAtt SongsFunction.Arn
     Export:
       Name: !Sub "${AWS::StackName}-SongsFunctionArn"
+
+  IssuesFunctionArn:
+    Description: "Issues Lambda Function ARN"
+    Value: !GetAtt IssuesFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-IssuesFunctionArn"
+
+  # DynamoDB Table Names
+  IssuesTableName:
+    Description: "Issues DynamoDB Table Name"
+    Value: !Ref IssuesTable
+    Export:
+      Name: !Sub "${AWS::StackName}-IssuesTable"
+
+  # Log Group Names for easy access
+  AuthLogGroupName:
+    Description: "Auth Lambda CloudWatch Log Group Name"
+    Value: !Ref AuthLogGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-AuthLogGroup"
+
+  UsersLogGroupName:
+    Description: "Users Lambda CloudWatch Log Group Name"
+    Value: !Ref UsersLogGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-UsersLogGroup"
+
+  EventsLogGroupName:
+    Description: "Events Lambda CloudWatch Log Group Name"
+    Value: !Ref EventsLogGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-EventsLogGroup"

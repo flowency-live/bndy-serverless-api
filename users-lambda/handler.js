@@ -1,5 +1,6 @@
 // BNDY Users Lambda Function - User Profile Management
 // Handles profile completion, updates, and user management
+// Uses Lambda Authorizer for authentication - receives pre-validated user context
 
 const AWS = require('aws-sdk');
 const jwt = require('jsonwebtoken');
@@ -9,24 +10,14 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 
 // Configuration
 const USERS_TABLE = 'bndy-users';
-const JWT_SECRET = process.env.JWT_SECRET || 'bndy-production-secret-key';
 const FRONTEND_URL = 'https://backstage.bndy.co.uk';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': FRONTEND_URL,
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Credentials': 'true'
-};
-
-// Parse cookies from event
-const parseCookies = (cookieHeader) => {
-  if (!cookieHeader) return {};
-  return cookieHeader.split(';').reduce((cookies, cookie) => {
-    const [name, value] = cookie.trim().split('=');
-    cookies[name] = value;
-    return cookies;
-  }, {});
 };
 
 // Create response
@@ -39,29 +30,52 @@ const createResponse = (statusCode, body) => ({
   body: JSON.stringify(body)
 });
 
-// Authentication middleware
-const requireAuth = (event) => {
-  const cookies = parseCookies(event.headers.Cookie || event.headers.cookie);
-  const sessionToken = cookies.bndy_session;
+// Parse cookies from event
+const parseCookies = (cookieHeader) => {
+  if (!cookieHeader) return {};
+  return cookieHeader.split(';').reduce((cookies, cookie) => {
+    const [name, value] = cookie.trim().split('=');
+    cookies[name] = value;
+    return cookies;
+  }, {});
+};
 
-  console.log('🔐 USERS: Checking authentication', {
-    hasCookie: !!event.headers.Cookie,
-    hasSessionToken: !!sessionToken
+// Authentication validation
+const requireAuth = (event) => {
+  // HTTP API v2 passes cookies in event.cookies array
+  let sessionToken = null;
+
+  if (event.cookies && Array.isArray(event.cookies)) {
+    // HTTP API v2 format
+    const cookieString = event.cookies.find(c => c.startsWith('bndy_session='));
+    if (cookieString) {
+      sessionToken = cookieString.split('=')[1];
+    }
+  } else {
+    // Fallback to headers for compatibility
+    const cookies = parseCookies(event.headers?.Cookie || event.headers?.cookie || '');
+    sessionToken = cookies.bndy_session;
+  }
+
+  console.log('USERS: Checking authentication', {
+    hasCookie: !!(event.cookies || event.headers?.Cookie),
+    hasSessionToken: !!sessionToken,
+    eventCookies: event.cookies?.length || 0
   });
 
   if (!sessionToken) {
-    console.log('🔐 USERS: No session token found');
+    console.log('USERS: No session token found');
     return { error: 'Not authenticated' };
   }
 
   try {
     const session = jwt.verify(sessionToken, JWT_SECRET);
-    console.log('🔐 USERS: User authenticated via session', {
+    console.log('USERS: User authenticated via session', {
       userId: session.userId.substring(0, 8) + '...'
     });
     return { user: session };
   } catch (error) {
-    console.error('🔐 USERS: Invalid session token:', error.message);
+    console.error('USERS: Invalid session token:', error.message);
     return { error: 'Invalid session' };
   }
 };
@@ -77,7 +91,7 @@ const handleGetProfile = async (event) => {
   const { user } = authResult;
 
   try {
-    console.log('👤 USERS: Get profile request');
+    console.log(' USERS: Get profile request');
 
     const userResult = await dynamodb.get({
       TableName: USERS_TABLE,
@@ -85,12 +99,12 @@ const handleGetProfile = async (event) => {
     }).promise();
 
     if (!userResult.Item) {
-      console.error('👤 USERS: User not found in DynamoDB');
+      console.error(' USERS: User not found in DynamoDB');
       return createResponse(404, { error: 'User not found' });
     }
 
     const dbUser = userResult.Item;
-    console.log('👤 USERS: User profile retrieved');
+    console.log(' USERS: User profile retrieved');
 
     const profileData = {
       id: dbUser.user_id,
@@ -110,7 +124,7 @@ const handleGetProfile = async (event) => {
     return createResponse(200, { user: profileData });
 
   } catch (error) {
-    console.error('👤 USERS: Get profile error:', error);
+    console.error(' USERS: Get profile error:', error);
     return createResponse(500, { error: 'Internal server error' });
   }
 };
@@ -127,9 +141,9 @@ const handleUpdateProfile = async (event) => {
 
   try {
     const requestBody = JSON.parse(event.body);
-    const { firstName, lastName, displayName, avatarUrl, instrument } = requestBody;
+    const { firstName, lastName, displayName, avatarUrl, instrument, hometown } = requestBody;
 
-    console.log('👤 USERS: Update profile request', {
+    console.log(' USERS: Update profile request', {
       hasFirstName: !!firstName,
       hasLastName: !!lastName,
       hasDisplayName: !!displayName
@@ -145,7 +159,7 @@ const handleUpdateProfile = async (event) => {
     }).promise();
 
     if (!userResult.Item) {
-      console.error('👤 USERS: User not found for profile update');
+      console.error(' USERS: User not found for profile update');
       return createResponse(404, { error: 'User not found' });
     }
 
@@ -153,22 +167,14 @@ const handleUpdateProfile = async (event) => {
     const updateResult = await dynamodb.update({
       TableName: USERS_TABLE,
       Key: { cognito_id: user.userId },
-      UpdateExpression: `
-        SET
-          first_name = :firstName,
-          last_name = :lastName,
-          display_name = :displayName,
-          avatar_url = :avatarUrl,
-          instrument = :instrument,
-          profile_complete = :profileComplete,
-          updated_at = :updatedAt
-      `,
+      UpdateExpression: 'SET first_name = :firstName, last_name = :lastName, display_name = :displayName, avatar_url = :avatarUrl, instrument = :instrument, hometown = :hometown, profile_complete = :profileComplete, updated_at = :updatedAt',
       ExpressionAttributeValues: {
         ':firstName': firstName || null,
         ':lastName': lastName || null,
         ':displayName': displayName || null,
         ':avatarUrl': avatarUrl || null,
         ':instrument': instrument || null,
+        ':hometown': hometown || null,
         ':profileComplete': profileComplete,
         ':updatedAt': new Date().toISOString()
       },
@@ -177,7 +183,7 @@ const handleUpdateProfile = async (event) => {
 
     const updatedUser = updateResult.Attributes;
 
-    console.log('👤 USERS: Profile updated successfully', {
+    console.log(' USERS: Profile updated successfully', {
       profileComplete,
       displayName: updatedUser.display_name
     });
@@ -203,7 +209,7 @@ const handleUpdateProfile = async (event) => {
     });
 
   } catch (error) {
-    console.error('👤 USERS: Update profile error:', error);
+    console.error(' USERS: Update profile error:', error);
     return createResponse(500, { error: 'Internal server error' });
   }
 };
@@ -217,7 +223,7 @@ const handleListUsers = async (event) => {
   }
 
   try {
-    console.log('👤 USERS: List users request');
+    console.log(' USERS: List users request');
 
     const result = await dynamodb.scan({
       TableName: USERS_TABLE,
@@ -234,26 +240,32 @@ const handleListUsers = async (event) => {
       createdAt: user.created_at
     }));
 
-    console.log(`👤 USERS: Retrieved ${users.length} users`);
+    console.log(` USERS: Retrieved ${users.length} users`);
 
     return createResponse(200, { users, count: users.length });
 
   } catch (error) {
-    console.error('👤 USERS: List users error:', error);
+    console.error(' USERS: List users error:', error);
     return createResponse(500, { error: 'Internal server error' });
   }
 };
 
 // Main handler
 exports.handler = async (event, context) => {
-  console.log('👤 Users Lambda: Request received', {
-    httpMethod: event.httpMethod,
-    path: event.path,
-    resource: event.resource
+  // HTTP API v2 payload format compatibility
+  const method = event.requestContext?.http?.method || event.httpMethod;
+  const path = event.requestContext?.http?.path || event.rawPath || event.path;
+  const routeKey = `${method} ${path}`;
+
+  console.log(' Users Lambda: Request received', {
+    routeKey,
+    method,
+    path,
+    version: event.version || 'v2.0'
   });
 
   // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
+  if (method === 'OPTIONS') {
     return {
       statusCode: 200,
       headers: corsHeaders,
@@ -262,28 +274,29 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Route requests
-    if (event.resource === '/users/profile' && event.httpMethod === 'GET') {
+    // Route requests (HTTP API v2 format)
+    if (routeKey === 'GET /users/profile') {
       return await handleGetProfile(event);
     }
 
-    if (event.resource === '/users/profile' && event.httpMethod === 'PUT') {
+    if (routeKey === 'PUT /users/profile') {
       return await handleUpdateProfile(event);
     }
 
-    if (event.resource === '/users' && event.httpMethod === 'GET') {
+    if (routeKey === 'GET /users') {
       return await handleListUsers(event);
     }
 
     // Route not found
     return createResponse(404, {
       error: 'Route not found',
-      path: event.path,
-      method: event.httpMethod
+      routeKey,
+      path,
+      method
     });
 
   } catch (error) {
-    console.error('👤 Users Lambda: Unexpected error:', error);
+    console.error(' Users Lambda: Unexpected error:', error);
     return createResponse(500, {
       error: 'Internal server error',
       message: error.message
