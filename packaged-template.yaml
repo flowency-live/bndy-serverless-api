@@ -1,220 +1,436 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: BNDY Platform Serverless API - Lambda Functions + API Gateway
+Description: BNDY Platform Serverless API - Lambda Functions + API Gateway (Redeploying)
 Globals:
   Function:
     Timeout: 30
     Runtime: nodejs18.x
+    Tracing: Active
     Environment:
       Variables:
         NODE_ENV: production
+        JWT_SECRET: 2c7fccb87d98f68d36b19d528aa81a61afacf91058c18ee49738c35b50b81aa5
+        _X_AMZN_TRACE_ID:
+          Ref: AWS::NoValue
 Parameters:
   Stage:
     Type: String
     Default: prod
     Description: Deployment stage (dev, staging, prod)
 Resources:
-  BndyApi:
-    Type: AWS::Serverless::Api
+  BndyHttpApi:
+    Type: AWS::Serverless::HttpApi
     Properties:
-      StageName:
-        Ref: Stage
-      EndpointConfiguration: EDGE
-      Cors:
-        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
-        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Cookie'"
-        AllowOrigin: "'https://backstage.bndy.co.uk,https://d3cewujswmjafa.cloudfront.net'"
+      StageName: $default
+      CorsConfiguration:
+        AllowOrigins:
+        - https://backstage.bndy.co.uk
+        - https://d3cewujswmjafa.cloudfront.net
+        AllowHeaders:
+        - Content-Type
+        - Authorization
+        - Cookie
+        - X-Amz-Date
+        - X-Api-Key
+        - X-Amz-Security-Token
+        AllowMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
         AllowCredentials: true
+        MaxAge: 300
   VenuesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://bndy-deployment-artifacts-1758805276/8ce8cf28b61d713629fd2de677757922
+      CodeUri: s3://bndy-lambda-deployments/ab7a2eda14690037f47eb024ea6701c0
       Handler: handler.handler
       MemorySize: 512
       Description: BNDY Venues API - handles /api/venues endpoints
-      Policies:
-      - Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Action:
-          - secretsmanager:GetSecretValue
-          Resource:
-          - arn:aws:secretsmanager:eu-west-2:771551874768:secret:bndy-production-aurora-password-v2*
-        - Effect: Allow
-          Action:
-          - rds:DescribeDBClusters
-          - rds:DescribeDBInstances
-          Resource: '*'
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         GetAllVenues:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
+            ApiId:
+              Ref: BndyHttpApi
             Path: /api/venues
             Method: get
         GetVenueById:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
+            ApiId:
+              Ref: BndyHttpApi
             Path: /api/venues/{id}
             Method: get
+        CreateVenue:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/venues
+            Method: post
+        UpdateVenue:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/venues/{id}
+            Method: put
+        DeleteVenue:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/venues/{id}
+            Method: delete
   AuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://bndy-deployment-artifacts-1758805276/76cdb2bad9582d23c1f6f4d868218d6c
+      CodeUri: s3://bndy-lambda-deployments/8e074fbac4dc847c9cf28ad914287813
       Handler: handler.handler
       MemorySize: 512
       Description: BNDY Authentication API - handles OAuth and sessions
-      Policies:
-      - Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Action:
-          - secretsmanager:GetSecretValue
-          Resource:
-          - arn:aws:secretsmanager:eu-west-2:771551874768:secret:bndy-production-aurora-password-v2*
-        - Effect: Allow
-          Action:
-          - rds:DescribeDBClusters
-          - rds:DescribeDBInstances
-          Resource: '*'
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         AuthGoogle:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
+            ApiId:
+              Ref: BndyHttpApi
             Path: /auth/google
             Method: get
         AuthCallback:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
+            ApiId:
+              Ref: BndyHttpApi
             Path: /auth/callback
             Method: get
         ApiMe:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
+            ApiId:
+              Ref: BndyHttpApi
             Path: /api/me
             Method: get
-  BandsFunction:
+        AuthLogout:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /auth/logout
+            Method: post
+        AuthLanding:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /auth/landing
+            Method: get
+  UsersFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://bndy-deployment-artifacts-1758805276/76cdb2bad9582d23c1f6f4d868218d6c
+      CodeUri: s3://bndy-lambda-deployments/e148ed20d9a74f20409291fd8fcb33c6
       Handler: handler.handler
       MemorySize: 512
-      Description: BNDY Bands/Artists API - handles band management
-      Policies:
-      - Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Action:
-          - secretsmanager:GetSecretValue
-          Resource:
-          - arn:aws:secretsmanager:eu-west-2:771551874768:secret:bndy-production-aurora-password-v2*
-        - Effect: Allow
-          Action:
-          - rds:DescribeDBClusters
-          - rds:DescribeDBInstances
-          Resource: '*'
+      Description: BNDY Users API - handles user profile management
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
-        CreateBand:
-          Type: Api
+        GetUserProfile:
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
-            Path: /admin/bands
-            Method: post
-        GetUserBands:
-          Type: Api
-          Properties:
-            RestApiId:
-              Ref: BndyApi
-            Path: /admin/bands/user/{userId}
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /users/profile
             Method: get
-        CreateUserBand:
-          Type: Api
+        UpdateUserProfile:
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
-            Path: /admin/user-bands
-            Method: post
-        GetBandMembers:
-          Type: Api
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /users/profile
+            Method: put
+        ListUsers:
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
-            Path: /admin/bands/{bandId}/members
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /users
             Method: get
   EventsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://bndy-deployment-artifacts-1758805276/76cdb2bad9582d23c1f6f4d868218d6c
+      CodeUri: s3://bndy-lambda-deployments/2b9826fb36693e9ffbe4577832b45f29
       Handler: handler.handler
       MemorySize: 512
       Description: BNDY Events API - handles calendar and event management
-      Policies:
-      - Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Action:
-          - secretsmanager:GetSecretValue
-          Resource:
-          - arn:aws:secretsmanager:eu-west-2:771551874768:secret:bndy-production-aurora-password-v2*
-        - Effect: Allow
-          Action:
-          - rds:DescribeDBClusters
-          - rds:DescribeDBInstances
-          Resource: '*'
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
         GetPublicEvents:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
+            ApiId:
+              Ref: BndyHttpApi
             Path: /api/events
             Method: get
         CreateEvent:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
+            ApiId:
+              Ref: BndyHttpApi
             Path: /admin/events
             Method: post
         UpdateEvent:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
+            ApiId:
+              Ref: BndyHttpApi
             Path: /admin/events/{id}
             Method: put
         DeleteEvent:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
+            ApiId:
+              Ref: BndyHttpApi
             Path: /admin/events/{id}
             Method: delete
         GetBandEvents:
-          Type: Api
+          Type: HttpApi
           Properties:
-            RestApiId:
-              Ref: BndyApi
+            ApiId:
+              Ref: BndyHttpApi
             Path: /admin/events/band/{bandId}
             Method: get
+  ArtistsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://bndy-lambda-deployments/59d3c3681d2c6982735224ef82685282
+      Handler: handler.handler
+      MemorySize: 512
+      Description: BNDY Artists API - handles /api/artists endpoints
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Events:
+        GetAllArtists:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/artists
+            Method: get
+        GetArtistById:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/artists/{id}
+            Method: get
+        CreateArtist:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/artists
+            Method: post
+        UpdateArtist:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/artists/{id}
+            Method: put
+        DeleteArtist:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/artists/{id}
+            Method: delete
+  SongsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://bndy-lambda-deployments/644c517085fbda7759ff9def17a1591a
+      Handler: handler.handler
+      MemorySize: 512
+      Description: BNDY Songs API - handles /api/songs endpoints
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Events:
+        GetAllSongs:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/songs
+            Method: get
+        GetSongById:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/songs/{id}
+            Method: get
+        CreateSong:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/songs
+            Method: post
+        UpdateSong:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/songs/{id}
+            Method: put
+        DeleteSong:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/songs/{id}
+            Method: delete
+  MembershipsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://bndy-lambda-deployments/851dfe1596d52a0d890dcdc4d4de3716
+      Handler: handler.handler
+      MemorySize: 512
+      Description: BNDY Memberships API - handles artist membership management
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Events:
+        GetArtistMembers:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/artists/{artistId}/members
+            Method: get
+        AddArtistMember:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/artists/{artistId}/members
+            Method: post
+        UpdateMembership:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/memberships/{membershipId}
+            Method: put
+        DeleteMembership:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: BndyHttpApi
+            Path: /api/memberships/{membershipId}
+            Method: delete
+  ArtistMembershipsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: bndy-artist-memberships
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: membership_id
+        AttributeType: S
+      - AttributeName: user_id
+        AttributeType: S
+      - AttributeName: artist_id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: membership_id
+        KeyType: HASH
+      GlobalSecondaryIndexes:
+      - IndexName: user_id-index
+        KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        Projection:
+          ProjectionType: ALL
+      - IndexName: artist_id-index
+        KeySchema:
+        - AttributeName: artist_id
+          KeyType: HASH
+        Projection:
+          ProjectionType: ALL
+      Tags:
+      - Key: Project
+        Value: BNDY
+      - Key: Environment
+        Value:
+          Ref: Stage
+      - Key: Component
+        Value: Memberships
+  AuthLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${AuthFunction}
+      RetentionInDays: 30
+  UsersLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${UsersFunction}
+      RetentionInDays: 30
+  EventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${EventsFunction}
+      RetentionInDays: 30
+  VenuesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${VenuesFunction}
+      RetentionInDays: 30
+  ArtistsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${ArtistsFunction}
+      RetentionInDays: 30
+  SongsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${SongsFunction}
+      RetentionInDays: 30
+  MembershipsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${MembershipsFunction}
+      RetentionInDays: 30
+  AuthErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName:
+        Fn::Sub: ${AWS::StackName}-AuthFunction-Errors
+      AlarmDescription: Alarm for Auth Lambda function errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+      - Name: FunctionName
+        Value:
+          Ref: AuthFunction
 Outputs:
-  BndyApi:
-    Description: API Gateway endpoint URL for BNDY API
+  BndyHttpApi:
+    Description: HTTP API Gateway endpoint URL for BNDY API
     Value:
-      Fn::Sub: https://${BndyApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/
+      Fn::Sub: https://${BndyHttpApi}.execute-api.${AWS::Region}.amazonaws.com/
     Export:
       Name:
-        Fn::Sub: ${AWS::StackName}-ApiUrl
+        Fn::Sub: ${AWS::StackName}-HttpApiUrl
   VenuesFunctionArn:
     Description: Venues Lambda Function ARN
     Value:
@@ -233,3 +449,51 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-AuthFunctionArn
+  UsersFunctionArn:
+    Description: Users Lambda Function ARN
+    Value:
+      Fn::GetAtt:
+      - UsersFunction
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-UsersFunctionArn
+  ArtistsFunctionArn:
+    Description: Artists Lambda Function ARN
+    Value:
+      Fn::GetAtt:
+      - ArtistsFunction
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-ArtistsFunctionArn
+  SongsFunctionArn:
+    Description: Songs Lambda Function ARN
+    Value:
+      Fn::GetAtt:
+      - SongsFunction
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-SongsFunctionArn
+  AuthLogGroupName:
+    Description: Auth Lambda CloudWatch Log Group Name
+    Value:
+      Ref: AuthLogGroup
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-AuthLogGroup
+  UsersLogGroupName:
+    Description: Users Lambda CloudWatch Log Group Name
+    Value:
+      Ref: UsersLogGroup
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-UsersLogGroup
+  EventsLogGroupName:
+    Description: Events Lambda CloudWatch Log Group Name
+    Value:
+      Ref: EventsLogGroup
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-EventsLogGroup

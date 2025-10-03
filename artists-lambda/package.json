@@ -4,7 +4,8 @@
   "description": "BNDY Artists Lambda Function - DynamoDB Version",
   "main": "handler.js",
   "dependencies": {
-    "aws-sdk": "^2.1467.0"
+    "aws-sdk": "^2.1467.0",
+    "jsonwebtoken": "^9.0.2"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -102,16 +102,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /auth/google
             Method: get
-            Auth:
-              Authorizer: NONE
         AuthCallback:
           Type: HttpApi
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /auth/callback
             Method: get
-            Auth:
-              Authorizer: NONE
         ApiMe:
           Type: HttpApi
           Properties:
@@ -130,8 +126,6 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /auth/landing
             Method: get
-            Auth:
-              Authorizer: NONE
 
   # Users Lambda Function
   UsersFunction:
@@ -285,83 +279,82 @@ Resources:
             Path: /api/songs/{id}
             Method: delete
 
-  # Issues Lambda Function
-  IssuesFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: issues-lambda/
-      Handler: handler.handler
-      MemorySize: 512
-      Description: BNDY Issues API - handles /issues endpoints for bug tracking
-      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
-      Events:
-        CreateIssue:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /issues
-            Method: post
-        GetAllIssues:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /issues
-            Method: get
-        UpdateIssue:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /issues/{id}
-            Method: put
-        DeleteIssue:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /issues/{id}
-            Method: delete
-        BatchUpdateIssues:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /issues/batch
-            Method: post
+  # NOTE: IssuesFunction and UploadsFunction deployed manually outside CF stack
+  # They are operational and managed independently
 
-  # Uploads Lambda Function
-  UploadsFunction:
+  # Memberships Lambda Function
+  MembershipsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: uploads-lambda/
+      CodeUri: memberships-lambda/
       Handler: handler.handler
       MemorySize: 512
-      Description: BNDY Uploads API - handles S3 presigned URLs for image uploads
+      Description: BNDY Memberships API - handles artist membership management
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Events:
-        GeneratePresignedUrl:
+        GetArtistMembers:
           Type: HttpApi
           Properties:
             ApiId: !Ref BndyHttpApi
-            Path: /uploads/presigned-url
+            Path: /api/artists/{artistId}/members
+            Method: get
+        AddArtistMember:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/members
             Method: post
+        UpdateMembership:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/memberships/{membershipId}
+            Method: put
+        DeleteMembership:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/memberships/{membershipId}
+            Method: delete
 
   # DynamoDB Tables
-  IssuesTable:
+  # NOTE: bndy-issues table deployed manually outside CF stack
+
+  ArtistMembershipsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: bndy-issues
+      TableName: bndy-artist-memberships
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
-        - AttributeName: issue_id
+        - AttributeName: membership_id
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: artist_id
           AttributeType: S
       KeySchema:
-        - AttributeName: issue_id
+        - AttributeName: membership_id
           KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: user_id-index
+          KeySchema:
+            - AttributeName: user_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: artist_id-index
+          KeySchema:
+            - AttributeName: artist_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
       Tags:
         - Key: Project
           Value: BNDY
         - Key: Environment
           Value: !Ref Stage
         - Key: Component
-          Value: Issues
+          Value: Memberships
 
   # CloudWatch Log Groups with retention
   AuthLogGroup:
@@ -400,17 +393,13 @@ Resources:
       LogGroupName: !Sub "/aws/lambda/${SongsFunction}"
       RetentionInDays: 30
 
-  IssuesLogGroup:
+  MembershipsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${IssuesFunction}"
+      LogGroupName: !Sub "/aws/lambda/${MembershipsFunction}"
       RetentionInDays: 30
 
-  UploadsLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${UploadsFunction}"
-      RetentionInDays: 30
+  # NOTE: IssuesLogGroup and UploadsLogGroup for manually deployed functions
 
   # CloudWatch Alarms for Lambda Errors
   AuthErrorAlarm:
@@ -466,18 +455,7 @@ Outputs:
     Export:
       Name: !Sub "${AWS::StackName}-SongsFunctionArn"
 
-  IssuesFunctionArn:
-    Description: "Issues Lambda Function ARN"
-    Value: !GetAtt IssuesFunction.Arn
-    Export:
-      Name: !Sub "${AWS::StackName}-IssuesFunctionArn"
-
-  # DynamoDB Table Names
-  IssuesTableName:
-    Description: "Issues DynamoDB Table Name"
-    Value: !Ref IssuesTable
-    Export:
-      Name: !Sub "${AWS::StackName}-IssuesTable"
+  # NOTE: IssuesFunction and IssuesTable outputs removed (deployed manually)
 
   # Log Group Names for easy access
   AuthLogGroupName:

@@ -2,30 +2,78 @@
 // Handles: /api/artists, /api/artists/:id
 
 const AWS = require('aws-sdk');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 
+// Configuration
+const JWT_SECRET = process.env.JWT_SECRET;
+const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
+const FRONTEND_URL = 'https://backstage.bndy.co.uk';
+
+// Parse cookies from event
+const parseCookies = (cookieHeader) => {
+  if (!cookieHeader) return {};
+  return cookieHeader.split(';').reduce((cookies, cookie) => {
+    const [name, value] = cookie.trim().split('=');
+    cookies[name] = value;
+    return cookies;
+  }, {});
+};
+
+// Authentication middleware
+const requireAuth = (event) => {
+  let sessionToken = null;
+
+  if (event.cookies && Array.isArray(event.cookies)) {
+    const cookieString = event.cookies.find(c => c.startsWith('bndy_session='));
+    if (cookieString) {
+      sessionToken = cookieString.split('=')[1];
+    }
+  } else {
+    const cookies = parseCookies(event.headers?.Cookie || event.headers?.cookie || '');
+    sessionToken = cookies.bndy_session;
+  }
+
+  if (!sessionToken) {
+    return { error: 'Not authenticated' };
+  }
+
+  try {
+    const session = jwt.verify(sessionToken, JWT_SECRET);
+    return { user: session };
+  } catch (error) {
+    console.error('🔐 Invalid session token:', error.message);
+    return { error: 'Invalid session' };
+  }
+};
+
 exports.handler = async (event, context) => {
+  // HTTP API v2 payload format compatibility
+  const method = event.requestContext?.http?.method || event.httpMethod;
+  const path = event.requestContext?.http?.path || event.rawPath || event.path;
+
   console.log('🎵 Artists Lambda: Request received', {
-    httpMethod: event.httpMethod,
-    path: event.path,
+    method,
+    path,
     pathParameters: event.pathParameters
   });
-  console.log('🚀 DynamoDB version - FAST AS FUCK');
 
   context.callbackWaitsForEmptyEventLoop = false;
 
   try {
     // Route requests
-    if (event.httpMethod === 'GET' && event.path === '/api/artists') {
+    if (method === 'GET' && path === '/api/artists') {
       return await handleGetAllArtists();
     }
 
-    if (event.httpMethod === 'GET' && event.pathParameters?.id) {
+    if (method === 'GET' && event.pathParameters?.id) {
       return await handleGetArtistById(event.pathParameters.id);
     }
 
-    if (event.httpMethod === 'POST' && event.path === '/api/artists') {
-      return await handleCreateArtist(JSON.parse(event.body));
+    if (method === 'POST' && path === '/api/artists') {
+      return await handleCreateArtist(event);
     }
 
     if (event.httpMethod === 'PUT' && event.pathParameters?.id) {
@@ -147,39 +195,112 @@ async function handleGetArtistById(artistId) {
   }
 }
 
-async function handleCreateArtist(artistData) {
+async function handleCreateArtist(event) {
   console.log('🎵 Artists Lambda: Creating new artist');
 
+  // Require authentication for creating artists
+  const authResult = requireAuth(event);
+  if (authResult.error) {
+    return {
+      statusCode: 401,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: authResult.error })
+    };
+  }
+
+  const { user } = authResult;
+  const artistData = JSON.parse(event.body);
+
   const now = new Date().toISOString();
+  const artistId = crypto.randomUUID();
+
   const artist = {
-    id: require('crypto').randomUUID(),
+    id: artistId,
     name: artistData.name,
     bio: artistData.bio || '',
     location: artistData.location || '',
     genres: artistData.genres || [],
+
+    // NEW: Artist type field (band, solo, duo, group, dj, collective)
+    artist_type: artistData.artistType || artistData.artist_type || 'band',
+
+    // NEW: Owner tracking
+    owner_user_id: user.userId,
+    member_count: 1, // Creator is first member
+
+    // Social media
     facebookUrl: artistData.facebookUrl || '',
     instagramUrl: artistData.instagramUrl || '',
     websiteUrl: artistData.websiteUrl || '',
     socialMediaUrls: artistData.socialMediaUrls || [],
-    profileImageUrl: artistData.profileImageUrl || '',
-    isVerified: artistData.isVerified || false,
-    followerCount: artistData.followerCount || 0,
-    claimedByUserId: artistData.claimedByUserId || null,
+    profileImageUrl: artistData.profileImageUrl || artistData.avatarUrl || '',
+
+    isVerified: false,
+    followerCount: 0,
+    claimedByUserId: null, // Deprecated - use owner_user_id
     created_at: now,
     updated_at: now
   };
 
-  const params = {
-    TableName: 'bndy-artists',
-    Item: artist
-  };
-
   try {
-    await dynamodb.put(params).promise();
+    // Create artist record
+    await dynamodb.put({
+      TableName: 'bndy-artists',
+      Item: artist
+    }).promise();
+
+    // Create owner membership automatically
+    const membershipId = crypto.randomUUID();
+    const membership = {
+      membership_id: membershipId,
+      user_id: user.userId,
+      artist_id: artistId,
+      membership_type: 'performer',
+      role: 'owner',
+
+      // Profile fields (null = inherit from user profile)
+      display_name: artistData.memberDisplayName || null,
+      avatar_url: null,
+      instrument: artistData.memberInstrument || null,
+      bio: null,
+
+      // UI fields
+      icon: artistData.memberIcon || 'fa-music',
+      color: artistData.memberColor || '#708090',
+
+      // Owner gets all permissions
+      permissions: [
+        'manage_members',
+        'manage_gigs',
+        'manage_songs',
+        'manage_finances',
+        'manage_settings'
+      ],
+
+      joined_at: now,
+      invited_at: null,
+      invited_by_user_id: null,
+      status: 'active',
+
+      created_at: now,
+      updated_at: now
+    };
+
+    await dynamodb.put({
+      TableName: MEMBERSHIPS_TABLE,
+      Item: membership
+    }).promise();
+
+    console.log('✅ Artist and owner membership created successfully');
+
     return {
       statusCode: 201,
       headers: getCorsHeaders(),
-      body: JSON.stringify(artist)
+      body: JSON.stringify({
+        artist: artist,
+        membership: membership,
+        message: 'Artist created successfully'
+      })
     };
   } catch (error) {
     console.error('❌ DynamoDB put failed:', error);
@@ -248,7 +369,7 @@ async function handleDeleteArtist(artistId) {
 function getCorsHeaders() {
   return {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': FRONTEND_URL,
     'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
     'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
     'Access-Control-Allow-Credentials': 'true'

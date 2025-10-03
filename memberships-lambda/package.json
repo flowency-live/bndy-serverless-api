@@ -1,0 +1,10 @@
+{
+  "name": "bndy-memberships-lambda",
+  "version": "1.0.0",
+  "description": "BNDY Memberships Lambda - Artist membership management",
+  "main": "handler.js",
+  "dependencies": {
+    "aws-sdk": "^2.1691.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
