@@ -73,27 +73,36 @@ const createResponse = (statusCode, body, cookies = null) => {
 
 // Authentication middleware
 const requireAuth = (event) => {
-  const cookies = parseCookies(event.headers.Cookie || event.headers.cookie);
+  // HTTP API v2 sends cookies in event.cookies array, REST API v1 in headers
+  let cookieHeader = event.headers?.Cookie || event.headers?.cookie;
+
+  if (!cookieHeader && event.cookies && event.cookies.length > 0) {
+    // HTTP API v2 format - join cookies array
+    cookieHeader = event.cookies.join('; ');
+  }
+
+  const cookies = parseCookies(cookieHeader);
   const sessionToken = cookies.bndy_session;
 
-  console.log('🔐 AUTH: Checking authentication', {
-    hasCookie: !!event.headers.Cookie,
+  console.log('AUTH: Checking authentication', {
+    hasCookieHeader: !!cookieHeader,
+    hasCookiesArray: !!(event.cookies && event.cookies.length > 0),
     hasSessionToken: !!sessionToken
   });
 
   if (!sessionToken) {
-    console.log('🔐 AUTH: No session token found');
+    console.log('AUTH: No session token found');
     return { error: 'Not authenticated' };
   }
 
   try {
     const session = jwt.verify(sessionToken, JWT_SECRET);
-    console.log('🔐 AUTH: User authenticated via session', {
+    console.log('AUTH: User authenticated via session', {
       userId: session.userId.substring(0, 8) + '...'
     });
     return { user: session };
   } catch (error) {
-    console.error('🔐 AUTH: Invalid session token:', error.message);
+    console.error('AUTH: Invalid session token:', error.message);
     return { error: 'Invalid session' };
   }
 };
@@ -118,7 +127,7 @@ const handleGoogleAuth = (event) => {
     `state=${state}&` +
     `identity_provider=Google`;
 
-  console.log('🔐 AUTH: Initiating Google OAuth flow', {
+  console.log('AUTH: Initiating Google OAuth flow', {
     state: state.substring(0, 8) + '...',
     redirectUri: REDIRECT_URI
   });
@@ -136,7 +145,7 @@ const handleGoogleAuth = (event) => {
 const handleOAuthCallback = async (event) => {
   const { code, state, error } = event.queryStringParameters || {};
 
-  console.log('🔐 AUTH CALLBACK: Received callback', {
+  console.log('AUTH CALLBACK: Received callback', {
     hasCode: !!code,
     hasState: !!state,
     error,
@@ -146,7 +155,7 @@ const handleOAuthCallback = async (event) => {
   try {
     // Verify state to prevent CSRF
     if (!state || !stateStore.has(state)) {
-      console.error('🔐 AUTH CALLBACK: Invalid or expired state');
+      console.error('AUTH CALLBACK: Invalid or expired state');
       return {
         statusCode: 302,
         headers: { Location: `${FRONTEND_URL}/login?error=invalid_state` },
@@ -157,7 +166,7 @@ const handleOAuthCallback = async (event) => {
     stateStore.delete(state);
 
     if (error) {
-      console.error('🔐 AUTH CALLBACK: OAuth error:', error);
+      console.error('AUTH CALLBACK: OAuth error:', error);
       return {
         statusCode: 302,
         headers: { Location: `${FRONTEND_URL}/login?error=${encodeURIComponent(error)}` },
@@ -166,7 +175,7 @@ const handleOAuthCallback = async (event) => {
     }
 
     if (!code) {
-      console.error('🔐 AUTH CALLBACK: No authorization code received');
+      console.error('AUTH CALLBACK: No authorization code received');
       return {
         statusCode: 302,
         headers: { Location: `${FRONTEND_URL}/login?error=no_code` },
@@ -175,7 +184,7 @@ const handleOAuthCallback = async (event) => {
     }
 
     // Exchange code for tokens
-    console.log('🔐 AUTH CALLBACK: Exchanging code for tokens');
+    console.log('AUTH CALLBACK: Exchanging code for tokens');
 
     const tokenParams = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -194,7 +203,7 @@ const handleOAuthCallback = async (event) => {
     const tokenData = await tokenResponse.json();
     const { access_token, id_token, refresh_token } = tokenData;
 
-    console.log('🔐 AUTH CALLBACK: Token exchange successful');
+    console.log('AUTH CALLBACK: Token exchange successful');
 
     // Decode ID token to get user info
     const decodedIdToken = jwt.decode(id_token);
@@ -202,7 +211,7 @@ const handleOAuthCallback = async (event) => {
     const email = decodedIdToken.email;
     const username = decodedIdToken['cognito:username'];
 
-    console.log('🔐 AUTH CALLBACK: User authenticated', {
+    console.log('AUTH CALLBACK: User authenticated', {
       userId: userId.substring(0, 8) + '...',
       email: email ? email.substring(0, 3) + '***' : 'N/A',
       username
@@ -215,14 +224,11 @@ const handleOAuthCallback = async (event) => {
       username
     });
 
-    // Create secure session
+    // Create lightweight session
     const sessionData = {
       userId,
       username,
       email,
-      accessToken: access_token,
-      idToken: id_token,
-      refreshToken: refresh_token,
       issuedAt: Date.now()
     };
 
@@ -236,19 +242,34 @@ const handleOAuthCallback = async (event) => {
       'Max-Age=604800; Path=/; ' +
       'Domain=.bndy.co.uk';
 
-    console.log('🔐 AUTH CALLBACK: Session created, redirecting to success page');
+    console.log('AUTH CALLBACK: Session created, redirecting to dashboard');
+
+    // Return 200 with HTML+JS redirect for reliable cookie setting
+    const redirectHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Redirecting...</title>
+</head>
+<body>
+  <p>Authentication successful. Redirecting...</p>
+  <script>
+    window.location.href = '${FRONTEND_URL}/dashboard';
+  </script>
+</body>
+</html>`;
 
     return {
-      statusCode: 302,
+      statusCode: 200,
       headers: {
-        Location: `${FRONTEND_URL}/auth-success`,
+        'Content-Type': 'text/html',
         'Set-Cookie': cookieOptions
       },
-      body: ''
+      body: redirectHtml
     };
 
   } catch (error) {
-    console.error('🔐 AUTH CALLBACK: Token exchange failed:', error.message);
+    console.error('AUTH CALLBACK: Token exchange failed:', error.message);
     return {
       statusCode: 302,
       headers: { Location: `${FRONTEND_URL}/login?error=token_exchange_failed` },
@@ -267,7 +288,7 @@ const handleGetMe = async (event) => {
   const { user } = authResult;
 
   try {
-    console.log('🔐 API: /api/me called by authenticated user');
+    console.log('API: /api/me called by authenticated user');
 
     // Get user from DynamoDB
     const userResult = await dynamodb.get({
@@ -276,12 +297,12 @@ const handleGetMe = async (event) => {
     }).promise();
 
     if (!userResult.Item) {
-      console.error('🔐 API: User not found in DynamoDB');
+      console.error('API: User not found in DynamoDB');
       return createResponse(404, { error: 'User not found' });
     }
 
     const dbUser = userResult.Item;
-    console.log('🔐 API: User found in DynamoDB');
+    console.log('API: User found in DynamoDB');
 
     const responseData = {
       user: {
@@ -307,13 +328,13 @@ const handleGetMe = async (event) => {
     return createResponse(200, responseData);
 
   } catch (error) {
-    console.error('🔐 API: /api/me error:', error);
+    console.error('API: /api/me error:', error);
     return createResponse(500, { error: 'Internal server error' });
   }
 };
 
 const handleLogout = (event) => {
-  console.log('🔐 AUTH: User logging out');
+  console.log('AUTH: User logging out');
 
   const clearCookie = 'bndy_session=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/; Domain=.bndy.co.uk';
 
@@ -340,7 +361,7 @@ const createOrUpdateUser = async (userData) => {
     }).promise();
 
     if (existingUser.Item) {
-      console.log('🔐 DB: User exists, updating');
+      console.log('DB: User exists, updating');
 
       // Update existing user
       await dynamodb.update({
@@ -354,7 +375,7 @@ const createOrUpdateUser = async (userData) => {
         }
       }).promise();
     } else {
-      console.log('🔐 DB: Creating new user');
+      console.log('DB: Creating new user');
 
       // Generate new user ID
       const userId = crypto.randomUUID();
@@ -379,23 +400,23 @@ const createOrUpdateUser = async (userData) => {
       }).promise();
     }
   } catch (error) {
-    console.error('🔐 DB: Error creating/updating user:', error);
+    console.error('DB: Error creating/updating user:', error);
     throw error;
   }
 };
 
 // Main handler
 exports.handler = async (event, context) => {
-  // HTTP API v2 payload format compatibility
+  // Support both HTTP API v2 and REST API v1 event formats
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
   const routeKey = `${method} ${path}`;
 
-  console.log('🔐 Auth Lambda: Request received', {
-    routeKey,
+  console.log('Auth Lambda: Request received', {
     method,
     path,
-    version: event.version || 'v2.0'
+    routeKey,
+    eventVersion: event.version || 'v1'
   });
 
   // Handle CORS preflight
@@ -408,7 +429,7 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Route requests using HTTP API v2 format
+    // Route requests using routeKey
     if (routeKey === 'GET /auth/google') {
       return handleGoogleAuth(event);
     }
@@ -426,15 +447,16 @@ exports.handler = async (event, context) => {
     }
 
     // Route not found
+    console.error('Route not found:', { routeKey, method, path });
     return createResponse(404, {
       error: 'Route not found',
-      routeKey,
       path,
-      method
+      method,
+      routeKey
     });
 
   } catch (error) {
-    console.error('🔐 Auth Lambda: Unexpected error:', error);
+    console.error('Auth Lambda: Unexpected error:', error);
     return createResponse(500, {
       error: 'Internal server error',
       message: error.message
