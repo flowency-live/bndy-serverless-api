@@ -386,14 +386,20 @@ const createOrUpdateUser = async (userData) => {
 
 // Main handler
 exports.handler = async (event, context) => {
+  // HTTP API v2 payload format compatibility
+  const method = event.requestContext?.http?.method || event.httpMethod;
+  const path = event.requestContext?.http?.path || event.rawPath || event.path;
+  const routeKey = `${method} ${path}`;
+
   console.log('🔐 Auth Lambda: Request received', {
-    httpMethod: event.httpMethod,
-    path: event.path,
-    resource: event.resource
+    routeKey,
+    method,
+    path,
+    version: event.version || 'v2.0'
   });
 
   // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
+  if (method === 'OPTIONS') {
     return {
       statusCode: 200,
       headers: corsHeaders,
@@ -402,28 +408,29 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Route requests
-    if (event.resource === '/auth/google' && event.httpMethod === 'GET') {
+    // Route requests using HTTP API v2 format
+    if (routeKey === 'GET /auth/google') {
       return handleGoogleAuth(event);
     }
 
-    if (event.resource === '/auth/callback' && event.httpMethod === 'GET') {
+    if (routeKey === 'GET /auth/callback') {
       return await handleOAuthCallback(event);
     }
 
-    if (event.resource === '/api/me' && event.httpMethod === 'GET') {
+    if (routeKey === 'GET /api/me') {
       return await handleGetMe(event);
     }
 
-    if (event.resource === '/auth/logout' && event.httpMethod === 'POST') {
+    if (routeKey === 'POST /auth/logout') {
       return handleLogout(event);
     }
 
     // Route not found
     return createResponse(404, {
       error: 'Route not found',
-      path: event.path,
-      method: event.httpMethod
+      routeKey,
+      path,
+      method
     });
 
   } catch (error) {

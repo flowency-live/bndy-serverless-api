@@ -88,7 +88,7 @@ Resources:
   AuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://bndy-lambda-deployments/fc93bd658fab7506feafb9495a93c66b
+      CodeUri: s3://bndy-lambda-deployments/ff378d36c42e37a93dd32d5c967b6b65
       Handler: handler.handler
       MemorySize: 512
       Description: BNDY Authentication API - handles OAuth and sessions
