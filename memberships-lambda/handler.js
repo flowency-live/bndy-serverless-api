@@ -467,7 +467,7 @@ const handleGetMyMemberships = async (event) => {
     console.log('[MEMBERSHIPS] Found', membershipsResult.Items.length, 'memberships');
 
     if (membershipsResult.Items.length === 0) {
-      return createResponse(200, { memberships: [], artists: [], bands: [] });
+      return createResponse(200, { user: { id: user.userId }, artists: [] });
     }
 
     // Batch get artist details
@@ -511,9 +511,8 @@ const handleGetMyMemberships = async (event) => {
     );
 
     return createResponse(200, {
-      memberships: resolvedMemberships,
-      artists: resolvedMemberships, // Same data, different key
-      bands: resolvedMemberships // Backwards compatibility
+      user: { id: user.userId },
+      artists: resolvedMemberships
     });
 
   } catch (error) {
