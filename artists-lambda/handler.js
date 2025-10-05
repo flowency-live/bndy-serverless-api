@@ -81,11 +81,11 @@ exports.handler = async (event, context) => {
       return await handleCreateArtist(event);
     }
 
-    if (event.httpMethod === 'PUT' && event.pathParameters?.id) {
+    if (method === 'PUT' && event.pathParameters?.id) {
       return await handleUpdateArtist(event.pathParameters.id, JSON.parse(event.body));
     }
 
-    if (event.httpMethod === 'DELETE' && event.pathParameters?.id) {
+    if (method === 'DELETE' && event.pathParameters?.id) {
       return await handleDeleteArtist(event.pathParameters.id);
     }
 
