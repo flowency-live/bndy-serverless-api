@@ -5,9 +5,13 @@ const AWS = require('aws-sdk');
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 
 exports.handler = async (event, context) => {
+  // HTTP API v2 payload format compatibility
+  const method = event.requestContext?.http?.method || event.httpMethod;
+  const path = event.requestContext?.http?.path || event.rawPath || event.path;
+
   console.log('🎯 Venues Lambda: Request received', {
-    httpMethod: event.httpMethod,
-    path: event.path,
+    method,
+    path,
     pathParameters: event.pathParameters
   });
   console.log('🚀 DynamoDB version - FAST AS FUCK');
@@ -16,30 +20,30 @@ exports.handler = async (event, context) => {
 
   try {
     // Route requests
-    if (event.httpMethod === 'GET' && event.path === '/api/venues') {
+    if (method === 'GET' && path === '/api/venues') {
       return await handleGetAllVenues();
     }
 
-    if (event.httpMethod === 'GET' && event.pathParameters?.id) {
+    if (method === 'GET' && event.pathParameters?.id) {
       return await handleGetVenueById(event.pathParameters.id);
     }
 
-    if (event.httpMethod === 'POST' && event.path === '/api/venues') {
+    if (method === 'POST' && path === '/api/venues') {
       return await handleCreateVenue(JSON.parse(event.body));
     }
 
-    if (event.httpMethod === 'PUT' && event.pathParameters?.id) {
+    if (method === 'PUT' && event.pathParameters?.id) {
       return await handleUpdateVenue(event.pathParameters.id, JSON.parse(event.body));
     }
 
-    if (event.httpMethod === 'DELETE' && event.pathParameters?.id) {
+    if (method === 'DELETE' && event.pathParameters?.id) {
       return await handleDeleteVenue(event.pathParameters.id);
     }
 
     return {
       statusCode: 404,
       headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Route not found' })
+      body: JSON.stringify({ error: 'Route not found', method, path })
     };
 
   } catch (error) {
@@ -56,11 +60,7 @@ async function handleGetAllVenues() {
   console.log('📍 Venues Lambda: Scanning all venues from DynamoDB...');
 
   const params = {
-    TableName: 'bndy-venues',
-    ProjectionExpression: 'id, #name, address, latitude, longitude, location_object, google_place_id, validated, profile_image_url',
-    ExpressionAttributeNames: {
-      '#name': 'name'
-    }
+    TableName: 'bndy-venues'
   };
 
   try {
@@ -77,10 +77,20 @@ async function handleGetAllVenues() {
       id: venue.id,
       name: venue.name,
       address: venue.address,
+      latitude: venue.latitude,
+      longitude: venue.longitude,
       location: venue.location_object || { lat: venue.latitude, lng: venue.longitude },
       googlePlaceId: venue.google_place_id,
       validated: venue.validated || false,
-      profileImageUrl: venue.profile_image_url
+      nameVariants: venue.name_variants || [],
+      phone: venue.phone || '',
+      postcode: venue.postcode || '',
+      facilities: venue.facilities || [],
+      socialMediaURLs: venue.social_media_urls || [],
+      profileImageUrl: venue.profile_image_url || null,
+      standardTicketed: venue.standard_ticketed || false,
+      standardTicketInformation: venue.standard_ticket_information || '',
+      standardTicketUrl: venue.standard_ticket_url || ''
     }));
 
     console.log(`📍 Venues Lambda: Served ${formattedVenues.length} venues (${result.Items.length} total in DB)`);
