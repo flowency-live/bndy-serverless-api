@@ -68,6 +68,11 @@ exports.handler = async (event, context) => {
       return await handleGetAllArtists();
     }
 
+    // Check name availability endpoint
+    if (method === 'GET' && path === '/api/artists/check-name') {
+      return await handleCheckName(event);
+    }
+
     if (method === 'GET' && event.pathParameters?.id) {
       return await handleGetArtistById(event.pathParameters.id);
     }
@@ -345,23 +350,107 @@ async function handleUpdateArtist(artistId, artistData) {
   }
 }
 
+async function handleCheckName(event) {
+  console.log('🎵 Artists Lambda: Checking name availability');
+
+  const name = event.queryStringParameters?.name;
+
+  if (!name || !name.trim()) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Name parameter is required' })
+    };
+  }
+
+  try {
+    // Scan all artists and filter case-insensitively in code
+    // DynamoDB doesn't support lower() function, so we fetch and filter
+    const params = {
+      TableName: 'bndy-artists',
+      ProjectionExpression: 'id, #name, #location',
+      ExpressionAttributeNames: {
+        '#name': 'name',
+        '#location': 'location'
+      }
+    };
+
+    const result = await dynamodb.scan(params).promise();
+
+    // Case-insensitive comparison
+    const normalizedSearchName = name.toLowerCase().trim();
+    const matches = result.Items.filter(item =>
+      item.name && item.name.toLowerCase().trim() === normalizedSearchName
+    );
+
+    const available = matches.length === 0;
+
+    console.log(`🎵 Name "${name}" availability: ${available}, found ${matches.length} matches`);
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        available,
+        existingId: matches.length > 0 ? matches[0].id : null,
+        existingName: matches.length > 0 ? matches[0].name : null,
+        existingLocation: matches.length > 0 ? (matches[0].location || null) : null,
+        totalMatches: matches.length,
+        matches: matches.map(m => ({
+          id: m.id,
+          name: m.name,
+          location: m.location || null
+        }))
+      })
+    };
+  } catch (error) {
+    console.error('❌ DynamoDB scan failed:', error);
+    throw error;
+  }
+}
+
 async function handleDeleteArtist(artistId) {
   console.log(`🎵 Artists Lambda: Deleting artist: ${artistId}`);
 
-  const params = {
-    TableName: 'bndy-artists',
-    Key: { id: artistId }
-  };
-
   try {
-    await dynamodb.delete(params).promise();
+    // Step 1: Query all memberships for this artist
+    const membershipQueryParams = {
+      TableName: MEMBERSHIPS_TABLE,
+      IndexName: 'artist_id-index',
+      KeyConditionExpression: 'artist_id = :artistId',
+      ExpressionAttributeValues: {
+        ':artistId': artistId
+      }
+    };
+
+    const membershipsResult = await dynamodb.query(membershipQueryParams).promise();
+    console.log(`🎵 Found ${membershipsResult.Items.length} memberships to delete`);
+
+    // Step 2: Delete all memberships (cascade delete)
+    for (const membership of membershipsResult.Items) {
+      await dynamodb.delete({
+        TableName: MEMBERSHIPS_TABLE,
+        Key: { membership_id: membership.membership_id }
+      }).promise();
+      console.log(`✅ Deleted membership: ${membership.membership_id} for user: ${membership.user_id}`);
+    }
+
+    // Step 3: Delete the artist record
+    const artistParams = {
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
+    };
+
+    await dynamodb.delete(artistParams).promise();
+    console.log(`✅ Artist deleted successfully with ${membershipsResult.Items.length} cascaded membership deletions`);
+
     return {
       statusCode: 204,
       headers: getCorsHeaders(),
       body: ''
     };
   } catch (error) {
-    console.error('❌ DynamoDB delete failed:', error);
+    console.error('❌ Artist deletion failed:', error);
     throw error;
   }
 }
