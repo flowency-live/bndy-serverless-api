@@ -321,7 +321,7 @@ async function handleUpdateArtist(artistId, artistData) {
   const params = {
     TableName: 'bndy-artists',
     Key: { id: artistId },
-    UpdateExpression: 'SET #name = :name, bio = :bio, #location = :location, genres = :genres, isVerified = :isVerified, updated_at = :updated_at',
+    UpdateExpression: 'SET #name = :name, bio = :bio, #location = :location, genres = :genres, isVerified = :isVerified, profileImageUrl = :profileImageUrl, allowedEventTypes = :allowedEventTypes, updated_at = :updated_at',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location'
@@ -332,6 +332,8 @@ async function handleUpdateArtist(artistId, artistData) {
       ':location': artistData.location || '',
       ':genres': artistData.genres || [],
       ':isVerified': artistData.isVerified || false,
+      ':profileImageUrl': artistData.profileImageUrl || '',
+      ':allowedEventTypes': artistData.allowedEventTypes || ['practice', 'public_gig'],
       ':updated_at': now
     },
     ReturnValues: 'ALL_NEW'
