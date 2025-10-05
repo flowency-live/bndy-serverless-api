@@ -538,24 +538,24 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Route requests (HTTP API v2 format)
-    if (routeKey === 'POST /issues') {
+    // Route requests (HTTP API v2 format with /api/ prefix)
+    if (routeKey === 'POST /api/issues') {
       return await handleCreateIssue(event);
     }
 
-    if (routeKey === 'GET /issues') {
+    if (routeKey === 'GET /api/issues') {
       return await handleListIssues(event);
     }
 
-    if (routeKey === 'PUT /issues/{id}') {
+    if (routeKey === 'PUT /api/issues/{id}') {
       return await handleUpdateIssue(event);
     }
 
-    if (routeKey === 'DELETE /issues/{id}') {
+    if (routeKey === 'DELETE /api/issues/{id}') {
       return await handleDeleteIssue(event);
     }
 
-    if (routeKey === 'POST /issues/batch') {
+    if (routeKey === 'POST /api/issues/batch') {
       return await handleBatchUpdateIssues(event);
     }
 
@@ -566,11 +566,11 @@ exports.handler = async (event, context) => {
       path,
       method,
       availableRoutes: [
-        'POST /issues',
-        'GET /issues',
-        'PUT /issues/{id}',
-        'DELETE /issues/{id}',
-        'POST /issues/batch'
+        'POST /api/issues',
+        'GET /api/issues',
+        'PUT /api/issues/{id}',
+        'DELETE /api/issues/{id}',
+        'POST /api/issues/batch'
       ]
     });
 
