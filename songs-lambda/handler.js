@@ -5,9 +5,13 @@ const AWS = require('aws-sdk');
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 
 exports.handler = async (event, context) => {
+  // HTTP API v2 payload format compatibility
+  const method = event.requestContext?.http?.method || event.httpMethod;
+  const path = event.requestContext?.http?.path || event.rawPath || event.path;
+
   console.log('🎶 Songs Lambda: Request received', {
-    httpMethod: event.httpMethod,
-    path: event.path,
+    method,
+    path,
     pathParameters: event.pathParameters
   });
   console.log('🚀 DynamoDB version - FAST AS FUCK');
@@ -16,30 +20,30 @@ exports.handler = async (event, context) => {
 
   try {
     // Route requests
-    if (event.httpMethod === 'GET' && event.path === '/api/songs') {
+    if (method === 'GET' && path === '/api/songs') {
       return await handleGetAllSongs();
     }
 
-    if (event.httpMethod === 'GET' && event.pathParameters?.id) {
+    if (method === 'GET' && event.pathParameters?.id) {
       return await handleGetSongById(event.pathParameters.id);
     }
 
-    if (event.httpMethod === 'POST' && event.path === '/api/songs') {
+    if (method === 'POST' && path === '/api/songs') {
       return await handleCreateSong(JSON.parse(event.body));
     }
 
-    if (event.httpMethod === 'PUT' && event.pathParameters?.id) {
+    if (method === 'PUT' && event.pathParameters?.id) {
       return await handleUpdateSong(event.pathParameters.id, JSON.parse(event.body));
     }
 
-    if (event.httpMethod === 'DELETE' && event.pathParameters?.id) {
+    if (method === 'DELETE' && event.pathParameters?.id) {
       return await handleDeleteSong(event.pathParameters.id);
     }
 
     return {
       statusCode: 404,
       headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Route not found' })
+      body: JSON.stringify({ error: 'Route not found', method, path })
     };
 
   } catch (error) {
@@ -56,8 +60,7 @@ async function handleGetAllSongs() {
   console.log('🎶 Songs Lambda: Scanning all songs from DynamoDB...');
 
   const params = {
-    TableName: 'bndy-songs',
-    ProjectionExpression: 'id, title, artistName, duration, genre, releaseDate, album, spotifyUrl, appleMusicUrl, youtubeUrl, audioFileUrl, isFeatured, tags, createdAt'
+    TableName: 'bndy-songs'
   };
 
   try {
