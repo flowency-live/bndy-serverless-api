@@ -504,6 +504,7 @@ const handleGetMyMemberships = async (event) => {
             profileImageUrl: artist.profileImageUrl,
             isVerified: artist.isVerified || false,
             memberCount: artist.member_count || 0,
+            allowedEventTypes: artist.allowedEventTypes || ['practice', 'public_gig'],
             createdAt: artist.created_at
           } : null
         };
