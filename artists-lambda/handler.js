@@ -110,7 +110,7 @@ async function handleGetAllArtists() {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, bio, #location, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, createdAt',
+    ProjectionExpression: 'id, #name, bio, #location, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, createdAt',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location'
@@ -135,6 +135,7 @@ async function handleGetAllArtists() {
       isVerified: artist.isVerified || false,
       followerCount: artist.followerCount || 0,
       claimedByUserId: artist.claimedByUserId || null,
+      allowedEventTypes: artist.allowedEventTypes || ['practice', 'public_gig'],
       createdAt: artist.createdAt
     }));
 
@@ -185,6 +186,7 @@ async function handleGetArtistById(artistId) {
       isVerified: result.Item.isVerified || false,
       followerCount: result.Item.followerCount || 0,
       claimedByUserId: result.Item.claimedByUserId || null,
+      allowedEventTypes: result.Item.allowedEventTypes || ['practice', 'public_gig'],
       createdAt: result.Item.createdAt,
       updatedAt: result.Item.updatedAt
     };
@@ -321,7 +323,7 @@ async function handleUpdateArtist(artistId, artistData) {
   const params = {
     TableName: 'bndy-artists',
     Key: { id: artistId },
-    UpdateExpression: 'SET #name = :name, bio = :bio, #location = :location, genres = :genres, isVerified = :isVerified, profileImageUrl = :profileImageUrl, allowedEventTypes = :allowedEventTypes, updated_at = :updated_at',
+    UpdateExpression: 'SET #name = :name, bio = :bio, #location = :location, locationLat = :locationLat, locationLng = :locationLng, genres = :genres, isVerified = :isVerified, profileImageUrl = :profileImageUrl, allowedEventTypes = :allowedEventTypes, updated_at = :updated_at',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location'
@@ -330,6 +332,8 @@ async function handleUpdateArtist(artistId, artistData) {
       ':name': artistData.name,
       ':bio': artistData.bio || '',
       ':location': artistData.location || '',
+      ':locationLat': artistData.locationLat !== undefined ? artistData.locationLat : null,
+      ':locationLng': artistData.locationLng !== undefined ? artistData.locationLng : null,
       ':genres': artistData.genres || [],
       ':isVerified': artistData.isVerified || false,
       ':profileImageUrl': artistData.profileImageUrl || '',
