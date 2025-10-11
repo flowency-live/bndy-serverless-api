@@ -110,7 +110,7 @@ async function handleGetAllArtists() {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, bio, #location, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, createdAt',
+    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, createdAt',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location'
@@ -126,6 +126,8 @@ async function handleGetAllArtists() {
       name: artist.name,
       bio: artist.bio || '',
       location: artist.location || '',
+      locationLat: artist.locationLat || null,
+      locationLng: artist.locationLng || null,
       genres: artist.genres || [],
       facebookUrl: artist.facebookUrl || '',
       instagramUrl: artist.instagramUrl || '',
@@ -136,6 +138,7 @@ async function handleGetAllArtists() {
       followerCount: artist.followerCount || 0,
       claimedByUserId: artist.claimedByUserId || null,
       allowedEventTypes: artist.allowedEventTypes || ['practice', 'public_gig'],
+      displayColour: artist.displayColour || '#f97316',
       createdAt: artist.createdAt
     }));
 
@@ -177,6 +180,8 @@ async function handleGetArtistById(artistId) {
       name: result.Item.name,
       bio: result.Item.bio || '',
       location: result.Item.location || '',
+      locationLat: result.Item.locationLat || null,
+      locationLng: result.Item.locationLng || null,
       genres: result.Item.genres || [],
       facebookUrl: result.Item.facebookUrl || '',
       instagramUrl: result.Item.instagramUrl || '',
@@ -187,6 +192,7 @@ async function handleGetArtistById(artistId) {
       followerCount: result.Item.followerCount || 0,
       claimedByUserId: result.Item.claimedByUserId || null,
       allowedEventTypes: result.Item.allowedEventTypes || ['practice', 'public_gig'],
+      displayColour: result.Item.displayColour || '#f97316',
       createdAt: result.Item.createdAt,
       updatedAt: result.Item.updatedAt
     };
@@ -226,6 +232,8 @@ async function handleCreateArtist(event) {
     name: artistData.name,
     bio: artistData.bio || '',
     location: artistData.location || '',
+    locationLat: artistData.locationLat || null,
+    locationLng: artistData.locationLng || null,
     genres: artistData.genres || [],
 
     // NEW: Artist type field (band, solo, duo, group, dj, collective)
@@ -241,6 +249,9 @@ async function handleCreateArtist(event) {
     websiteUrl: artistData.websiteUrl || '',
     socialMediaUrls: artistData.socialMediaUrls || [],
     profileImageUrl: artistData.profileImageUrl || artistData.avatarUrl || '',
+
+    // Display customization
+    displayColour: artistData.displayColour || '#f97316',
 
     isVerified: false,
     followerCount: 0,
@@ -323,7 +334,7 @@ async function handleUpdateArtist(artistId, artistData) {
   const params = {
     TableName: 'bndy-artists',
     Key: { id: artistId },
-    UpdateExpression: 'SET #name = :name, bio = :bio, #location = :location, locationLat = :locationLat, locationLng = :locationLng, genres = :genres, isVerified = :isVerified, profileImageUrl = :profileImageUrl, allowedEventTypes = :allowedEventTypes, updated_at = :updated_at',
+    UpdateExpression: 'SET #name = :name, bio = :bio, #location = :location, locationLat = :locationLat, locationLng = :locationLng, genres = :genres, isVerified = :isVerified, profileImageUrl = :profileImageUrl, allowedEventTypes = :allowedEventTypes, displayColour = :displayColour, updated_at = :updated_at',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location'
@@ -338,6 +349,7 @@ async function handleUpdateArtist(artistId, artistData) {
       ':isVerified': artistData.isVerified || false,
       ':profileImageUrl': artistData.profileImageUrl || '',
       ':allowedEventTypes': artistData.allowedEventTypes || ['practice', 'public_gig'],
+      ':displayColour': artistData.displayColour || '#f97316',
       ':updated_at': now
     },
     ReturnValues: 'ALL_NEW'
