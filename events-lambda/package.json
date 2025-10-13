@@ -4,7 +4,8 @@
   "description": "BNDY Events/Calendar Lambda Function",
   "main": "handler.js",
   "dependencies": {
-    "pg": "^8.11.3",
-    "aws-sdk": "^2.1450.0"
+    "aws-sdk": "^2.1450.0",
+    "jsonwebtoken": "^9.0.2",
+    "ngeohash": "^0.6.3"
   }
 }

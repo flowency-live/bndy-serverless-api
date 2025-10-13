@@ -21,6 +21,7 @@ const REDIRECT_URI = `${API_URL}/auth/callback`;
 
 // DynamoDB Tables
 const USERS_TABLE = 'bndy-users';
+const OTP_TABLE = 'bndy-otp-codes';
 
 // State storage for OAuth (in production, use DynamoDB with TTL)
 const stateStore = new Map();
@@ -349,6 +350,391 @@ const handleLogout = (event) => {
   };
 };
 
+// ========== PHONE AUTHENTICATION HANDLERS ==========
+
+const handlePhoneRequestOTP = async (event) => {
+  try {
+    const body = JSON.parse(event.body || '{}');
+    const { phone } = body;
+
+    // Validate phone format (+1234567890)
+    if (!phone || !/^\+[1-9]\d{10,14}$/.test(phone)) {
+      return createResponse(400, { error: 'Invalid phone number format. Must be E.164 format (+1234567890)' });
+    }
+
+    console.log('[PHONE_AUTH] OTP requested for phone:', phone.substring(0, 4) + '****');
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + (5 * 60 * 1000); // 5 minutes
+    const requestId = crypto.randomUUID();
+
+    // Store OTP in DynamoDB
+    await dynamodb.put({
+      TableName: OTP_TABLE,
+      Item: {
+        phone,
+        otp,
+        expiresAt,
+        attempts: 0,
+        createdAt: new Date().toISOString(),
+        requestId
+      }
+    }).promise();
+
+    // Send SMS via SNS (will fail gracefully if SNS not approved)
+    try {
+      const sns = new AWS.SNS({ region: 'eu-west-2' });
+      await sns.publish({
+        Message: `Your BNDY verification code is: ${otp}\n\nThis code expires in 5 minutes.`,
+        PhoneNumber: phone
+      }).promise();
+
+      console.log('[PHONE_AUTH] OTP sent via SMS successfully');
+      return createResponse(200, {
+        success: true,
+        message: 'OTP sent to your phone',
+        requestId,
+        expiresIn: 300
+      });
+    } catch (smsError) {
+      console.warn('[PHONE_AUTH] SMS send failed (SNS may not be approved):', smsError.message);
+
+      // Return success anyway (OTP is stored, can be tested manually)
+      return createResponse(200, {
+        success: true,
+        message: 'OTP generated (SMS delivery pending SNS approval)',
+        requestId,
+        expiresIn: 300,
+        warning: 'SMS not sent - SNS not configured'
+      });
+    }
+
+  } catch (error) {
+    console.error('[PHONE_AUTH] Error requesting OTP:', error);
+    return createResponse(500, { error: 'Failed to request OTP' });
+  }
+};
+
+const handlePhoneVerifyOTP = async (event) => {
+  try {
+    const body = JSON.parse(event.body || '{}');
+    const { phone, otp } = body;
+
+    if (!phone || !otp) {
+      return createResponse(400, { error: 'Phone and OTP are required' });
+    }
+
+    console.log('[PHONE_AUTH] Verifying OTP for phone:', phone.substring(0, 4) + '****');
+
+    // Get OTP record from DynamoDB
+    const otpResult = await dynamodb.get({
+      TableName: OTP_TABLE,
+      Key: { phone }
+    }).promise();
+
+    if (!otpResult.Item) {
+      console.log('[PHONE_AUTH] No OTP found for phone');
+      return createResponse(404, { error: 'No OTP request found for this phone number' });
+    }
+
+    const otpRecord = otpResult.Item;
+
+    // Check expiry
+    if (Date.now() > otpRecord.expiresAt) {
+      console.log('[PHONE_AUTH] OTP expired');
+      await dynamodb.delete({
+        TableName: OTP_TABLE,
+        Key: { phone }
+      }).promise();
+      return createResponse(400, { error: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Check attempts (max 3)
+    if (otpRecord.attempts >= 3) {
+      console.log('[PHONE_AUTH] Too many attempts');
+      await dynamodb.delete({
+        TableName: OTP_TABLE,
+        Key: { phone }
+      }).promise();
+      return createResponse(400, { error: 'Too many failed attempts. Please request a new OTP.' });
+    }
+
+    // Verify OTP
+    if (otpRecord.otp !== otp) {
+      console.log('[PHONE_AUTH] Invalid OTP');
+
+      // Increment attempts
+      await dynamodb.update({
+        TableName: OTP_TABLE,
+        Key: { phone },
+        UpdateExpression: 'SET attempts = attempts + :inc',
+        ExpressionAttributeValues: { ':inc': 1 }
+      }).promise();
+
+      return createResponse(400, {
+        error: 'Invalid OTP',
+        attemptsRemaining: 2 - otpRecord.attempts
+      });
+    }
+
+    // OTP is valid - delete it
+    await dynamodb.delete({
+      TableName: OTP_TABLE,
+      Key: { phone }
+    }).promise();
+
+    console.log('[PHONE_AUTH] OTP verified successfully');
+
+    // Check if user already exists with this phone
+    const usersResult = await dynamodb.query({
+      TableName: USERS_TABLE,
+      IndexName: 'phone-index',
+      KeyConditionExpression: 'phone = :phone',
+      ExpressionAttributeValues: { ':phone': phone }
+    }).promise();
+
+    if (usersResult.Items && usersResult.Items.length > 0) {
+      // User exists - log them in
+      const existingUser = usersResult.Items[0];
+
+      const sessionData = {
+        userId: existingUser.cognito_id,
+        username: existingUser.username,
+        email: existingUser.email,
+        phone: existingUser.phone,
+        issuedAt: Date.now()
+      };
+
+      const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '7d' });
+
+      const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
+        'HttpOnly; Secure; SameSite=Lax; ' +
+        'Max-Age=604800; Path=/; ' +
+        'Domain=.bndy.co.uk';
+
+      console.log('[PHONE_AUTH] Existing user logged in');
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Set-Cookie': cookieOptions,
+          ...corsHeaders
+        },
+        body: JSON.stringify({
+          success: true,
+          user: {
+            id: existingUser.user_id,
+            phone: existingUser.phone,
+            displayName: existingUser.display_name,
+            profileCompleted: existingUser.profile_complete || false
+          }
+        })
+      };
+    }
+
+    // User doesn't exist - auto-create like Google OAuth does
+    console.log('[PHONE_AUTH] New user, auto-creating in bndy-users');
+
+    const userId = crypto.randomUUID();
+    const cognitoId = `phone_${userId}`;
+    const username = `user_${phone.substring(phone.length - 4)}`;
+
+    await dynamodb.put({
+      TableName: USERS_TABLE,
+      Item: {
+        cognito_id: cognitoId,
+        user_id: userId,
+        phone,
+        email: null,
+        username,
+        first_name: null,
+        last_name: null,
+        display_name: null,
+        hometown: null,
+        avatar_url: null,
+        instrument: null,
+        profile_complete: false,  // Just like Google OAuth
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    }).promise();
+
+    // Create session
+    const sessionData = {
+      userId: cognitoId,
+      username,
+      phone,
+      issuedAt: Date.now()
+    };
+
+    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '7d' });
+
+    const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
+      'HttpOnly; Secure; SameSite=Lax; ' +
+      'Max-Age=604800; Path=/; ' +
+      'Domain=.bndy.co.uk';
+
+    console.log('[PHONE_AUTH] New user created and logged in');
+
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Set-Cookie': cookieOptions,
+        ...corsHeaders
+      },
+      body: JSON.stringify({
+        success: true,
+        user: {
+          id: userId,
+          phone,
+          displayName: null,
+          profileCompleted: false
+        }
+      })
+    };
+
+  } catch (error) {
+    console.error('[PHONE_AUTH] Error verifying OTP:', error);
+    return createResponse(500, { error: 'Failed to verify OTP' });
+  }
+};
+
+const handlePhoneVerifyAndOnboard = async (event) => {
+  try {
+    const body = JSON.parse(event.body || '{}');
+    const { phone, otp, firstName, lastName, hometown } = body;
+
+    if (!phone || !otp || !firstName || !hometown) {
+      return createResponse(400, {
+        error: 'Phone, OTP, first name, and hometown are required'
+      });
+    }
+
+    console.log('[PHONE_AUTH] Verify and onboard for phone:', phone.substring(0, 4) + '****');
+
+    // Verify OTP first (same logic as handlePhoneVerifyOTP)
+    const otpResult = await dynamodb.get({
+      TableName: OTP_TABLE,
+      Key: { phone }
+    }).promise();
+
+    if (!otpResult.Item) {
+      return createResponse(404, { error: 'No OTP request found' });
+    }
+
+    const otpRecord = otpResult.Item;
+
+    if (Date.now() > otpRecord.expiresAt) {
+      await dynamodb.delete({ TableName: OTP_TABLE, Key: { phone } }).promise();
+      return createResponse(400, { error: 'OTP has expired' });
+    }
+
+    if (otpRecord.attempts >= 3) {
+      await dynamodb.delete({ TableName: OTP_TABLE, Key: { phone } }).promise();
+      return createResponse(400, { error: 'Too many failed attempts' });
+    }
+
+    if (otpRecord.otp !== otp) {
+      await dynamodb.update({
+        TableName: OTP_TABLE,
+        Key: { phone },
+        UpdateExpression: 'SET attempts = attempts + :inc',
+        ExpressionAttributeValues: { ':inc': 1 }
+      }).promise();
+      return createResponse(400, { error: 'Invalid OTP' });
+    }
+
+    // OTP verified - delete it
+    await dynamodb.delete({
+      TableName: OTP_TABLE,
+      Key: { phone }
+    }).promise();
+
+    // Check if user already exists
+    const usersResult = await dynamodb.query({
+      TableName: USERS_TABLE,
+      IndexName: 'phone-index',
+      KeyConditionExpression: 'phone = :phone',
+      ExpressionAttributeValues: { ':phone': phone }
+    }).promise();
+
+    if (usersResult.Items && usersResult.Items.length > 0) {
+      return createResponse(400, {
+        error: 'User already exists with this phone number. Please use verify-otp to login.'
+      });
+    }
+
+    // Create new user
+    const userId = crypto.randomUUID();
+    const cognitoId = `phone_${userId}`; // Synthetic Cognito ID for phone-auth users
+    const username = `user_${phone.substring(phone.length - 4)}`;
+    const displayName = lastName ? `${firstName} ${lastName}` : firstName;
+
+    await dynamodb.put({
+      TableName: USERS_TABLE,
+      Item: {
+        cognito_id: cognitoId,
+        user_id: userId,
+        phone,
+        email: null,
+        username,
+        first_name: firstName,
+        last_name: lastName || null,
+        display_name: displayName,
+        hometown,
+        avatar_url: null,
+        instrument: null,
+        profile_complete: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    }).promise();
+
+    console.log('[PHONE_AUTH] New user created:', userId.substring(0, 8) + '...');
+
+    // Create session
+    const sessionData = {
+      userId: cognitoId,
+      username,
+      phone,
+      issuedAt: Date.now()
+    };
+
+    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '7d' });
+
+    const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
+      'HttpOnly; Secure; SameSite=Lax; ' +
+      'Max-Age=604800; Path=/; ' +
+      'Domain=.bndy.co.uk';
+
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Set-Cookie': cookieOptions,
+        ...corsHeaders
+      },
+      body: JSON.stringify({
+        success: true,
+        user: {
+          id: userId,
+          phone,
+          displayName,
+          hometown,
+          profileCompleted: true
+        }
+      })
+    };
+
+  } catch (error) {
+    console.error('[PHONE_AUTH] Error in verify-and-onboard:', error);
+    return createResponse(500, { error: 'Failed to complete onboarding' });
+  }
+};
+
 // Helper function to create or update user in DynamoDB
 const createOrUpdateUser = async (userData) => {
   const { cognitoId, email, username } = userData;
@@ -444,6 +830,19 @@ exports.handler = async (event, context) => {
 
     if (routeKey === 'POST /auth/logout') {
       return handleLogout(event);
+    }
+
+    // Phone authentication routes
+    if (routeKey === 'POST /auth/phone/request-otp') {
+      return await handlePhoneRequestOTP(event);
+    }
+
+    if (routeKey === 'POST /auth/phone/verify-otp') {
+      return await handlePhoneVerifyOTP(event);
+    }
+
+    if (routeKey === 'POST /auth/phone/verify-and-onboard') {
+      return await handlePhoneVerifyAndOnboard(event);
     }
 
     // Route not found

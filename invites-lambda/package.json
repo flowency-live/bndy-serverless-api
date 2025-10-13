@@ -1,0 +1,16 @@
+{
+  "name": "bndy-invites-lambda",
+  "version": "1.0.0",
+  "description": "Magic link invite management for BNDY platform",
+  "main": "handler.js",
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2",
+    "aws-sdk": "^2.1691.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}

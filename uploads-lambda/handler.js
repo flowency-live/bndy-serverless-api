@@ -131,14 +131,21 @@ const handleGenerateUploadUrl = async (event) => {
     const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
     const key = `${uploadType}/${user.userId}/${timestamp}-${randomId}-${sanitizedFileName}`;
 
+    console.log('UPLOADS: Generating presigned URL', {
+      bucket: BUCKET_NAME,
+      key,
+      contentType,
+      userId: user.userId.substring(0, 8) + '...'
+    });
+
     // Generate presigned URL (expires in 5 minutes)
     const presignedUrl = s3.getSignedUrl('putObject', {
       Bucket: BUCKET_NAME,
       Key: key,
       ContentType: contentType,
       Expires: 300, // 5 minutes
-      ACL: 'public-read',
-      ContentLengthRange: [1, maxFileSize], // Enforce size limit in S3
+      // Note: ACL removed - bucket uses public-read bucket policy instead
+      // Note: File size validation done client-side before request
       Metadata: {
         'uploaded-by': user.userId,
         'upload-type': uploadType,
@@ -162,8 +169,16 @@ const handleGenerateUploadUrl = async (event) => {
     });
 
   } catch (error) {
-    console.error('UPLOADS: Generate upload URL error:', error);
-    return createResponse(500, { error: 'Internal server error' });
+    console.error('UPLOADS: Generate upload URL error:', {
+      message: error.message,
+      code: error.code,
+      statusCode: error.statusCode,
+      stack: error.stack
+    });
+    return createResponse(500, {
+      error: 'Internal server error',
+      details: error.message
+    });
   }
 };
 

@@ -81,6 +81,7 @@ const requireAuth = (event) => {
 // Helper: Resolve membership profile with inheritance from user
 const resolveMembershipProfile = async (membership, userId) => {
   // Get user profile for inheritance
+  // Note: membership.user_id contains cognito_id (not user_id from users table)
   const userResult = await dynamodb.get({
     TableName: USERS_TABLE,
     Key: { cognito_id: userId }
@@ -89,9 +90,32 @@ const resolveMembershipProfile = async (membership, userId) => {
   const userProfile = userResult.Item || {};
 
   return {
-    ...membership,
+    // Frontend-expected format
+    id: membership.membership_id,
+    displayName: membership.display_name || userProfile.display_name || userProfile.username || 'Unknown',
+    avatarUrl: membership.avatar_url || userProfile.avatar_url || userProfile.oauth_profile_picture,
+    instrument: membership.instrument || userProfile.instrument || null,
+    role: membership.role,
+    status: membership.status,
+    icon: membership.icon || 'fa-music',
+    color: membership.color || '#708090',
+    joinedAt: membership.joined_at,
 
-    // Resolved profile fields (with inheritance)
+    // User data for additional info
+    user: {
+      firstName: userProfile.first_name || userProfile.firstName || null,
+      lastName: userProfile.last_name || userProfile.lastName || null,
+      email: userProfile.email || null
+    },
+
+    // Keep original fields for backend use
+    membership_id: membership.membership_id,
+    user_id: membership.user_id,
+    artist_id: membership.artist_id,
+    membership_type: membership.membership_type,
+    permissions: membership.permissions || [],
+
+    // Resolved profile fields (with inheritance) - for backward compatibility
     resolved_display_name: membership.display_name || userProfile.display_name || userProfile.username,
     resolved_avatar_url: membership.avatar_url || userProfile.avatar_url || userProfile.oauth_profile_picture,
     resolved_instrument: membership.instrument || userProfile.instrument || null,

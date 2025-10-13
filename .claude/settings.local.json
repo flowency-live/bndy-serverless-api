@@ -5,7 +5,22 @@
       "Bash(aws lambda list-functions:*)",
       "Read(//c/VSProjects/**)",
       "Bash(aws lambda update-function-code:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(aws amplify get-app:*)",
+      "Bash(aws amplify:*)",
+      "Bash(aws lambda get-function:*)",
+      "Bash(aws dynamodb:*)",
+      "Bash(aws logs describe-log-groups:*)",
+      "Bash(aws logs describe-log-streams:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:aws-amplify-prod-eu-west-2-artifacts.s3.eu-west-2.amazonaws.com)",
+      "Bash(aws rds describe-db-clusters:*)",
+      "Bash(aws rds describe-db-instances:*)",
+      "Bash(aws apprunner list-services:*)",
+      "Bash(aws apigateway get-rest-apis:*)",
+      "Bash(aws:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []
