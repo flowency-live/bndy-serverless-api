@@ -1378,6 +1378,117 @@ const handleGetAllPublicEvents = async (event) => {
   }
 };
 
+// ============================================================================
+// COMMUNITY WIZARD ENDPOINT (Public, No Auth Required)
+// ============================================================================
+
+// POST /api/events/community - Create community event (public endpoint)
+const handleCreateCommunityEvent = async (event) => {
+  console.log('COMMUNITY_EVENT: Create request');
+
+  try {
+    const body = JSON.parse(event.body);
+    const { artistId, venueId, date, startTime, endTime, title } = body;
+
+    // Validation
+    if (!artistId || !venueId || !date || !startTime) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'artistId, venueId, date, and startTime are required' })
+      };
+    }
+
+    // Get venue details for geolocation
+    const venue = await getVenue(venueId);
+    if (!venue) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Venue not found' })
+      };
+    }
+
+    // Get artist details for title
+    const artistResult = await dynamodb.get({
+      TableName: ARTISTS_TABLE,
+      Key: { id: artistId }
+    }).promise();
+
+    if (!artistResult.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Artist not found' })
+      };
+    }
+
+    const artist = artistResult.Item;
+
+    // Compute geohash fields from venue location
+    const geohashFields = computeGeohashFields(venue);
+
+    const now = new Date().toISOString();
+    const eventId = crypto.randomUUID();
+
+    const newEvent = {
+      id: eventId,
+      artistId: artistId,
+      venueId: venueId,
+      title: title || `${artist.name} @ ${venue.name}`,
+      date: date,
+      startTime: startTime,
+      endTime: endTime || '00:00',
+      type: 'gig',
+      isPublic: true,
+      isAllDay: false,
+
+      // Geolocation
+      ...geohashFields,
+
+      // Community event flags
+      source: 'community_wizard',
+      verifiedByArtist: false,  // Ghost checkmark
+      verifiedByVenue: false,   // Future feature
+      createdByUserId: null,    // Anonymous community builder
+      membershipId: null,       // No membership for community events
+
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await dynamodb.put({
+      TableName: EVENTS_TABLE,
+      Item: newEvent
+    }).promise();
+
+    console.log(`✅ Community event created: ${eventId} (${artist.name} @ ${venue.name})`);
+
+    return {
+      statusCode: 201,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        message: 'Event created successfully',
+        event: {
+          id: eventId,
+          title: newEvent.title,
+          date: newEvent.date,
+          startTime: newEvent.startTime,
+          artistId: newEvent.artistId,
+          venueId: newEvent.venueId
+        }
+      })
+    };
+  } catch (error) {
+    console.error('❌ Community event creation failed:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+};
+
 // Main handler
 exports.handler = async (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;
@@ -1416,6 +1527,11 @@ exports.handler = async (event, context) => {
 
     if (routeKey.match(/GET \/api\/venues\/[^/]+\/events/)) {
       return await handleGetVenueEvents(event);
+    }
+
+    // Community event creation (public, no auth required)
+    if (routeKey.match(/POST \/api\/events\/community/)) {
+      return await handleCreateCommunityEvent(event);
     }
 
     // AUTHENTICATED ROUTES - Require auth for everything else

@@ -68,6 +68,11 @@ exports.handler = async (event, context) => {
       return await handleGetAllArtists();
     }
 
+    // Artist search endpoint (fuzzy matching for duplicate prevention)
+    if (method === 'GET' && path === '/api/artists/search') {
+      return await handleSearchArtists(event);
+    }
+
     // Check name availability endpoint
     if (method === 'GET' && path === '/api/artists/check-name') {
       return await handleCheckName(event);
@@ -79,6 +84,11 @@ exports.handler = async (event, context) => {
 
     if (method === 'POST' && path === '/api/artists') {
       return await handleCreateArtist(event);
+    }
+
+    // Community artist creation endpoint (public, no auth required)
+    if (method === 'POST' && path === '/api/artists/community') {
+      return await handleCreateCommunityArtist(event);
     }
 
     if (method === 'PUT' && event.pathParameters?.id) {
@@ -471,6 +481,224 @@ async function handleDeleteArtist(artistId) {
     console.error('❌ Artist deletion failed:', error);
     throw error;
   }
+}
+
+// ============================================================================
+// COMMUNITY WIZARD ENDPOINTS (Public, No Auth Required)
+// ============================================================================
+
+// Levenshtein distance for fuzzy matching
+function levenshteinDistance(str1, str2) {
+  const matrix = [];
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[str2.length][str1.length];
+}
+
+// Calculate match score (0-100)
+function calculateMatchScore(artistName, artistLocation, queryName, queryLocation) {
+  const nameLower = artistName.toLowerCase().trim();
+  const queryLower = queryName.toLowerCase().trim();
+
+  // Exact match = 100
+  if (nameLower === queryLower) {
+    // If locations also match, definitely 100
+    if (queryLocation && artistLocation) {
+      const locLower = artistLocation.toLowerCase().trim();
+      const queryLocLower = queryLocation.toLowerCase().trim();
+      if (locLower.includes(queryLocLower) || queryLocLower.includes(locLower)) {
+        return 100;
+      }
+      return 80; // Same name, different location
+    }
+    return 90; // Same name, no location to compare
+  }
+
+  // Calculate Levenshtein distance
+  const distance = levenshteinDistance(nameLower, queryLower);
+  const maxLength = Math.max(nameLower.length, queryLower.length);
+  const similarity = (1 - distance / maxLength) * 100;
+
+  // Bonus points for location match
+  if (queryLocation && artistLocation) {
+    const locLower = artistLocation.toLowerCase().trim();
+    const queryLocLower = queryLocation.toLowerCase().trim();
+    if (locLower.includes(queryLocLower) || queryLocLower.includes(locLower)) {
+      return Math.min(100, similarity + 10);
+    }
+  }
+
+  return Math.round(similarity);
+}
+
+// Search artists (fuzzy matching for duplicate prevention)
+async function handleSearchArtists(event) {
+  console.log('🔍 Artists Lambda: Searching artists with fuzzy matching');
+
+  const { name, location } = event.queryStringParameters || {};
+
+  if (!name || name.length < 2) {
+    return {
+      statusCode: 400,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({ error: 'Name query must be at least 2 characters' })
+    };
+  }
+
+  try {
+    // Scan all artists (TODO: Optimize with GSI when scale increases)
+    const result = await dynamodb.scan({
+      TableName: 'bndy-artists',
+      ProjectionExpression: 'id, #name, #location, profileImageUrl',
+      ExpressionAttributeNames: {
+        '#name': 'name',
+        '#location': 'location'
+      }
+    }).promise();
+
+    // Calculate match scores
+    const matches = result.Items
+      .map(artist => ({
+        id: artist.id,
+        name: artist.name,
+        location: artist.location || '',
+        profileImageUrl: artist.profileImageUrl || null,
+        matchScore: calculateMatchScore(artist.name, artist.location, name, location || '')
+      }))
+      .filter(artist => artist.matchScore >= 60)  // Only show matches >= 60%
+      .sort((a, b) => b.matchScore - a.matchScore)  // Highest score first
+      .slice(0, 10);  // Top 10 matches
+
+    console.log(`🔍 Found ${matches.length} matches for "${name}"`);
+
+    return {
+      statusCode: 200,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({ matches })
+    };
+  } catch (error) {
+    console.error('❌ Artist search failed:', error);
+    throw error;
+  }
+}
+
+// Generate random color for displayColour
+function randomColor() {
+  const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+  return colors[Math.floor(Math.random() * colors.length)];
+}
+
+// Create community artist (public endpoint, no auth)
+async function handleCreateCommunityArtist(event) {
+  console.log('🎵 Artists Lambda: Creating community artist');
+
+  try {
+    const body = JSON.parse(event.body);
+    const { name, location, facebookUrl, instagramUrl, websiteUrl, bio } = body;
+
+    // Validation
+    if (!name || name.trim().length === 0) {
+      return {
+        statusCode: 400,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({ error: 'Artist name is required' })
+      };
+    }
+
+    if (!location || location.trim().length === 0) {
+      return {
+        statusCode: 400,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({ error: 'Location is required to prevent duplicates' })
+      };
+    }
+
+    const now = new Date().toISOString();
+    const artistId = crypto.randomUUID();
+
+    const newArtist = {
+      id: artistId,
+      name: name.trim(),
+      location: location.trim(),
+      locationLat: null,  // Future: geocode location string
+      locationLng: null,
+      facebookUrl: facebookUrl || '',
+      instagramUrl: instagramUrl || '',
+      websiteUrl: websiteUrl || '',
+      bio: bio || '',
+      profileImageUrl: '',
+      isVerified: false,
+      claimedByUserId: null,  // Available for claiming
+      socialMediaUrls: [],
+      followerCount: 0,
+      genres: [],
+
+      // Backstage-compatible fields
+      owner_user_id: null,  // Community-created = no owner
+      artist_type: 'band',
+      displayColour: randomColor(),
+      member_count: 0,
+      allowedEventTypes: ['public_gig'],
+
+      created_at: now,
+      updated_at: now
+    };
+
+    await dynamodb.put({
+      TableName: 'bndy-artists',
+      Item: newArtist
+    }).promise();
+
+    console.log(`✅ Community artist created: ${artistId} (${name})`);
+
+    return {
+      statusCode: 201,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({
+        message: 'Artist created successfully',
+        artist: {
+          id: artistId,
+          name: newArtist.name,
+          location: newArtist.location
+        }
+      })
+    };
+  } catch (error) {
+    console.error('❌ Community artist creation failed:', error);
+    return {
+      statusCode: 500,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+}
+
+// CORS headers for community endpoints (allows live.bndy.co.uk)
+function getCommunityHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': 'https://live.bndy.co.uk',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Credentials': 'false'
+  };
 }
 
 function getCorsHeaders() {
