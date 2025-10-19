@@ -10,7 +10,11 @@ const { z } = require('zod');
 const ngeohash = require('ngeohash');
 
 const client = new DynamoDBClient({ region: 'eu-west-2' });
-const dynamodb = DynamoDBDocumentClient.from(client);
+const dynamodb = DynamoDBDocumentClient.from(client, {
+  marshallOptions: {
+    removeUndefinedValues: true
+  }
+});
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
