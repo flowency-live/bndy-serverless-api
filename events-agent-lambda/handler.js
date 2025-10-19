@@ -584,9 +584,8 @@ async function extractFromHTML(event) {
     const extractedEvents = await extractEventsWithLLM(body.html);
     console.log(`Extracted ${extractedEvents.length} events`);
 
-    let processedCount = 0;
-
-    for (const extractedEvent of extractedEvents) {
+    // Process events in parallel for speed (must complete within 30s API Gateway timeout)
+    const processPromises = extractedEvents.map(async (extractedEvent) => {
       console.log(`Processing: ${extractedEvent.artistName} @ ${extractedEvent.venueName}`);
 
       const venueResolution = await resolveVenue(extractedEvent.venueName, locationContext);
@@ -618,15 +617,17 @@ async function extractFromHTML(event) {
         Item: queueItem
       }));
 
-      processedCount++;
-    }
+      return queueId;
+    });
 
-    console.log(`Loaded ${processedCount} events into queue`);
+    const queueIds = await Promise.all(processPromises);
+
+    console.log(`Loaded ${queueIds.length} events into queue`);
 
     return createResponse(200, {
       success: true,
       extracted: extractedEvents.length,
-      queued: processedCount
+      queued: queueIds.length
     });
 
   } catch (error) {
