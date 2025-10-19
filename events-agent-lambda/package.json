@@ -1,0 +1,17 @@
+{
+  "name": "events-agent-lambda",
+  "version": "1.0.0",
+  "description": "BNDY agentic event ingestion - queue management and event creation",
+  "main": "handler.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.645.0",
+    "@aws-sdk/lib-dynamodb": "^3.645.0",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^9.0.0"
+  },
+  "author": "BNDY",
+  "license": "ISC"
+}

@@ -1,0 +1,21 @@
+{
+  "name": "bndy-agentic-poc",
+  "version": "1.0.0",
+  "description": "POC for agentic event ingestion - Week 1 local testing",
+  "type": "module",
+  "main": "extract-and-resolve.ts",
+  "scripts": {
+    "test": "node --loader ts-node/esm extract-and-resolve.ts"
+  },
+  "dependencies": {
+    "openai": "^4.67.0",
+    "zod": "^3.23.8",
+    "axios": "^1.7.7",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.2"
+  }
+}
