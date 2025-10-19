@@ -818,6 +818,112 @@ function generateGroupKey(name) {
   return crypto.createHash('sha1').update(normalized).digest('hex').substring(0, 12);
 }
 
+// NEW: Venue enrichment endpoint
+const VenueSchema = z.object({
+  venueName: z.string().min(1).max(100),
+  facebookUrl: z.string().url().optional()
+});
+
+const VenuesExtractSchema = z.object({
+  venues: z.array(VenueSchema).max(200)
+});
+
+async function extractVenuesWithLLM(html) {
+  const text = htmlToVisibleText(html);
+  const clampedText = text.slice(0, 50000);
+
+  const prompt = `
+Extract ALL unique venue names and their Facebook URLs from this webpage. Return ONLY valid JSON.
+
+STRICT RULES:
+- venueName: Include city if mentioned (e.g., "Queens Hotel Macclesfield", "the Dog Inn Chadderton")
+- facebookUrl: Only if there's a Facebook link for that venue
+- Extract EVERY unique venue mentioned, not just those with events
+- Maximum 200 venues
+
+JSON Schema:
+{
+  "venues": [
+    {
+      "venueName": "string",
+      "facebookUrl": "https://..." (optional)
+    }
+  ]
+}
+
+Text:
+${clampedText}
+`;
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content: prompt }],
+    response_format: { type: 'json_object' },
+    temperature: 0
+  });
+
+  const parsed = JSON.parse(response.choices[0].message.content || '{}');
+  const validated = VenuesExtractSchema.parse(parsed);
+  return validated.venues;
+}
+
+async function extractVenues(event) {
+  const authResult = requireAuth(event);
+  if (authResult.error) {
+    return createResponse(401, { error: authResult.error });
+  }
+
+  const body = event.body ? JSON.parse(event.body) : null;
+  if (!body || !body.html) {
+    return createResponse(400, { error: 'HTML content required in request body' });
+  }
+
+  const locationContext = 'Greater Manchester, UK';
+
+  try {
+    console.log('Extracting venues from HTML...');
+    const extractedVenues = await extractVenuesWithLLM(body.html);
+    console.log(`Extracted ${extractedVenues.length} venues`);
+
+    const results = {
+      perfectMatches: [],
+      newVenues: [],
+      totalExtracted: extractedVenues.length
+    };
+
+    for (const extracted of extractedVenues) {
+      const venueResolution = await resolveVenue(extracted.venueName, locationContext);
+
+      const result = {
+        extractedName: extracted.venueName,
+        facebookUrl: extracted.facebookUrl,
+        resolution: venueResolution
+      };
+
+      if (venueResolution.confidence === 0.99 && venueResolution.venue_id) {
+        // Perfect match - can enrich immediately
+        results.perfectMatches.push({
+          ...result,
+          venueId: venueResolution.venue_id,
+          currentFacebookUrl: venueResolution.matched_venue?.facebookUrl,
+          needsEnrichment: !venueResolution.matched_venue?.facebookUrl && extracted.facebookUrl
+        });
+      } else {
+        // New venue or uncertain match
+        results.newVenues.push(result);
+      }
+    }
+
+    console.log(`Perfect matches: ${results.perfectMatches.length}, New venues: ${results.newVenues.length}`);
+
+    return createResponse(200, results);
+
+  } catch (error) {
+    console.error('Error in extractVenues:', error);
+    return createResponse(500, { error: 'Failed to extract venues: ' + error.message });
+  }
+}
+
 exports.handler = async (event) => {
   console.log('EventsAgent Lambda invoked:', JSON.stringify(event, null, 2));
 
@@ -850,6 +956,10 @@ exports.handler = async (event) => {
 
     if (routeKey === 'POST /api/ingest/extract-from-html') {
       return await extractFromHTML(event);
+    }
+
+    if (routeKey === 'POST /api/ingest/extract-venues') {
+      return await extractVenues(event);
     }
 
     return createResponse(404, { error: 'Route not found' });
