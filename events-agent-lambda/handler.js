@@ -262,13 +262,29 @@ async function loadPOCResults(event) {
   }
 
   try {
-    const pocResultsPath = path.join(__dirname, '../poc/poc-results.json');
+    let pocData;
 
-    if (!fs.existsSync(pocResultsPath)) {
-      return createResponse(404, { error: 'POC results file not found. Run the POC script first.' });
+    // Try to get data from request body first
+    const body = event.body ? JSON.parse(event.body) : null;
+
+    if (body && body.results && Array.isArray(body.results)) {
+      pocData = body.results;
+      console.log('Using POC results from request body');
+    } else {
+      // Fallback to local file (development only)
+      const pocResultsPath = path.join(__dirname, 'poc-results.json');
+
+      if (!fs.existsSync(pocResultsPath)) {
+        return createResponse(400, {
+          error: 'POC results must be provided in request body',
+          format: '{ "results": [ {...extracted events...} ] }',
+          hint: 'Copy the contents of poc-results.json and send as POST body'
+        });
+      }
+
+      pocData = JSON.parse(fs.readFileSync(pocResultsPath, 'utf8'));
+      console.log('Using POC results from deployed file');
     }
-
-    const pocData = JSON.parse(fs.readFileSync(pocResultsPath, 'utf8'));
 
     let loadedCount = 0;
 
