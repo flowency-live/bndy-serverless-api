@@ -566,6 +566,111 @@ async function extractFromURL(event) {
   }
 }
 
+async function extractFromHTML(event) {
+  const authResult = requireAuth(event);
+  if (authResult.error) {
+    return createResponse(401, { error: authResult.error });
+  }
+
+  const body = event.body ? JSON.parse(event.body) : null;
+  if (!body || !body.html) {
+    return createResponse(400, { error: 'HTML content required in request body' });
+  }
+
+  const locationContext = 'Greater Manchester, UK';
+
+  try {
+    console.log('Extracting events from pasted HTML...');
+    const extractedEvents = await extractEventsWithLLM(body.html);
+    console.log(`Extracted ${extractedEvents.length} events`);
+
+    let processedCount = 0;
+
+    for (const extractedEvent of extractedEvents) {
+      console.log(`Processing: ${extractedEvent.artistName} @ ${extractedEvent.venueName}`);
+
+      const venueResolution = await resolveVenue(extractedEvent.venueName, locationContext);
+      const artistResolution = await resolveArtist(extractedEvent.artistName, venueResolution.location);
+
+      // Facebook URL enrichment for 100% matched venues
+      if (venueResolution.confidence === 0.99 && venueResolution.venue_id && extractedEvent.facebookUrl) {
+        await enrichVenueWithFacebookUrl(venueResolution.venue_id, extractedEvent.facebookUrl);
+      }
+
+      const queueId = uuidv4();
+      const queueItem = {
+        queue_id: queueId,
+        venueName: extractedEvent.venueName,
+        artistName: extractedEvent.artistName,
+        date: extractedEvent.date,
+        time: extractedEvent.time,
+        notes: extractedEvent.notes,
+        facebookUrl: extractedEvent.facebookUrl,
+        venueResolution,
+        artistResolution,
+        status: 'pending',
+        source: 'gigs-news_manual_paste',
+        created_at: new Date().toISOString()
+      };
+
+      await dynamodb.send(new PutCommand({
+        TableName: QUEUE_TABLE,
+        Item: queueItem
+      }));
+
+      processedCount++;
+    }
+
+    console.log(`Loaded ${processedCount} events into queue`);
+
+    return createResponse(200, {
+      success: true,
+      extracted: extractedEvents.length,
+      queued: processedCount
+    });
+
+  } catch (error) {
+    console.error('Error in extractFromHTML:', error);
+    return createResponse(500, { error: 'Failed to extract events: ' + error.message });
+  }
+}
+
+async function enrichVenueWithFacebookUrl(venueId, facebookUrl) {
+  try {
+    // Get the venue first to check if it already has a Facebook URL
+    const venueResult = await dynamodb.send(new GetCommand({
+      TableName: VENUES_TABLE,
+      Key: { id: venueId }
+    }));
+
+    const venue = venueResult.Item;
+    if (!venue) {
+      console.log(`Venue ${venueId} not found for Facebook URL enrichment`);
+      return;
+    }
+
+    // Only enrich if venue doesn't already have a Facebook URL
+    if (!venue.facebookUrl || venue.facebookUrl === '') {
+      await dynamodb.send(new UpdateCommand({
+        TableName: VENUES_TABLE,
+        Key: { id: venueId },
+        UpdateExpression: 'SET facebookUrl = :url, updatedAt = :now',
+        ExpressionAttributeValues: {
+          ':url': facebookUrl,
+          ':now': new Date().toISOString()
+        }
+      }));
+
+      console.log(`Enriched venue ${venueId} with Facebook URL: ${facebookUrl}`);
+    } else {
+      console.log(`Venue ${venueId} already has Facebook URL, skipping enrichment`);
+    }
+  } catch (error) {
+    console.error(`Error enriching venue ${venueId} with Facebook URL:`, error);
+    // Don't throw - enrichment failure shouldn't block the extraction
+  }
+}
+
 function generateNaturalKey(venueId, artistId, date) {
   const crypto = require('crypto');
   const raw = `${venueId}|${artistId}|${date}`;
@@ -600,6 +705,10 @@ exports.handler = async (event) => {
 
     if (routeKey === 'POST /api/ingest/extract-from-url') {
       return await extractFromURL(event);
+    }
+
+    if (routeKey === 'POST /api/ingest/extract-from-html') {
+      return await extractFromHTML(event);
     }
 
     return createResponse(404, { error: 'Route not found' });
