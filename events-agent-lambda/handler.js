@@ -4,15 +4,37 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
+const OpenAI = require('openai');
+const { z } = require('zod');
 
 const client = new DynamoDBClient({ region: 'eu-west-2' });
 const dynamodb = DynamoDBDocumentClient.from(client);
 
 const JWT_SECRET = process.env.JWT_SECRET;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 const QUEUE_TABLE = 'bndy-ingest-queue';
 const EVENTS_TABLE = 'bndy-events';
 const VENUES_TABLE = 'bndy-venues';
 const ARTISTS_TABLE = 'bndy-artists';
+const BNDY_API_BASE = 'https://api.bndy.co.uk';
+
+const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+
+// Zod schema for event extraction
+const EventSchema = z.object({
+  venueName: z.string().min(1).max(100),
+  artistName: z.string().min(1).max(100),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+  time: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be HH:mm').optional(),
+  facebookUrl: z.string().url().optional(),
+  notes: z.string().max(500).optional()
+});
+
+const ExtractSchema = z.object({
+  events: z.array(EventSchema).max(200)
+});
 
 function createResponse(statusCode, body, additionalHeaders = {}) {
   return {
@@ -331,6 +353,219 @@ async function loadPOCResults(event) {
   }
 }
 
+// Helper functions for extraction and resolution
+function htmlToVisibleText(html) {
+  return html
+    .replace(/<script[^>]*>.*?<\/script>/gis, '')
+    .replace(/<style[^>]*>.*?<\/style>/gis, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function extractEventsWithLLM(html) {
+  const text = htmlToVisibleText(html);
+  const clampedText = text.slice(0, 50000);
+
+  const prompt = `
+Extract gig events from this webpage. Return ONLY valid JSON.
+
+STRICT RULES:
+- venueName: Include city if mentioned (e.g., "Queens Hotel Macclesfield")
+- artistName: Band/artist name only
+- date: YYYY-MM-DD format (parse relative dates like "this Saturday")
+- time: HH:mm format, omit if not specified (we default to 20:00 later)
+- facebookUrl: Only if explicitly mentioned
+- notes: Ticket price, entry info, etc.
+- Maximum 200 events
+
+JSON Schema:
+{
+  "events": [
+    {
+      "venueName": "string",
+      "artistName": "string",
+      "date": "YYYY-MM-DD",
+      "time": "HH:mm" (optional),
+      "facebookUrl": "https://..." (optional),
+      "notes": "string" (optional)
+    }
+  ]
+}
+
+Text:
+${clampedText}
+`;
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content: prompt }],
+    response_format: { type: 'json_object' },
+    temperature: 0
+  });
+
+  const parsed = JSON.parse(response.choices[0].message.content || '{}');
+  const validated = ExtractSchema.parse(parsed);
+  return validated.events;
+}
+
+async function resolveVenue(venueName, locationContext) {
+  // Load all venues from BNDY API
+  const venuesResponse = await axios.get(`${BNDY_API_BASE}/api/venues`);
+  const allVenues = venuesResponse.data || [];
+
+  // Search Google Places
+  const placesResponse = await axios.get('https://maps.googleapis.com/maps/api/place/textsearch/json', {
+    params: {
+      query: `${venueName} ${locationContext}`,
+      key: GOOGLE_PLACES_API_KEY
+    }
+  });
+
+  if (placesResponse.data.status !== 'OK' || !placesResponse.data.results || placesResponse.data.results.length === 0) {
+    return {
+      action: 'CREATE_NEW',
+      confidence: 0.5,
+      reasons: ['no_google_results']
+    };
+  }
+
+  const topGooglePlace = placesResponse.data.results[0];
+
+  // Check for place_id match first
+  const placeIdMatch = allVenues.find(v => v.googlePlaceId === topGooglePlace.place_id);
+  if (placeIdMatch) {
+    return {
+      action: 'MATCH_EXISTING',
+      venue_id: placeIdMatch.id,
+      confidence: 0.99,
+      reasons: ['place_id_match'],
+      location: {
+        lat: topGooglePlace.geometry.location.lat,
+        lng: topGooglePlace.geometry.location.lng
+      }
+    };
+  }
+
+  // Fallback to creating new with Google enrichments
+  return {
+    action: 'CREATE_NEW',
+    confidence: 0.8,
+    reasons: ['google_enrichment'],
+    enrichments: {
+      googlePlaceId: topGooglePlace.place_id,
+      address: topGooglePlace.formatted_address,
+      latitude: topGooglePlace.geometry.location.lat,
+      longitude: topGooglePlace.geometry.location.lng
+    },
+    location: {
+      lat: topGooglePlace.geometry.location.lat,
+      lng: topGooglePlace.geometry.location.lng
+    }
+  };
+}
+
+async function resolveArtist(artistName, venueLocation) {
+  // Load all artists from BNDY API
+  const artistsResponse = await axios.get(`${BNDY_API_BASE}/api/artists`);
+  const allArtists = artistsResponse.data || [];
+
+  // Normalize name for comparison
+  const normalize = (name) => name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const extractedNorm = normalize(artistName);
+
+  // Find exact name match
+  const exactMatch = allArtists.find(a => normalize(a.name) === extractedNorm);
+  if (exactMatch) {
+    return {
+      action: 'MATCH_EXISTING',
+      artist_id: exactMatch.id,
+      confidence: 0.7,
+      reasons: ['name_exact']
+    };
+  }
+
+  // No match - create new
+  return {
+    action: 'CREATE_NEW',
+    confidence: 0.8,
+    reasons: ['new_artist'],
+    artist_data: {
+      name: artistName,
+      location: null
+    }
+  };
+}
+
+async function extractFromURL(event) {
+  const authResult = requireAuth(event);
+  if (authResult.error) {
+    return createResponse(401, { error: authResult.error });
+  }
+
+  const url = 'https://www.gigs-news.uk/';
+  const locationContext = 'Greater Manchester, UK';
+
+  try {
+    console.log('Fetching HTML from:', url);
+    const htmlResponse = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      },
+      timeout: 15000
+    });
+
+    console.log('Extracting events with LLM...');
+    const extractedEvents = await extractEventsWithLLM(htmlResponse.data);
+    console.log(`Extracted ${extractedEvents.length} events`);
+
+    let processedCount = 0;
+
+    for (const extractedEvent of extractedEvents) {
+      console.log(`Processing: ${extractedEvent.artistName} @ ${extractedEvent.venueName}`);
+
+      const venueResolution = await resolveVenue(extractedEvent.venueName, locationContext);
+      const artistResolution = await resolveArtist(extractedEvent.artistName, venueResolution.location);
+
+      const queueId = uuidv4();
+      const queueItem = {
+        queue_id: queueId,
+        venueName: extractedEvent.venueName,
+        artistName: extractedEvent.artistName,
+        date: extractedEvent.date,
+        time: extractedEvent.time,
+        notes: extractedEvent.notes,
+        facebookUrl: extractedEvent.facebookUrl,
+        venueResolution,
+        artistResolution,
+        status: 'pending',
+        source: 'gigs-news_automated',
+        created_at: new Date().toISOString()
+      };
+
+      await dynamodb.send(new PutCommand({
+        TableName: QUEUE_TABLE,
+        Item: queueItem
+      }));
+
+      processedCount++;
+    }
+
+    console.log(`Loaded ${processedCount} events into queue`);
+
+    return createResponse(200, {
+      success: true,
+      extracted: extractedEvents.length,
+      queued: processedCount
+    });
+
+  } catch (error) {
+    console.error('Error in extractFromURL:', error);
+    return createResponse(500, { error: 'Failed to extract events: ' + error.message });
+  }
+}
+
 function generateNaturalKey(venueId, artistId, date) {
   const crypto = require('crypto');
   const raw = `${venueId}|${artistId}|${date}`;
@@ -361,6 +596,10 @@ exports.handler = async (event) => {
 
     if (routeKey === 'POST /api/ingest/load-poc') {
       return await loadPOCResults(event);
+    }
+
+    if (routeKey === 'POST /api/ingest/extract-from-url') {
+      return await extractFromURL(event);
     }
 
     return createResponse(404, { error: 'Route not found' });

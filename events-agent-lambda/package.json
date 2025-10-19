@@ -9,8 +9,11 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.645.0",
     "@aws-sdk/lib-dynamodb": "^3.645.0",
+    "axios": "^1.7.7",
     "jsonwebtoken": "^9.0.2",
-    "uuid": "^9.0.0"
+    "openai": "^4.67.0",
+    "uuid": "^9.0.0",
+    "zod": "^3.23.8"
   },
   "author": "BNDY",
   "license": "ISC"
