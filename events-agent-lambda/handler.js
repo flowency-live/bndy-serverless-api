@@ -134,14 +134,66 @@ async function approveQueueItem(event) {
       return createResponse(400, { error: 'Queue item already processed' });
     }
 
+    // Handle SKIP events (TBC, Karaoke, Quiz) - mark as rejected
+    if (queueItem.artistResolution.action === 'SKIP') {
+      await dynamodb.send(new UpdateCommand({
+        TableName: QUEUE_TABLE,
+        Key: { queue_id: queueId },
+        UpdateExpression: 'SET #status = :rejected, rejectedAt = :now, rejectedBy = :userId, skipReason = :reason',
+        ExpressionAttributeNames: {
+          '#status': 'status'
+        },
+        ExpressionAttributeValues: {
+          ':rejected': 'rejected',
+          ':now': new Date().toISOString(),
+          ':userId': authResult.user.userId,
+          ':reason': 'Theme event (no artist): ' + queueItem.artistResolution.theme
+        }
+      }));
+
+      return createResponse(200, {
+        success: true,
+        skipped: true,
+        reason: 'Theme event (no artist): ' + queueItem.artistResolution.theme
+      });
+    }
+
     let venueId = queueItem.venueResolution.venue_id;
     let artistId = queueItem.artistResolution.artist_id;
+
+    // Handle Open Mic events - create a generic "Open Mic" artist if not exists
+    if (queueItem.artistResolution.action === 'OPEN_MIC') {
+      // Try to find existing "Open Mic" artist
+      const artistsResponse = await axios.get(`${BNDY_API_BASE}/api/artists`);
+      const allArtists = artistsResponse.data || [];
+      const openMicArtist = allArtists.find(a => a.name === 'Open Mic');
+
+      if (openMicArtist) {
+        artistId = openMicArtist.id;
+      } else {
+        // Create generic Open Mic artist
+        artistId = uuidv4();
+        await dynamodb.send(new PutCommand({
+          TableName: ARTISTS_TABLE,
+          Item: {
+            id: artistId,
+            name: 'Open Mic',
+            artist_type: 'event',
+            bio: 'Generic entry for open mic nights',
+            isVerified: false,
+            source: 'agentic_ingest',
+            createdAt: new Date().toISOString()
+          }
+        }));
+        console.log('Created generic Open Mic artist:', artistId);
+      }
+    }
 
     if (queueItem.venueResolution.action === 'CREATE_NEW') {
       venueId = uuidv4();
       const venueData = {
         id: venueId,
-        name: queueItem.venueName,
+        name: normalizeVenueName(queueItem.venueName),
         validated: false,
         source: 'agentic_ingest',
         createdAt: new Date().toISOString(),
@@ -194,6 +246,8 @@ async function approveQueueItem(event) {
     const geohash6 = (lat && lng) ? ngeohash.encode(lat, lng, 6) : null;
     const geohash4 = (lat && lng) ? ngeohash.encode(lat, lng, 4) : null;
 
+    const isOpenMic = queueItem.artistResolution.action === 'OPEN_MIC';
+
     const eventData = {
       id: eventId,
       naturalKey,
@@ -202,9 +256,10 @@ async function approveQueueItem(event) {
       date: eventDate,
       startTime: eventTime,
       endTime: '23:00',
-      title: `${queueItem.artistName} @ ${queueItem.venueName}`,
+      title: isOpenMic ? `Open Mic @ ${queueItem.venueName}` : `${queueItem.artistName} @ ${queueItem.venueName}`,
       type: 'gig',
       isPublic: true,
+      isOpenMic,
       source: 'agentic_ingest',
       geoLat: lat,
       geoLng: lng,
@@ -457,6 +512,16 @@ async function resolveVenue(venueName, locationContext) {
       location: {
         lat: topGooglePlace.geometry.location.lat,
         lng: topGooglePlace.geometry.location.lng
+      },
+      enrichments: {
+        address: topGooglePlace.formatted_address,
+        website: topGooglePlace.website
+      },
+      matched_venue: {
+        id: placeIdMatch.id,
+        name: placeIdMatch.name,
+        facebookUrl: placeIdMatch.facebookUrl,
+        website: placeIdMatch.website
       }
     };
   }
@@ -480,13 +545,36 @@ async function resolveVenue(venueName, locationContext) {
 }
 
 async function resolveArtist(artistName, venueLocation) {
-  // Load all artists from BNDY API
-  const artistsResponse = await axios.get(`${BNDY_API_BASE}/api/artists`);
-  const allArtists = artistsResponse.data || [];
-
   // Normalize name for comparison
   const normalize = (name) => name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
   const extractedNorm = normalize(artistName);
+
+  // Handle theme events (not real artists)
+  const themePatterns = {
+    'open mic': 'OPEN_MIC',
+    'openmic': 'OPEN_MIC',
+    'open mike': 'OPEN_MIC',
+    'tbc': 'SKIP',
+    'to be confirmed': 'SKIP',
+    'karaoke': 'SKIP',
+    'quiz': 'SKIP',
+    'quiz night': 'SKIP'
+  };
+
+  for (const [pattern, action] of Object.entries(themePatterns)) {
+    if (extractedNorm.includes(pattern)) {
+      return {
+        action,
+        confidence: 1.0,
+        reasons: ['theme_event'],
+        theme: pattern
+      };
+    }
+  }
+
+  // Load all artists from BNDY API
+  const artistsResponse = await axios.get(`${BNDY_API_BASE}/api/artists`);
+  const allArtists = artistsResponse.data || [];
 
   // Find exact name match
   const exactMatch = allArtists.find(a => normalize(a.name) === extractedNorm);
@@ -495,7 +583,15 @@ async function resolveArtist(artistName, venueLocation) {
       action: 'MATCH_EXISTING',
       artist_id: exactMatch.id,
       confidence: 0.7,
-      reasons: ['name_exact']
+      reasons: ['name_exact'],
+      matched_artist: {
+        id: exactMatch.id,
+        name: exactMatch.name,
+        location: exactMatch.location,
+        facebookUrl: exactMatch.facebookUrl,
+        instagramUrl: exactMatch.instagramUrl,
+        websiteUrl: exactMatch.websiteUrl
+      }
     };
   }
 
@@ -623,6 +719,9 @@ async function extractFromHTML(event) {
         artistResolution,
         status: 'pending',
         source: 'gigs-news_manual_paste',
+        // Grouping keys for UI
+        venue_group_key: generateGroupKey(extractedEvent.venueName),
+        artist_group_key: generateGroupKey(extractedEvent.artistName),
         created_at: new Date().toISOString()
       };
 
@@ -690,6 +789,29 @@ function generateNaturalKey(venueId, artistId, date) {
   const crypto = require('crypto');
   const raw = `${venueId}|${artistId}|${date}`;
   return crypto.createHash('sha1').update(raw).digest('hex');
+}
+
+function normalizeVenueName(name) {
+  // Capitalize "The" at the start, keep rest as-is for display
+  let normalized = name.trim();
+
+  // Handle "the" at the start (case-insensitive)
+  if (/^the\s+/i.test(normalized)) {
+    normalized = 'The ' + normalized.substring(4).trim();
+  }
+
+  return normalized;
+}
+
+function generateGroupKey(name) {
+  const crypto = require('crypto');
+  // Normalize name for grouping: lowercase, remove punctuation, collapse whitespace
+  const normalized = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return crypto.createHash('sha1').update(normalized).digest('hex').substring(0, 12);
 }
 
 exports.handler = async (event) => {
