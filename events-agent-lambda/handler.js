@@ -7,6 +7,7 @@ const path = require('path');
 const axios = require('axios');
 const OpenAI = require('openai');
 const { z } = require('zod');
+const ngeohash = require('ngeohash');
 
 const client = new DynamoDBClient({ region: 'eu-west-2' });
 const dynamodb = DynamoDBDocumentClient.from(client);
@@ -187,6 +188,12 @@ async function approveQueueItem(event) {
 
     const naturalKey = generateNaturalKey(venueId, artistId, eventDate);
 
+    // Compute geohash fields for frontstage map
+    const lat = queueItem.venueResolution.location?.lat || 0;
+    const lng = queueItem.venueResolution.location?.lng || 0;
+    const geohash6 = (lat && lng) ? ngeohash.encode(lat, lng, 6) : null;
+    const geohash4 = (lat && lng) ? ngeohash.encode(lat, lng, 4) : null;
+
     const eventData = {
       id: eventId,
       naturalKey,
@@ -199,8 +206,10 @@ async function approveQueueItem(event) {
       type: 'gig',
       isPublic: true,
       source: 'agentic_ingest',
-      geoLat: queueItem.venueResolution.location?.lat || 0,
-      geoLng: queueItem.venueResolution.location?.lng || 0,
+      geoLat: lat,
+      geoLng: lng,
+      geohash6,
+      geohash4,
       facebookUrl: queueItem.facebookUrl || null,
       notes: queueItem.notes || null,
       createdAt: new Date().toISOString(),
@@ -367,13 +376,18 @@ async function extractEventsWithLLM(html) {
   const text = htmlToVisibleText(html);
   const clampedText = text.slice(0, 50000);
 
+  // Provide current date for context
+  const today = new Date().toISOString().split('T')[0];
+
   const prompt = `
 Extract gig events from this webpage. Return ONLY valid JSON.
+
+TODAY'S DATE: ${today}
 
 STRICT RULES:
 - venueName: Include city if mentioned (e.g., "Queens Hotel Macclesfield")
 - artistName: Band/artist name only
-- date: YYYY-MM-DD format (parse relative dates like "this Saturday")
+- date: YYYY-MM-DD format. If only day/month given (e.g., "Friday 17th October"), infer the year from today's date
 - time: HH:mm format, omit if not specified (we default to 20:00 later)
 - facebookUrl: Only if explicitly mentioned
 - notes: Ticket price, entry info, etc.
