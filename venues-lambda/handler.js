@@ -3,6 +3,8 @@
 
 const AWS = require('aws-sdk');
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
+const lambda = new AWS.Lambda({ region: 'eu-west-2' });
+const https = require('https');
 
 // ===== FUZZY MATCHING HELPERS =====
 
@@ -20,87 +22,40 @@ function normalizeForSearch(str) {
     .trim();
 }
 
-// Levenshtein distance for fuzzy string matching
-function levenshteinDistance(str1, str2) {
-  const m = str1.length;
-  const n = str2.length;
-  const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (str1[i - 1] === str2[j - 1]) {
-        dp[i][j] = dp[i - 1][j - 1];
-      } else {
-        dp[i][j] = 1 + Math.min(
-          dp[i - 1][j],    // deletion
-          dp[i][j - 1],    // insertion
-          dp[i - 1][j - 1] // substitution
-        );
-      }
-    }
-  }
-
-  return dp[m][n];
-}
-
-// Calculate similarity percentage between two strings
-function calculateSimilarity(str1, str2) {
-  const normalized1 = str1.toLowerCase().trim();
-  const normalized2 = str2.toLowerCase().trim();
-  const distance = levenshteinDistance(normalized1, normalized2);
-  const maxLength = Math.max(normalized1.length, normalized2.length);
-  return maxLength === 0 ? 100 : ((maxLength - distance) / maxLength) * 100;
-}
-
-// Check if two locations are within threshold distance (meters)
-function isWithinDistance(lat1, lon1, lat2, lon2, thresholdMeters = 50) {
-  const R = 6371000; // Earth radius in meters
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = R * c;
-  return distance <= thresholdMeters;
-}
-
-// Tokenize address for fuzzy comparison
-function tokenizeAddress(address) {
-  return address
-    .toLowerCase()
-    .replace(/[^\w\s]/g, ' ') // Remove punctuation
-    .split(/\s+/)
-    .filter(token => token.length > 2) // Ignore short tokens
-    .sort();
-}
-
-// Calculate address token overlap percentage
-function calculateAddressOverlap(addr1, addr2) {
-  const tokens1 = tokenizeAddress(addr1);
-  const tokens2 = tokenizeAddress(addr2);
-  const intersection = tokens1.filter(token => tokens2.includes(token));
-  const union = [...new Set([...tokens1, ...tokens2])];
-  return union.length === 0 ? 0 : (intersection.length / union.length) * 100;
-}
-
 // ===== END FUZZY MATCHING HELPERS =====
+
+// Safe JSON parse helper - handles both string and object body
+function parseBody(body) {
+  if (!body) return {};
+  if (typeof body === 'object') return body;
+
+  console.log('[Venues Lambda] Parsing body, type:', typeof body, 'length:', body.length);
+  console.log('[Venues Lambda] Body preview:', body.substring(0, 200));
+
+  try {
+    const parsed = JSON.parse(body);
+    console.log('[Venues Lambda] Parsed successfully, keys:', Object.keys(parsed));
+    return parsed;
+  } catch (error) {
+    console.error('[ERROR] JSON parse failed:', error.message);
+    console.error('[ERROR] Body that failed to parse:', body);
+    throw new Error('Invalid JSON in request body');
+  }
+}
 
 exports.handler = async (event, context) => {
   // HTTP API v2 payload format compatibility
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
 
-  console.log('🎯 Venues Lambda: Request received', {
+  console.log('[Venues Lambda] Request received', {
     method,
     path,
-    pathParameters: event.pathParameters
+    pathParameters: event.pathParameters,
+    bodyType: typeof event.body,
+    bodyLength: event.body ? event.body.length : 0
   });
-  console.log('🚀 DynamoDB version - FAST AS FUCK');
+  console.log('[DynamoDB] version - FAST AS FUCK');
 
   context.callbackWaitsForEmptyEventLoop = false;
 
@@ -111,7 +66,12 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'POST' && path === '/api/venues/find-or-create') {
-      return await handleFindOrCreateVenue(JSON.parse(event.body), event);
+      return await handleFindOrCreateVenue(parseBody(event.body), event);
+    }
+
+    // Admin endpoints
+    if (method === 'POST' && path === '/api/admin/venues/extract-and-match') {
+      return await handleExtractAndMatch(parseBody(event.body), event);
     }
 
     if (method === 'GET' && event.pathParameters?.id) {
@@ -119,11 +79,11 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'POST' && path === '/api/venues') {
-      return await handleCreateVenue(JSON.parse(event.body), event);
+      return await handleCreateVenue(parseBody(event.body), event);
     }
 
     if (method === 'PUT' && event.pathParameters?.id) {
-      return await handleUpdateVenue(event.pathParameters.id, JSON.parse(event.body), event);
+      return await handleUpdateVenue(event.pathParameters.id, parseBody(event.body), event);
     }
 
     if (method === 'DELETE' && event.pathParameters?.id) {
@@ -137,7 +97,7 @@ exports.handler = async (event, context) => {
     };
 
   } catch (error) {
-    console.error('❌ Venues Lambda: Error:', error);
+    console.error('[ERROR] Venues Lambda: Error:', error);
     return {
       statusCode: 500,
       headers: getCorsHeaders(event),
@@ -147,7 +107,7 @@ exports.handler = async (event, context) => {
 };
 
 async function handleGetAllVenues(event) {
-  console.log('📍 Venues Lambda: Scanning all venues from DynamoDB...');
+  console.log('[Venues] Venues Lambda: Scanning all venues from DynamoDB...');
 
   // Check for search query parameter
   const searchTerm = event.queryStringParameters?.search;
@@ -168,7 +128,7 @@ async function handleGetAllVenues(event) {
     // If search term provided, filter by name or address (with stop word normalization)
     if (searchTerm) {
       const normalizedSearch = normalizeForSearch(searchTerm);
-      console.log(`📍 Venues Lambda: Search term "${searchTerm}" normalized to "${normalizedSearch}"`);
+      console.log(`[Venues] Venues Lambda: Search term "${searchTerm}" normalized to "${normalizedSearch}"`);
 
       validVenues = validVenues.filter(venue => {
         const normalizedName = normalizeForSearch(venue.name);
@@ -178,7 +138,7 @@ async function handleGetAllVenues(event) {
         return normalizedName.includes(normalizedSearch) || normalizedAddress.includes(normalizedSearch);
       });
 
-      console.log(`📍 Venues Lambda: Search for "${searchTerm}" returned ${validVenues.length} results`);
+      console.log(`[Venues] Venues Lambda: Search for "${searchTerm}" returned ${validVenues.length} results`);
     }
 
     // Transform to match expected API format
@@ -190,6 +150,7 @@ async function handleGetAllVenues(event) {
       longitude: venue.longitude,
       location: venue.location_object || { lat: venue.latitude, lng: venue.longitude },
       googlePlaceId: venue.google_place_id,
+      website: venue.website || '',
       validated: venue.validated || false,
       nameVariants: venue.name_variants || [],
       phone: venue.phone || '',
@@ -202,7 +163,7 @@ async function handleGetAllVenues(event) {
       standardTicketUrl: venue.standard_ticket_url || ''
     }));
 
-    console.log(`📍 Venues Lambda: Served ${formattedVenues.length} venues (${result.Items.length} total in DB)`);
+    console.log(`[Venues] Venues Lambda: Served ${formattedVenues.length} venues (${result.Items.length} total in DB)`);
 
     return {
       statusCode: 200,
@@ -210,13 +171,13 @@ async function handleGetAllVenues(event) {
       body: JSON.stringify(formattedVenues)
     };
   } catch (error) {
-    console.error('❌ DynamoDB scan failed:', error);
+    console.error('[ERROR] DynamoDB scan failed:', error);
     throw error;
   }
 }
 
 async function handleGetVenueById(venueId, event) {
-  console.log(`📍 Venues Lambda: Getting venue by ID: ${venueId}`);
+  console.log(`[Venues] Venues Lambda: Getting venue by ID: ${venueId}`);
 
   const params = {
     TableName: 'bndy-venues',
@@ -243,6 +204,7 @@ async function handleGetVenueById(venueId, event) {
       longitude: result.Item.longitude,
       location: result.Item.location_object || { lat: result.Item.latitude, lng: result.Item.longitude },
       googlePlaceId: result.Item.google_place_id,
+      website: result.Item.website || '',
       validated: result.Item.validated || false,
       nameVariants: result.Item.name_variants || [],
       phone: result.Item.phone || '',
@@ -263,13 +225,13 @@ async function handleGetVenueById(venueId, event) {
       body: JSON.stringify(venue)
     };
   } catch (error) {
-    console.error('❌ DynamoDB get failed:', error);
+    console.error('[ERROR] DynamoDB get failed:', error);
     throw error;
   }
 }
 
 async function handleCreateVenue(venueData, event) {
-  console.log('📍 Venues Lambda: Creating new venue');
+  console.log('[Venues] Venues Lambda: Creating new venue');
 
   const now = new Date().toISOString();
   const venue = {
@@ -280,6 +242,7 @@ async function handleCreateVenue(venueData, event) {
     longitude: venueData.longitude || 0,
     location_object: venueData.location || { lat: venueData.latitude, lng: venueData.longitude },
     google_place_id: venueData.googlePlaceId || '',
+    website: venueData.website || '',
     validated: venueData.validated || false,
     name_variants: venueData.nameVariants || [],
     phone: venueData.phone || '',
@@ -301,19 +264,23 @@ async function handleCreateVenue(venueData, event) {
 
   try {
     await dynamodb.put(params).promise();
+
+    // Trigger enrichment in background (async, non-blocking)
+    await triggerVenueEnrichment(venue.id);
+
     return {
       statusCode: 201,
       headers: getCorsHeaders(event),
       body: JSON.stringify(venue)
     };
   } catch (error) {
-    console.error('❌ DynamoDB put failed:', error);
+    console.error('[ERROR] DynamoDB put failed:', error);
     throw error;
   }
 }
 
-async function handleUpdateVenue(venueId, venueData) {
-  console.log(`📍 Venues Lambda: Updating venue: ${venueId}`);
+async function handleUpdateVenue(venueId, venueData, event) {
+  console.log(`[Venues] Venues Lambda: Updating venue: ${venueId}`);
 
   const now = new Date().toISOString();
 
@@ -345,13 +312,13 @@ async function handleUpdateVenue(venueId, venueData) {
       body: JSON.stringify(result.Attributes)
     };
   } catch (error) {
-    console.error('❌ DynamoDB update failed:', error);
+    console.error('[ERROR] DynamoDB update failed:', error);
     throw error;
   }
 }
 
 async function handleDeleteVenue(venueId, event) {
-  console.log(`📍 Venues Lambda: Deleting venue: ${venueId}`);
+  console.log(`[Venues] Venues Lambda: Deleting venue: ${venueId}`);
 
   const params = {
     TableName: 'bndy-venues',
@@ -366,14 +333,14 @@ async function handleDeleteVenue(venueId, event) {
       body: ''
     };
   } catch (error) {
-    console.error('❌ DynamoDB delete failed:', error);
+    console.error('[ERROR] DynamoDB delete failed:', error);
     throw error;
   }
 }
 
 async function handleFindOrCreateVenue(venueData, event) {
-  console.log('📍 Venues Lambda: Find-or-create venue with deduplication');
-  console.log('📍 Input:', {
+  console.log('[Venues] Venues Lambda: Find-or-create venue with deduplication');
+  console.log('[Venues] Input:', {
     name: venueData.name,
     googlePlaceId: venueData.googlePlaceId,
     address: venueData.address,
@@ -390,7 +357,7 @@ async function handleFindOrCreateVenue(venueData, event) {
     const result = await dynamodb.scan(scanParams).promise();
     const existingVenues = result.Items;
 
-    console.log(`📍 Scanning ${existingVenues.length} existing venues for matches`);
+    console.log(`[Venues] Scanning ${existingVenues.length} existing venues for matches`);
 
     // === LEVEL 1: Exact googlePlaceId match (100% confidence) ===
     if (venueData.googlePlaceId) {
@@ -399,7 +366,7 @@ async function handleFindOrCreateVenue(venueData, event) {
       );
 
       if (googlePlaceMatch) {
-        console.log('✅ LEVEL 1 MATCH: Google Place ID exact match');
+        console.log('[SUCCESS] LEVEL 1 MATCH: Google Place ID exact match');
         const formattedVenue = {
           id: googlePlaceMatch.id,
           name: googlePlaceMatch.name,
@@ -436,7 +403,7 @@ async function handleFindOrCreateVenue(venueData, event) {
             const nameSimilarity = calculateSimilarity(venueData.name, venue.name);
 
             if (nameSimilarity >= 80) {
-              console.log(`✅ LEVEL 2 MATCH: Location + Name (${nameSimilarity.toFixed(1)}% similarity)`);
+              console.log(`[SUCCESS] LEVEL 2 MATCH: Location + Name (${nameSimilarity.toFixed(1)}% similarity)`);
               const formattedVenue = {
                 id: venue.id,
                 name: venue.name,
@@ -469,7 +436,7 @@ async function handleFindOrCreateVenue(venueData, event) {
 
         // Match if name is very similar AND address has decent overlap
         if (nameSimilarity >= 85 && addressOverlap >= 50) {
-          console.log(`⚠️ LEVEL 3 MATCH: Name + Address tokens (name: ${nameSimilarity.toFixed(1)}%, addr: ${addressOverlap.toFixed(1)}%)`);
+          console.log(`[WARNING] LEVEL 3 MATCH: Name + Address tokens (name: ${nameSimilarity.toFixed(1)}%, addr: ${addressOverlap.toFixed(1)}%)`);
           const formattedVenue = {
             id: venue.id,
             name: venue.name,
@@ -496,7 +463,7 @@ async function handleFindOrCreateVenue(venueData, event) {
     }
 
     // === LEVEL 4: Create new venue (no match found) ===
-    console.log('🆕 LEVEL 4: No match found - creating new venue');
+    console.log('[NEW] LEVEL 4: No match found - creating new venue');
 
     const now = new Date().toISOString();
     const newVenue = {
@@ -507,6 +474,7 @@ async function handleFindOrCreateVenue(venueData, event) {
       longitude: venueData.longitude || 0,
       location_object: venueData.location || { lat: venueData.latitude, lng: venueData.longitude },
       google_place_id: venueData.googlePlaceId || '',
+      website: venueData.website || '',
       validated: false,
       name_variants: venueData.nameVariants || [],
       phone: venueData.phone || '',
@@ -528,6 +496,9 @@ async function handleFindOrCreateVenue(venueData, event) {
       Item: newVenue
     }).promise();
 
+    // Trigger enrichment in background (async, non-blocking)
+    await triggerVenueEnrichment(newVenue.id);
+
     const formattedNewVenue = {
       id: newVenue.id,
       name: newVenue.name,
@@ -548,10 +519,37 @@ async function handleFindOrCreateVenue(venueData, event) {
     };
 
   } catch (error) {
-    console.error('❌ Find-or-create failed:', error);
+    console.error('[ERROR] Find-or-create failed:', error);
     throw error;
   }
 }
+
+// ===== ENRICHMENT HELPERS =====
+
+async function triggerVenueEnrichment(venueId) {
+  try {
+    console.log(`[Enrichment] Triggering enrichment for venue: ${venueId}`);
+    await lambda.invoke({
+      FunctionName: 'venue-enrichment-lambda',
+      InvocationType: 'Event', // Async - don't wait for response
+      Payload: JSON.stringify({ body: JSON.stringify({ venueId }) })
+    }).promise();
+    console.log(`[Enrichment] Successfully triggered for: ${venueId}`);
+  } catch (error) {
+    console.error(`[Enrichment] Failed to trigger for ${venueId}:`, error);
+    // Don't throw - enrichment failure shouldn't block venue creation
+  }
+}
+
+// ===== END ENRICHMENT HELPERS =====
+
+// ===== ADMIN ENDPOINTS =====
+
+// Removed: getPlaceDetails() and handleBackfillWebsites() functions
+// These programmatic enrichment functions were replaced by venue-enrichment-lambda (AI-based approach)
+// See: C:/VSProjects/bndy-serverless-api/venue-enrichment-lambda/
+
+// ===== END ADMIN ENDPOINTS =====
 
 function getCorsHeaders(event) {
   const origin = event?.headers?.origin || event?.headers?.Origin;
