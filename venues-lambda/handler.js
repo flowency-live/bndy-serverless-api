@@ -160,7 +160,10 @@ async function handleGetAllVenues(event) {
       profileImageUrl: venue.profile_image_url || null,
       standardTicketed: venue.standard_ticketed || false,
       standardTicketInformation: venue.standard_ticket_information || '',
-      standardTicketUrl: venue.standard_ticket_url || ''
+      standardTicketUrl: venue.standard_ticket_url || '',
+      enrichment_status: venue.enrichment_status,
+      enrichment_data: venue.enrichment_data,
+      enrichment_date: venue.enrichment_date
     }));
 
     console.log(`[Venues] Venues Lambda: Served ${formattedVenues.length} venues (${result.Items.length} total in DB)`);
