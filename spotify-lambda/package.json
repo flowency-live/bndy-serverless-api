@@ -1,0 +1,8 @@
+{
+  "name": "spotify-lambda",
+  "version": "1.0.0",
+  "description": "Spotify Web API proxy for BNDY platform",
+  "main": "handler.js",
+  "dependencies": {},
+  "devDependencies": {}
+}
