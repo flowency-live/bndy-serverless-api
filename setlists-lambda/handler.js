@@ -108,7 +108,12 @@ exports.handler = async (event) => {
         ScanIndexForward: false, // Most recent first
       }).promise();
 
-      return createResponse(200, result.Items || []);
+      // Enrich each setlist with tuning data
+      const enrichedSetlists = await Promise.all(
+        (result.Items || []).map(setlist => enrichSetlistWithTuning(setlist))
+      );
+
+      return createResponse(200, enrichedSetlists);
     }
 
     // GET /api/artists/{artistId}/setlists/{setlistId} - Get single setlist
