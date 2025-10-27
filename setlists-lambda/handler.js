@@ -37,35 +37,53 @@ async function enrichSetlistWithTuning(setlist) {
   setlist.sets.forEach(set => {
     if (set.songs) {
       set.songs.forEach(song => {
+        console.log(`[ENRICH] Song: "${song.title}" has song_id:`, song.song_id);
         if (song.song_id) {
           songIds.add(song.song_id);
+        } else {
+          console.warn(`[ENRICH] Song "${song.title}" missing song_id field!`);
         }
       });
     }
   });
 
-  // Fetch tuning data for each song_id from artist-songs table
+  console.log(`[ENRICH] Found ${songIds.size} unique song_ids to lookup tuning for`);
+
+  // Fetch all artist songs from playbook to get tuning data
   const tuningMap = {};
   const artistId = setlist.artist_id;
 
-  for (const songId of songIds) {
-    try {
-      const result = await dynamodb.query({
-        TableName: 'bndy-artist-songs',
-        IndexName: 'artist_id-song_id-index',
-        KeyConditionExpression: 'artist_id = :artistId AND song_id = :songId',
-        ExpressionAttributeValues: {
-          ':artistId': artistId,
-          ':songId': songId,
-        },
-      }).promise();
+  console.log(`[ENRICH] Fetching all playbook songs for artist: ${artistId}`);
 
-      if (result.Items && result.Items.length > 0) {
-        tuningMap[songId] = result.Items[0].tuning || 'standard';
-      }
-    } catch (error) {
-      console.error(`Error fetching tuning for song ${songId}:`, error);
+  try {
+    const result = await dynamodb.query({
+      TableName: 'bndy-artist-songs',
+      IndexName: 'artist_id-status-index',
+      KeyConditionExpression: 'artist_id = :artistId AND #status = :status',
+      ExpressionAttributeNames: { '#status': 'status' },
+      ExpressionAttributeValues: {
+        ':artistId': artistId,
+        ':status': 'playbook',
+      },
+    }).promise();
+
+    console.log(`[ENRICH] Found ${result.Items ? result.Items.length : 0} playbook songs`);
+
+    // Build tuning map from playbook songs
+    if (result.Items) {
+      result.Items.forEach(item => {
+        if (item.song_id && item.tuning) {
+          tuningMap[item.song_id] = item.tuning;
+          if (item.tuning !== 'standard') {
+            console.log(`[ENRICH] Mapped ${item.song_id} -> ${item.tuning}`);
+          }
+        }
+      });
     }
+
+    console.log(`[ENRICH] Built tuning map with ${Object.keys(tuningMap).length} entries`);
+  } catch (error) {
+    console.error(`[ENRICH] Error fetching playbook songs:`, error);
   }
 
   // Enrich songs with tuning data
