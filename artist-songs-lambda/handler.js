@@ -104,6 +104,12 @@ async function handleGetPlaybook(artistId, queryParams) {
     result.Items.map(async (artistSong) => {
       const globalSong = await getGlobalSong(artistSong.song_id);
 
+      // Skip if global song has been deleted (orphaned record)
+      if (!globalSong) {
+        console.log(`Warning: Orphaned artist-song record ${artistSong.id} references deleted song ${artistSong.song_id}`);
+        return null;
+      }
+
       // Override global song title with custom title if set
       if (artistSong.custom_title) {
         globalSong.title = artistSong.custom_title;
@@ -112,6 +118,9 @@ async function handleGetPlaybook(artistId, queryParams) {
       return { ...artistSong, globalSong };
     })
   );
+
+  // Filter out null entries (orphaned records)
+  songs = songs.filter(song => song !== null);
 
   // Apply filters
   if (queryParams?.search) {
@@ -148,6 +157,10 @@ async function handleUpdateSong(artistSongId, body) {
   if (body.tuning !== undefined) {
     updates.push('tuning = :tuning');
     values[':tuning'] = body.tuning;
+  }
+  if (body.custom_duration !== undefined) {
+    updates.push('custom_duration = :custom_duration');
+    values[':custom_duration'] = body.custom_duration;
   }
   if (body.notes !== undefined) {
     updates.push('notes = :notes');
