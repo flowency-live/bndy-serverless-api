@@ -13,6 +13,7 @@ exports.handler = async (event, context) => {
   try {
     const artistId = event.pathParameters?.artistId;
     const artistSongId = event.pathParameters?.artistSongId;
+    const userId = event.requestContext?.authorizer?.userId;
 
     // POST /api/artists/{artistId}/playbook - Add song
     if (method === 'POST' && path.includes('/playbook') && artistId) {
@@ -25,13 +26,43 @@ exports.handler = async (event, context) => {
     }
 
     // PUT /api/artists/{artistId}/playbook/{artistSongId} - Update enrichments
-    if (method === 'PUT' && artistSongId) {
+    if (method === 'PUT' && artistSongId && path.includes('/playbook')) {
       return await handleUpdateSong(artistSongId, JSON.parse(event.body));
     }
 
     // DELETE /api/artists/{artistId}/playbook/{artistSongId} - Remove song
     if (method === 'DELETE' && artistSongId) {
       return await handleDeleteSong(artistSongId);
+    }
+
+    // POST /api/artists/{artistId}/pipeline/suggestions - Add song to pipeline
+    if (method === 'POST' && path.includes('/pipeline/suggestions') && artistId) {
+      return await handleAddSuggestion(JSON.parse(event.body), artistId, userId);
+    }
+
+    // GET /api/artists/{artistId}/pipeline - Get pipeline songs by status
+    if (method === 'GET' && path.includes('/pipeline') && artistId) {
+      return await handleGetPipeline(artistId, event.queryStringParameters);
+    }
+
+    // POST /api/artists/{artistId}/pipeline/{artistSongId}/vote - Vote on song
+    if (method === 'POST' && artistSongId && path.includes('/vote')) {
+      return await handleVote(artistSongId, artistId, userId, JSON.parse(event.body));
+    }
+
+    // POST /api/artists/{artistId}/pipeline/{artistSongId}/rag - Update RAG status
+    if (method === 'POST' && artistSongId && path.includes('/rag')) {
+      return await handleUpdateRagStatus(artistSongId, userId, JSON.parse(event.body));
+    }
+
+    // PUT /api/artists/{artistId}/pipeline/{artistSongId}/status - Change status
+    if (method === 'PUT' && artistSongId && path.includes('/status')) {
+      return await handleChangeStatus(artistSongId, JSON.parse(event.body));
+    }
+
+    // PUT /api/artists/{artistId}/pipeline/{artistSongId}/comment - Update comment
+    if (method === 'PUT' && artistSongId && path.includes('/comment')) {
+      return await handleUpdateComment(artistSongId, JSON.parse(event.body));
     }
 
     return {
@@ -216,6 +247,267 @@ async function getGlobalSong(songId) {
     console.error('Error fetching global song:', error);
     return null;
   }
+}
+
+async function handleAddSuggestion(body, artistId, userId) {
+  const now = new Date().toISOString();
+  const artistSong = {
+    id: crypto.randomUUID(),
+    artist_id: artistId,
+    song_id: body.song_id,
+    status: 'voting',
+
+    votes: {
+      [userId]: {
+        value: body.initial_vote,
+        updated_at: now
+      }
+    },
+
+    rag_status: {},
+
+    custom_key: null,
+    custom_tempo: null,
+    tuning: 'standard',
+    notes: '',
+    youtube_url: '',
+    reference_url: '',
+
+    suggested_by_user_id: userId,
+    suggested_comment: body.suggested_comment || '',
+    vote_score_percentage: null,
+
+    last_performed_at: '1970-01-01T00:00:00.000Z',
+    performance_count: 0,
+    promoted_to_playbook_at: null,
+
+    added_by_membership_id: body.added_by_membership_id,
+    created_at: now,
+    updated_at: now,
+    last_status_change_at: now
+  };
+
+  await dynamodb.put({
+    TableName: 'bndy-artist-songs',
+    Item: artistSong
+  }).promise();
+
+  const globalSong = await getGlobalSong(body.song_id);
+
+  return {
+    statusCode: 201,
+    headers: getCorsHeaders(),
+    body: JSON.stringify({ ...artistSong, globalSong })
+  };
+}
+
+async function handleGetPipeline(artistId, queryParams) {
+  const status = queryParams?.status || 'voting';
+
+  const result = await dynamodb.query({
+    TableName: 'bndy-artist-songs',
+    IndexName: 'artist_id-status-index',
+    KeyConditionExpression: 'artist_id = :artistId AND #status = :status',
+    ExpressionAttributeNames: { '#status': 'status' },
+    ExpressionAttributeValues: {
+      ':artistId': artistId,
+      ':status': status
+    }
+  }).promise();
+
+  let songs = await Promise.all(
+    result.Items.map(async (artistSong) => {
+      const globalSong = await getGlobalSong(artistSong.song_id);
+
+      if (!globalSong) {
+        console.log(`Warning: Orphaned artist-song record ${artistSong.id}`);
+        return null;
+      }
+
+      return { ...artistSong, globalSong };
+    })
+  );
+
+  songs = songs.filter(song => song !== null);
+
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(),
+    body: JSON.stringify(songs)
+  };
+}
+
+async function handleVote(artistSongId, artistId, userId, body) {
+  const now = new Date().toISOString();
+
+  const songResult = await dynamodb.get({
+    TableName: 'bndy-artist-songs',
+    Key: { id: artistSongId }
+  }).promise();
+
+  if (!songResult.Item) {
+    return {
+      statusCode: 404,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Song not found' })
+    };
+  }
+
+  const song = songResult.Item;
+  const votes = song.votes || {};
+
+  votes[userId] = {
+    value: body.vote_value,
+    updated_at: now
+  };
+
+  const memberCountResult = await dynamodb.query({
+    TableName: 'bndy-memberships',
+    IndexName: 'artist_id-index',
+    KeyConditionExpression: 'artist_id = :artistId',
+    ExpressionAttributeValues: { ':artistId': artistId }
+  }).promise();
+
+  const memberCount = memberCountResult.Items.length;
+  const voteCount = Object.keys(votes).length;
+
+  const totalVotes = Object.values(votes).reduce((sum, v) => sum + v.value, 0);
+  const scorePercentage = Math.round((totalVotes / (memberCount * 5)) * 100);
+
+  const newStatus = (voteCount >= memberCount && song.status === 'voting') ? 'review' : song.status;
+  const statusChanged = newStatus !== song.status;
+
+  await dynamodb.update({
+    TableName: 'bndy-artist-songs',
+    Key: { id: artistSongId },
+    UpdateExpression: 'SET votes = :votes, vote_score_percentage = :score, #status = :status, updated_at = :now' +
+      (statusChanged ? ', last_status_change_at = :now' : ''),
+    ExpressionAttributeNames: { '#status': 'status' },
+    ExpressionAttributeValues: {
+      ':votes': votes,
+      ':score': scorePercentage,
+      ':status': newStatus,
+      ':now': now
+    }
+  }).promise();
+
+  const globalSong = await getGlobalSong(song.song_id);
+
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(),
+    body: JSON.stringify({
+      ...song,
+      votes,
+      vote_score_percentage: scorePercentage,
+      status: newStatus,
+      updated_at: now,
+      globalSong
+    })
+  };
+}
+
+async function handleUpdateRagStatus(artistSongId, userId, body) {
+  const now = new Date().toISOString();
+
+  const songResult = await dynamodb.get({
+    TableName: 'bndy-artist-songs',
+    Key: { id: artistSongId }
+  }).promise();
+
+  if (!songResult.Item) {
+    return {
+      statusCode: 404,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Song not found' })
+    };
+  }
+
+  const song = songResult.Item;
+  const ragStatus = song.rag_status || {};
+
+  ragStatus[userId] = {
+    status: body.status,
+    updated_at: now
+  };
+
+  await dynamodb.update({
+    TableName: 'bndy-artist-songs',
+    Key: { id: artistSongId },
+    UpdateExpression: 'SET rag_status = :rag_status, updated_at = :now',
+    ExpressionAttributeValues: {
+      ':rag_status': ragStatus,
+      ':now': now
+    }
+  }).promise();
+
+  const globalSong = await getGlobalSong(song.song_id);
+
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(),
+    body: JSON.stringify({
+      ...song,
+      rag_status: ragStatus,
+      updated_at: now,
+      globalSong
+    })
+  };
+}
+
+async function handleChangeStatus(artistSongId, body) {
+  const now = new Date().toISOString();
+  const newStatus = body.status;
+
+  const updates = ['#status = :status', 'updated_at = :now', 'last_status_change_at = :now'];
+  const values = {
+    ':status': newStatus,
+    ':now': now
+  };
+
+  if (newStatus === 'playbook') {
+    updates.push('promoted_to_playbook_at = :now');
+  }
+
+  const result = await dynamodb.update({
+    TableName: 'bndy-artist-songs',
+    Key: { id: artistSongId },
+    UpdateExpression: 'SET ' + updates.join(', '),
+    ExpressionAttributeNames: { '#status': 'status' },
+    ExpressionAttributeValues: values,
+    ReturnValues: 'ALL_NEW'
+  }).promise();
+
+  const globalSong = await getGlobalSong(result.Attributes.song_id);
+
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(),
+    body: JSON.stringify({ ...result.Attributes, globalSong })
+  };
+}
+
+async function handleUpdateComment(artistSongId, body) {
+  const now = new Date().toISOString();
+
+  const result = await dynamodb.update({
+    TableName: 'bndy-artist-songs',
+    Key: { id: artistSongId },
+    UpdateExpression: 'SET suggested_comment = :comment, updated_at = :now',
+    ExpressionAttributeValues: {
+      ':comment': body.comment,
+      ':now': now
+    },
+    ReturnValues: 'ALL_NEW'
+  }).promise();
+
+  const globalSong = await getGlobalSong(result.Attributes.song_id);
+
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(),
+    body: JSON.stringify({ ...result.Attributes, globalSong })
+  };
 }
 
 function getCorsHeaders() {
