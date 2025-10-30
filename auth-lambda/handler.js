@@ -8,6 +8,7 @@ const crypto = require('crypto');
 // AWS Services
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const cognito = new AWS.CognitoIdentityServiceProvider({ region: 'eu-west-2' });
+const SES = new AWS.SES({ region: 'eu-west-2' });
 
 // Configuration
 const COGNITO_DOMAIN = 'https://eu-west-2lqtkkhs1p.auth.eu-west-2.amazoncognito.com';
@@ -22,18 +23,55 @@ const REDIRECT_URI = `${API_URL}/auth/callback`;
 // DynamoDB Tables
 const USERS_TABLE = 'bndy-users';
 const OTP_TABLE = 'bndy-otp-codes';
-
-// State storage for OAuth (in production, use DynamoDB with TTL)
-const stateStore = new Map();
+const MAGIC_TOKEN_TABLE = 'bndy-magic-tokens';
+const OAUTH_STATE_TABLE = 'bndy-oauth-states';
 
 // Utility functions
 const generateState = () => crypto.randomBytes(32).toString('hex');
 
-const cleanupExpiredStates = () => {
-  for (const [key, value] of stateStore.entries()) {
-    if (Date.now() - value.timestamp > 300000) { // 5 minutes
-      stateStore.delete(key);
+// OAuth state management with DynamoDB
+const storeOAuthState = async (state, origin) => {
+  const ttl = Math.floor(Date.now() / 1000) + 300; // 5 minutes from now
+
+  await dynamodb.put({
+    TableName: OAUTH_STATE_TABLE,
+    Item: {
+      state,
+      origin,
+      created_at: new Date().toISOString(),
+      ttl
     }
+  }).promise();
+
+  console.log('AUTH: OAuth state stored in DynamoDB', {
+    state: state.substring(0, 8) + '...',
+    ttl
+  });
+};
+
+const verifyOAuthState = async (state) => {
+  try {
+    const result = await dynamodb.get({
+      TableName: OAUTH_STATE_TABLE,
+      Key: { state }
+    }).promise();
+
+    if (!result.Item) {
+      console.log('AUTH: OAuth state not found in DynamoDB');
+      return false;
+    }
+
+    // Delete state after verification (one-time use)
+    await dynamodb.delete({
+      TableName: OAUTH_STATE_TABLE,
+      Key: { state }
+    }).promise();
+
+    console.log('AUTH: OAuth state verified and deleted');
+    return true;
+  } catch (error) {
+    console.error('AUTH: Error verifying OAuth state:', error);
+    return false;
   }
 };
 
@@ -109,16 +147,12 @@ const requireAuth = (event) => {
 };
 
 // Route handlers
-const handleGoogleAuth = (event) => {
+const handleGoogleAuth = async (event) => {
   const state = generateState();
+  const origin = event.headers.referer || FRONTEND_URL;
 
-  // Store state with expiry
-  stateStore.set(state, {
-    timestamp: Date.now(),
-    origin: event.headers.referer || FRONTEND_URL
-  });
-
-  cleanupExpiredStates();
+  // Store state in DynamoDB
+  await storeOAuthState(state, origin);
 
   const authUrl = `${COGNITO_DOMAIN}/oauth2/authorize?` +
     `response_type=code&` +
@@ -155,7 +189,8 @@ const handleOAuthCallback = async (event) => {
 
   try {
     // Verify state to prevent CSRF
-    if (!state || !stateStore.has(state)) {
+    const stateValid = await verifyOAuthState(state);
+    if (!state || !stateValid) {
       console.error('AUTH CALLBACK: Invalid or expired state');
       return {
         statusCode: 302,
@@ -163,8 +198,6 @@ const handleOAuthCallback = async (event) => {
         body: ''
       };
     }
-
-    stateStore.delete(state);
 
     if (error) {
       console.error('AUTH CALLBACK: OAuth error:', error);
@@ -234,13 +267,13 @@ const handleOAuthCallback = async (event) => {
     };
 
     const sessionToken = jwt.sign(sessionData, JWT_SECRET, {
-      expiresIn: '7d'
+      expiresIn: '90d'
     });
 
     // Create secure cookie
     const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
       'HttpOnly; Secure; SameSite=Lax; ' +
-      'Max-Age=604800; Path=/; ' +
+      'Max-Age=7776000; Path=/; ' +
       'Domain=.bndy.co.uk';
 
     console.log('AUTH CALLBACK: Session created, redirecting to dashboard');
@@ -382,15 +415,18 @@ const handlePhoneRequestOTP = async (event) => {
       }
     }).promise();
 
-    // Send SMS via SNS (will fail gracefully if SNS not approved)
+    // Send SMS via Pinpoint SMS (AWS End User Messaging)
     try {
-      const sns = new AWS.SNS({ region: 'eu-west-2' });
-      await sns.publish({
-        Message: `Your BNDY verification code is: ${otp}\n\nThis code expires in 5 minutes.`,
-        PhoneNumber: phone
+      const pinpointSMS = new AWS.PinpointSMSVoiceV2({ region: 'eu-west-2' });
+      await pinpointSMS.sendTextMessage({
+        DestinationPhoneNumber: phone,
+        MessageBody: `Your BNDY verification code is: ${otp}\n\nThis code expires in 5 minutes.`,
+        OriginationIdentity: 'BNDY',
+        MessageType: 'TRANSACTIONAL',
+        ConfigurationSetName: 'bndy-sms-config'
       }).promise();
 
-      console.log('[PHONE_AUTH] OTP sent via SMS successfully');
+      console.log('[PHONE_AUTH] OTP sent via Pinpoint SMS successfully');
       return createResponse(200, {
         success: true,
         message: 'OTP sent to your phone',
@@ -398,15 +434,14 @@ const handlePhoneRequestOTP = async (event) => {
         expiresIn: 300
       });
     } catch (smsError) {
-      console.warn('[PHONE_AUTH] SMS send failed (SNS may not be approved):', smsError.message);
+      console.error('[PHONE_AUTH] SMS send failed:', smsError.message);
 
-      // Return success anyway (OTP is stored, can be tested manually)
-      return createResponse(200, {
-        success: true,
-        message: 'OTP generated (SMS delivery pending SNS approval)',
-        requestId,
-        expiresIn: 300,
-        warning: 'SMS not sent - SNS not configured'
+      // Return error with details for troubleshooting
+      return createResponse(500, {
+        success: false,
+        error: 'Failed to send SMS',
+        message: smsError.message,
+        requestId
       });
     }
 
@@ -506,11 +541,11 @@ const handlePhoneVerifyOTP = async (event) => {
         issuedAt: Date.now()
       };
 
-      const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '7d' });
+      const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '90d' });
 
       const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
         'HttpOnly; Secure; SameSite=Lax; ' +
-        'Max-Age=604800; Path=/; ' +
+        'Max-Age=7776000; Path=/; ' +
         'Domain=.bndy.co.uk';
 
       console.log('[PHONE_AUTH] Existing user logged in');
@@ -569,11 +604,11 @@ const handlePhoneVerifyOTP = async (event) => {
       issuedAt: Date.now()
     };
 
-    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '7d' });
+    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '90d' });
 
     const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
       'HttpOnly; Secure; SameSite=Lax; ' +
-      'Max-Age=604800; Path=/; ' +
+      'Max-Age=7776000; Path=/; ' +
       'Domain=.bndy.co.uk';
 
     console.log('[PHONE_AUTH] New user created and logged in');
@@ -703,11 +738,11 @@ const handlePhoneVerifyAndOnboard = async (event) => {
       issuedAt: Date.now()
     };
 
-    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '7d' });
+    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '90d' });
 
     const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
       'HttpOnly; Secure; SameSite=Lax; ' +
-      'Max-Age=604800; Path=/; ' +
+      'Max-Age=7776000; Path=/; ' +
       'Domain=.bndy.co.uk';
 
     return {
@@ -791,6 +826,351 @@ const createOrUpdateUser = async (userData) => {
   }
 };
 
+// ========== EMAIL MAGIC LINK AUTHENTICATION HANDLERS ==========
+
+// Handler: POST /auth/email/request-magic
+const handleEmailRequestMagic = async (event) => {
+  try {
+    const body = JSON.parse(event.body || '{}');
+    const { email } = body;
+
+    // Validate email format
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return createResponse(400, { error: 'Invalid email format' });
+    }
+
+    console.log('[EMAIL_AUTH] Magic link requested for email:', email.substring(0, 3) + '***');
+
+    // Generate magic token (UUID)
+    const token = crypto.randomUUID();
+    const expiresAt = Date.now() + (5 * 60 * 1000); // 5 minutes
+    const requestId = crypto.randomUUID();
+
+    // Store token in DynamoDB
+    await dynamodb.put({
+      TableName: MAGIC_TOKEN_TABLE,
+      Item: {
+        token,
+        email,
+        expiresAt,
+        attempts: 0,
+        createdAt: new Date().toISOString(),
+        requestId,
+        type: 'email-magic-link'
+      }
+    }).promise();
+
+    // Send email via SES
+    const magicLink = `https://api.bndy.co.uk/auth/magic/${token}`;
+
+    try {
+      await SES.sendEmail({
+        Source: 'noreply@bndy.co.uk',
+        Destination: { ToAddresses: [email] },
+        Message: {
+          Subject: { Data: 'Sign in to bndy' },
+          Body: {
+            Html: {
+              Data: `
+                <h2>Sign in to bndy</h2>
+                <p>Click the link below to sign in to your account:</p>
+                <p><a href="${magicLink}" style="background: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Sign In to bndy</a></p>
+                <p>Or copy this link: ${magicLink}</p>
+                <p><small>This link expires in 5 minutes. If you didn't request this, you can safely ignore this email.</small></p>
+              `
+            },
+            Text: {
+              Data: `Sign in to bndy\n\nClick here to sign in: ${magicLink}\n\nThis link expires in 5 minutes.`
+            }
+          }
+        }
+      }).promise();
+
+      console.log('[EMAIL_AUTH] Magic link sent successfully');
+      return createResponse(200, {
+        success: true,
+        message: 'Magic link sent to your email',
+        requestId,
+        expiresIn: 300
+      });
+    } catch (sesError) {
+      console.error('[EMAIL_AUTH] SES send failed:', sesError.message);
+      return createResponse(500, {
+        success: false,
+        error: 'Failed to send email',
+        message: sesError.message,
+        requestId
+      });
+    }
+
+  } catch (error) {
+    console.error('[EMAIL_AUTH] Error requesting magic link:', error);
+    return createResponse(500, { error: 'Failed to request magic link' });
+  }
+};
+
+// Handler: GET /auth/magic/{token}
+const handleMagicLinkAuth = async (event) => {
+  try {
+    const token = event.pathParameters?.token;
+
+    if (!token) {
+      return createResponse(400, { error: 'Token required' });
+    }
+
+    console.log('[EMAIL_AUTH] Validating magic link:', token.substring(0, 8) + '...');
+
+    // Get token from DynamoDB
+    const tokenResult = await dynamodb.get({
+      TableName: MAGIC_TOKEN_TABLE,
+      Key: { token }
+    }).promise();
+
+    if (!tokenResult.Item) {
+      console.log('[EMAIL_AUTH] Token not found');
+      return {
+        statusCode: 302,
+        headers: { Location: `${FRONTEND_URL}/login?error=invalid_token` },
+        body: ''
+      };
+    }
+
+    const tokenRecord = tokenResult.Item;
+
+    // Check expiry
+    if (Date.now() > tokenRecord.expiresAt) {
+      console.log('[EMAIL_AUTH] Token expired');
+      await dynamodb.delete({
+        TableName: MAGIC_TOKEN_TABLE,
+        Key: { token }
+      }).promise();
+      return {
+        statusCode: 302,
+        headers: { Location: `${FRONTEND_URL}/login?error=token_expired` },
+        body: ''
+      };
+    }
+
+    // Token valid - delete it (one-time use)
+    await dynamodb.delete({
+      TableName: MAGIC_TOKEN_TABLE,
+      Key: { token }
+    }).promise();
+
+    const email = tokenRecord.email;
+    console.log('[EMAIL_AUTH] Token verified for email:', email.substring(0, 3) + '***');
+
+    // Check if user exists with this email
+    const usersResult = await dynamodb.scan({
+      TableName: USERS_TABLE,
+      FilterExpression: 'email = :email',
+      ExpressionAttributeValues: { ':email': email }
+    }).promise();
+
+    if (usersResult.Items && usersResult.Items.length > 0) {
+      // Existing user - log them in
+      const existingUser = usersResult.Items[0];
+
+      const sessionData = {
+        userId: existingUser.cognito_id,
+        username: existingUser.username,
+        email: existingUser.email,
+        issuedAt: Date.now()
+      };
+
+      const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '90d' });
+
+      const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
+        'HttpOnly; Secure; SameSite=Lax; ' +
+        'Max-Age=7776000; Path=/; ' +
+        'Domain=.bndy.co.uk';
+
+      console.log('[EMAIL_AUTH] Existing user logged in');
+
+      const redirectHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Redirecting...</title>
+</head>
+<body>
+  <p>Authentication successful. Redirecting...</p>
+  <script>
+    window.location.href = '${FRONTEND_URL}/dashboard';
+  </script>
+</body>
+</html>`;
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'text/html',
+          'Set-Cookie': cookieOptions
+        },
+        body: redirectHtml
+      };
+    }
+
+    // New user - auto-create like phone auth does
+    console.log('[EMAIL_AUTH] New user, auto-creating in bndy-users');
+
+    const userId = crypto.randomUUID();
+    const cognitoId = `email_${userId}`;
+    const username = `user_${email.split('@')[0]}`;
+
+    await dynamodb.put({
+      TableName: USERS_TABLE,
+      Item: {
+        cognito_id: cognitoId,
+        user_id: userId,
+        email,
+        username,
+        profile_complete: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    }).promise();
+
+    // Create session
+    const sessionData = {
+      userId: cognitoId,
+      username,
+      email,
+      issuedAt: Date.now()
+    };
+
+    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '90d' });
+
+    const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
+      'HttpOnly; Secure; SameSite=Lax; ' +
+      'Max-Age=7776000; Path=/; ' +
+      'Domain=.bndy.co.uk';
+
+    console.log('[EMAIL_AUTH] New user created and logged in');
+
+    const redirectHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Redirecting...</title>
+</head>
+<body>
+  <p>Welcome to bndy! Redirecting...</p>
+  <script>
+    window.location.href = '${FRONTEND_URL}/dashboard';
+  </script>
+</body>
+</html>`;
+
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'text/html',
+        'Set-Cookie': cookieOptions
+      },
+      body: redirectHtml
+    };
+
+  } catch (error) {
+    console.error('[EMAIL_AUTH] Magic link validation error:', error);
+    return {
+      statusCode: 302,
+      headers: { Location: `${FRONTEND_URL}/login?error=authentication_failed` },
+      body: ''
+    };
+  }
+};
+
+// Handler: POST /auth/check-identity (for dynamic welcome message)
+const handleCheckIdentity = async (event) => {
+  try {
+    const body = JSON.parse(event.body || '{}');
+    const { phone, email } = body;
+
+    if (!phone && !email) {
+      return createResponse(400, { error: 'Phone or email required' });
+    }
+
+    console.log('[AUTH] Checking identity existence');
+
+    if (phone) {
+      const result = await dynamodb.query({
+        TableName: USERS_TABLE,
+        IndexName: 'phone-index',
+        KeyConditionExpression: 'phone = :phone',
+        ExpressionAttributeValues: { ':phone': phone }
+      }).promise();
+
+      if (result.Items && result.Items.length > 0) {
+        const user = result.Items[0];
+        return createResponse(200, {
+          exists: true,
+          displayName: user.display_name || user.first_name,
+          method: 'phone'
+        });
+      }
+    }
+
+    if (email) {
+      const result = await dynamodb.scan({
+        TableName: USERS_TABLE,
+        FilterExpression: 'email = :email',
+        ExpressionAttributeValues: { ':email': email }
+      }).promise();
+
+      if (result.Items && result.Items.length > 0) {
+        const user = result.Items[0];
+        return createResponse(200, {
+          exists: true,
+          displayName: user.display_name || user.first_name,
+          method: 'email'
+        });
+      }
+    }
+
+    // Not found
+    return createResponse(200, {
+      exists: false,
+      method: phone ? 'phone' : 'email'
+    });
+
+  } catch (error) {
+    console.error('[AUTH] Check identity error:', error);
+    return createResponse(500, { error: 'Failed to check identity' });
+  }
+};
+
+// Handler: GET /auth/apple
+const handleAppleAuth = async (event) => {
+  const state = generateState();
+  const origin = event.headers.referer || FRONTEND_URL;
+
+  // Store state in DynamoDB
+  await storeOAuthState(state, origin);
+
+  const authUrl = `${COGNITO_DOMAIN}/oauth2/authorize?` +
+    `response_type=code&` +
+    `client_id=${CLIENT_ID}&` +
+    `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
+    `scope=email+openid+profile+phone&` +
+    `state=${state}&` +
+    `identity_provider=SignInWithApple`;
+
+  console.log('AUTH: Initiating Apple OAuth flow', {
+    state: state.substring(0, 8) + '...',
+    redirectUri: REDIRECT_URI
+  });
+
+  return {
+    statusCode: 302,
+    headers: {
+      Location: authUrl,
+      ...corsHeaders
+    },
+    body: ''
+  };
+};
+
 // Main handler
 exports.handler = async (event, context) => {
   // Support both HTTP API v2 and REST API v1 event formats
@@ -817,7 +1197,7 @@ exports.handler = async (event, context) => {
   try {
     // Route requests using routeKey
     if (routeKey === 'GET /auth/google') {
-      return handleGoogleAuth(event);
+      return await handleGoogleAuth(event);
     }
 
     if (routeKey === 'GET /auth/callback') {
@@ -843,6 +1223,25 @@ exports.handler = async (event, context) => {
 
     if (routeKey === 'POST /auth/phone/verify-and-onboard') {
       return await handlePhoneVerifyAndOnboard(event);
+    }
+
+    // Email magic link routes
+    if (routeKey === 'POST /auth/email/request-magic') {
+      return await handleEmailRequestMagic(event);
+    }
+
+    if (routeKey.startsWith('GET /auth/magic/') || (method === 'GET' && path.includes('/auth/magic/'))) {
+      return await handleMagicLinkAuth(event);
+    }
+
+    // Check identity route (for dynamic welcome message)
+    if (routeKey === 'POST /auth/check-identity') {
+      return await handleCheckIdentity(event);
+    }
+
+    // Apple OAuth route
+    if (routeKey === 'GET /auth/apple') {
+      return await handleAppleAuth(event);
     }
 
     // Route not found
