@@ -242,7 +242,18 @@ async function getGlobalSong(songId) {
       TableName: 'bndy-songs',
       Key: { id: songId }
     }).promise();
-    return result.Item || null;
+
+    if (!result.Item) return null;
+
+    // Map DB fields to frontend expected fields
+    const song = result.Item;
+    return {
+      ...song,
+      artist_name: song.artistName || song.artist_name,
+      thumbnail_url: song.albumImageUrl || song.thumbnail_url,
+      spotify_url: song.spotifyUrl || song.spotify_url,
+      preview_url: song.previewUrl || song.preview_url
+    };
   } catch (error) {
     console.error('Error fetching global song:', error);
     return null;
