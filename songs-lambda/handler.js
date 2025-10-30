@@ -9,18 +9,22 @@ exports.handler = async (event, context) => {
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
 
-  console.log('🎶 Songs Lambda: Request received', {
+  console.log('Songs Lambda: Request received', {
     method,
     path,
-    pathParameters: event.pathParameters
+    pathParameters: event.pathParameters,
+    queryStringParameters: event.queryStringParameters
   });
-  console.log('🚀 DynamoDB version - FAST AS FUCK');
 
   context.callbackWaitsForEmptyEventLoop = false;
 
   try {
     // Route requests
     if (method === 'GET' && path === '/api/songs') {
+      // If search query provided, use search handler
+      if (event.queryStringParameters?.q) {
+        return await handleSearchSongs(event.queryStringParameters.q);
+      }
       return await handleGetAllSongs();
     }
 
@@ -47,7 +51,7 @@ exports.handler = async (event, context) => {
     };
 
   } catch (error) {
-    console.error('❌ Songs Lambda: Error:', error);
+    console.error('Songs Lambda: Error:', error);
     return {
       statusCode: 500,
       headers: getCorsHeaders(),
@@ -56,8 +60,57 @@ exports.handler = async (event, context) => {
   }
 };
 
+async function handleSearchSongs(query) {
+  console.log('Songs Lambda: Searching songs with query:', query);
+
+  const params = {
+    TableName: 'bndy-songs'
+  };
+
+  try {
+    const result = await dynamodb.scan(params).promise();
+
+    // Filter songs by title or artist name
+    const lowerQuery = query.toLowerCase();
+    const filteredSongs = result.Items.filter(song =>
+      song.title?.toLowerCase().includes(lowerQuery) ||
+      song.artistName?.toLowerCase().includes(lowerQuery)
+    );
+
+    // Transform to match expected API format
+    const formattedSongs = filteredSongs.map(song => ({
+      id: song.id,
+      title: song.title,
+      artistName: song.artistName || '',
+      duration: song.duration || null,
+      genre: song.genre || '',
+      releaseDate: song.releaseDate || null,
+      album: song.album || null,
+      albumImageUrl: song.albumImageUrl || null,
+      spotifyUrl: song.spotifyUrl || '',
+      appleMusicUrl: song.appleMusicUrl || '',
+      youtubeUrl: song.youtubeUrl || '',
+      audioFileUrl: song.audioFileUrl || '',
+      isFeatured: song.isFeatured || false,
+      tags: song.tags || [],
+      createdAt: song.createdAt
+    }));
+
+    console.log('Songs Lambda: Found', formattedSongs.length, 'matching songs');
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify(formattedSongs)
+    };
+  } catch (error) {
+    console.error('DynamoDB scan failed:', error);
+    throw error;
+  }
+}
+
 async function handleGetAllSongs() {
-  console.log('🎶 Songs Lambda: Scanning all songs from DynamoDB...');
+  console.log('Songs Lambda: Scanning all songs from DynamoDB...');
 
   const params = {
     TableName: 'bndy-songs'
@@ -84,7 +137,7 @@ async function handleGetAllSongs() {
       createdAt: song.createdAt
     }));
 
-    console.log(`🎶 Songs Lambda: Served ${formattedSongs.length} songs`);
+    console.log(`Songs Lambda: Served ${formattedSongs.length} songs`);
 
     return {
       statusCode: 200,
@@ -92,13 +145,13 @@ async function handleGetAllSongs() {
       body: JSON.stringify(formattedSongs)
     };
   } catch (error) {
-    console.error('❌ DynamoDB scan failed:', error);
+    console.error('DynamoDB scan failed:', error);
     throw error;
   }
 }
 
 async function handleGetSongById(songId) {
-  console.log(`🎶 Songs Lambda: Getting song by ID: ${songId}`);
+  console.log(`Songs Lambda: Getting song by ID: ${songId}`);
 
   const params = {
     TableName: 'bndy-songs',
@@ -125,6 +178,7 @@ async function handleGetSongById(songId) {
       genre: result.Item.genre || '',
       releaseDate: result.Item.releaseDate || null,
       album: result.Item.album || null,
+      albumImageUrl: result.Item.albumImageUrl || null,
       spotifyUrl: result.Item.spotifyUrl || '',
       appleMusicUrl: result.Item.appleMusicUrl || '',
       youtubeUrl: result.Item.youtubeUrl || '',
@@ -141,13 +195,13 @@ async function handleGetSongById(songId) {
       body: JSON.stringify(song)
     };
   } catch (error) {
-    console.error('❌ DynamoDB get failed:', error);
+    console.error('DynamoDB get failed:', error);
     throw error;
   }
 }
 
 async function handleCreateSong(songData) {
-  console.log('🎶 Songs Lambda: Creating new song');
+  console.log('Songs Lambda: Creating new song');
 
   const now = new Date().toISOString();
   const song = {
@@ -158,6 +212,7 @@ async function handleCreateSong(songData) {
     genre: songData.genre || '',
     releaseDate: songData.releaseDate || null,
     album: songData.album || null,
+    albumImageUrl: songData.albumImageUrl || null,
     spotifyUrl: songData.spotifyUrl || '',
     appleMusicUrl: songData.appleMusicUrl || '',
     youtubeUrl: songData.youtubeUrl || '',
@@ -181,53 +236,78 @@ async function handleCreateSong(songData) {
       body: JSON.stringify(song)
     };
   } catch (error) {
-    console.error('❌ DynamoDB put failed:', error);
+    console.error('DynamoDB put failed:', error);
     throw error;
   }
 }
 
 async function handleUpdateSong(songId, songData) {
-  console.log(`🎶 Songs Lambda: Updating song: ${songId}`);
+  console.log(`Songs Lambda: Updating song: ${songId}`, { songId, fields: Object.keys(songData) });
 
   const now = new Date().toISOString();
+
+  // Build dynamic update expression based on provided fields
+  const updateExpressions = [];
+  const expressionAttributeValues = {};
+  const expressionAttributeNames = {};
+
+  // Always update the updatedAt timestamp
+  updateExpressions.push('#updatedAt = :updatedAt');
+  expressionAttributeNames['#updatedAt'] = 'updatedAt';
+  expressionAttributeValues[':updatedAt'] = now;
+
+  // Add each provided field to the update
+  const fieldMapping = {
+    title: 'title',
+    artistName: 'artistName',
+    duration: 'duration',
+    genre: 'genre',
+    releaseDate: 'releaseDate',
+    album: 'album',
+    albumImageUrl: 'albumImageUrl',
+    spotifyUrl: 'spotifyUrl',
+    appleMusicUrl: 'appleMusicUrl',
+    youtubeUrl: 'youtubeUrl',
+    audioFileUrl: 'audioFileUrl',
+    isFeatured: 'isFeatured',
+    tags: 'tags'
+  };
+
+  for (const [key, dbField] of Object.entries(fieldMapping)) {
+    if (songData.hasOwnProperty(key)) {
+      updateExpressions.push(`#${dbField} = :${dbField}`);
+      expressionAttributeNames[`#${dbField}`] = dbField;
+      expressionAttributeValues[`:${dbField}`] = songData[key];
+    }
+  }
 
   const params = {
     TableName: 'bndy-songs',
     Key: { id: songId },
-    UpdateExpression: 'SET title = :title, artistName = :artistName, duration = :duration, genre = :genre, releaseDate = :releaseDate, album = :album, spotifyUrl = :spotifyUrl, appleMusicUrl = :appleMusicUrl, youtubeUrl = :youtubeUrl, audioFileUrl = :audioFileUrl, isFeatured = :isFeatured, tags = :tags, updatedAt = :updatedAt',
-    ExpressionAttributeValues: {
-      ':title': songData.title,
-      ':artistName': songData.artistName || '',
-      ':duration': songData.duration || null,
-      ':genre': songData.genre || '',
-      ':releaseDate': songData.releaseDate || null,
-      ':album': songData.album || null,
-      ':spotifyUrl': songData.spotifyUrl || '',
-      ':appleMusicUrl': songData.appleMusicUrl || '',
-      ':youtubeUrl': songData.youtubeUrl || '',
-      ':audioFileUrl': songData.audioFileUrl || '',
-      ':isFeatured': songData.isFeatured || false,
-      ':tags': songData.tags || [],
-      ':updatedAt': now
-    },
+    UpdateExpression: `SET ${updateExpressions.join(', ')}`,
+    ExpressionAttributeNames: expressionAttributeNames,
+    ExpressionAttributeValues: expressionAttributeValues,
     ReturnValues: 'ALL_NEW'
   };
 
+  console.log('Songs Lambda: Update params:', JSON.stringify(params, null, 2));
+
   try {
     const result = await dynamodb.update(params).promise();
+    console.log('Songs Lambda: Update successful');
     return {
       statusCode: 200,
       headers: getCorsHeaders(),
       body: JSON.stringify(result.Attributes)
     };
   } catch (error) {
-    console.error('❌ DynamoDB update failed:', error);
+    console.error('DynamoDB update failed:', error);
     throw error;
   }
 }
 
 async function handleDeleteSong(songId) {
-  console.log(`🎶 Songs Lambda: Deleting song: ${songId}`);
+  console.log(`Songs Lambda: Deleting song: ${songId}`);
 
   const params = {
     TableName: 'bndy-songs',
@@ -242,7 +322,7 @@ async function handleDeleteSong(songId) {
       body: ''
     };
   } catch (error) {
-    console.error('❌ DynamoDB delete failed:', error);
+    console.error('DynamoDB delete failed:', error);
     throw error;
   }
 }
