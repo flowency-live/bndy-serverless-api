@@ -41,6 +41,10 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'DELETE' && event.pathParameters?.id) {
+      const queryParams = event.queryStringParameters || {};
+      if (queryParams.force === 'true') {
+        return await handleForceDeleteSong(event.pathParameters.id);
+      }
       return await handleDeleteSong(event.pathParameters.id);
     }
 
@@ -309,13 +313,43 @@ async function handleUpdateSong(songId, songData) {
 async function handleDeleteSong(songId) {
   console.log(`Songs Lambda: Deleting song: ${songId}`);
 
-  const params = {
-    TableName: 'bndy-songs',
-    Key: { id: songId }
-  };
-
   try {
-    await dynamodb.delete(params).promise();
+    // First, check how many artist-songs reference this song
+    const artistSongsQuery = {
+      TableName: 'bndy-artist-songs',
+      IndexName: 'song_id-index',
+      KeyConditionExpression: 'song_id = :songId',
+      ExpressionAttributeValues: {
+        ':songId': songId
+      }
+    };
+
+    const artistSongsResult = await dynamodb.query(artistSongsQuery).promise();
+    const artistSongCount = artistSongsResult.Items?.length || 0;
+
+    console.log(`Found ${artistSongCount} artist-songs referencing this song`);
+
+    // If artist-songs exist, return info for frontend to confirm
+    if (artistSongCount > 0) {
+      return {
+        statusCode: 409, // Conflict
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          message: `This song is in ${artistSongCount} band playbook(s). Delete everywhere?`,
+          artistSongCount: artistSongCount,
+          requiresConfirmation: true
+        })
+      };
+    }
+
+    // No artist-songs, safe to delete from bndy-songs only
+    const deleteParams = {
+      TableName: 'bndy-songs',
+      Key: { id: songId }
+    };
+
+    await dynamodb.delete(deleteParams).promise();
+
     return {
       statusCode: 204,
       headers: getCorsHeaders(),
@@ -323,6 +357,54 @@ async function handleDeleteSong(songId) {
     };
   } catch (error) {
     console.error('DynamoDB delete failed:', error);
+    throw error;
+  }
+}
+
+async function handleForceDeleteSong(songId) {
+  console.log(`Songs Lambda: Force deleting song and all artist-songs: ${songId}`);
+
+  try {
+    // Get all artist-songs that reference this song
+    const artistSongsQuery = {
+      TableName: 'bndy-artist-songs',
+      IndexName: 'song_id-index',
+      KeyConditionExpression: 'song_id = :songId',
+      ExpressionAttributeValues: {
+        ':songId': songId
+      }
+    };
+
+    const artistSongsResult = await dynamodb.query(artistSongsQuery).promise();
+    const artistSongs = artistSongsResult.Items || [];
+
+    console.log(`Deleting ${artistSongs.length} artist-songs`);
+
+    // Delete all artist-songs
+    await Promise.all(
+      artistSongs.map(artistSong =>
+        dynamodb.delete({
+          TableName: 'bndy-artist-songs',
+          Key: { id: artistSong.id }
+        }).promise()
+      )
+    );
+
+    // Delete the base song
+    await dynamodb.delete({
+      TableName: 'bndy-songs',
+      Key: { id: songId }
+    }).promise();
+
+    console.log(`Successfully deleted song ${songId} and ${artistSongs.length} artist-songs`);
+
+    return {
+      statusCode: 204,
+      headers: getCorsHeaders(),
+      body: ''
+    };
+  } catch (error) {
+    console.error('Force delete failed:', error);
     throw error;
   }
 }
