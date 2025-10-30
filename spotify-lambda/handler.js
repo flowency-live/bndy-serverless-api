@@ -110,7 +110,7 @@ async function spotifyApiRequest(path, token) {
 }
 
 /**
- * Search Spotify for tracks
+ * Search Spotify for tracks with enriched metadata (genres and release dates)
  */
 async function searchTracks(query, limit = 20) {
   const token = await getAccessToken();
@@ -119,6 +119,33 @@ async function searchTracks(query, limit = 20) {
 
   console.log('Searching Spotify for:', query, 'limit:', limit);
   const result = await spotifyApiRequest(path, token);
+
+  // Enrich each track with artist genres
+  if (result.tracks && result.tracks.items) {
+    const enrichedTracks = await Promise.all(
+      result.tracks.items.map(async (track) => {
+        try {
+          // Get artist genres from the first artist
+          if (track.artists && track.artists.length > 0) {
+            const artistId = track.artists[0].id;
+            const artistData = await spotifyApiRequest(`/v1/artists/${artistId}`, token);
+
+            // Add genre (pick first genre if available)
+            track.genre = artistData.genres && artistData.genres.length > 0
+              ? artistData.genres[0]
+              : null;
+          }
+        } catch (error) {
+          console.error(`Failed to get artist data for track ${track.id}:`, error);
+          track.genre = null;
+        }
+
+        return track;
+      })
+    );
+
+    result.tracks.items = enrichedTracks;
+  }
 
   return result;
 }
