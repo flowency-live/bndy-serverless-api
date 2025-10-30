@@ -12,7 +12,7 @@ const crypto = require('crypto');
 
 // AWS Services
 const dynamodb = new AWS.DynamoDB.DocumentClient();
-const sns = new AWS.SNS({ region: 'eu-west-2' });
+const pinpointSMS = new AWS.PinpointSMSVoiceV2({ region: 'eu-west-2' });
 
 // Configuration
 const INVITES_TABLE = 'bndy-invites';
@@ -99,20 +99,17 @@ const sendInviteSMS = async (phone, artistName, inviterName, inviteLink) => {
   console.log('[INVITES] Sending SMS invite', { phone: phone.substring(0, 6) + '***' });
 
   try {
-    await sns.publish({
-      PhoneNumber: phone,
-      Message: message,
-      MessageAttributes: {
-        'AWS.SNS.SMS.SMSType': {
-          DataType: 'String',
-          StringValue: 'Transactional'
-        }
-      }
+    await pinpointSMS.sendTextMessage({
+      DestinationPhoneNumber: phone,
+      MessageBody: message,
+      OriginationIdentity: 'BNDY',
+      MessageType: 'TRANSACTIONAL',
+      ConfigurationSetName: 'bndy-sms-config'
     }).promise();
 
-    console.log('[INVITES] SMS sent successfully');
+    console.log('[INVITES] SMS sent successfully via Pinpoint');
   } catch (error) {
-    console.error('[INVITES] SMS send failed:', error);
+    console.error('[INVITES] Pinpoint SMS send failed:', error);
     throw new Error('Failed to send SMS invite');
   }
 };
@@ -314,11 +311,11 @@ const handleCreatePhoneInvite = async (event, artistId) => {
 
     const inviteLink = `${FRONTEND_URL}/invite/${token}`;
 
-    // Send SMS (will fail if SNS not in production mode - that's OK for now)
+    // Send SMS via Pinpoint
     try {
       await sendInviteSMS(phone, artist.name, inviterName, inviteLink);
     } catch (smsError) {
-      console.warn('[INVITES] SMS send failed (SNS may be in sandbox):', smsError.message);
+      console.warn('[INVITES] SMS send failed:', smsError.message);
       // Don't fail the whole request - invite is still created
     }
 
@@ -657,6 +654,12 @@ const handleAcceptInvite = async (event, token) => {
 
   } catch (error) {
     console.error('[INVITES] Accept invite error:', error);
+    console.error('[INVITES] Error stack:', error.stack);
+    console.error('[INVITES] Error details:', {
+      name: error.name,
+      message: error.message,
+      code: error.code
+    });
     return createResponse(500, { error: 'Internal server error', message: error.message });
   }
 };
