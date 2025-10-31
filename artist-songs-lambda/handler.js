@@ -349,73 +349,94 @@ async function handleGetPipeline(artistId, queryParams) {
 }
 
 async function handleVote(artistSongId, artistId, userId, body) {
-  const now = new Date().toISOString();
+  try {
+    const now = new Date().toISOString();
 
-  const songResult = await dynamodb.get({
-    TableName: 'bndy-artist-songs',
-    Key: { id: artistSongId }
-  }).promise();
+    if (!body.vote_value || body.vote_value < 1 || body.vote_value > 5) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Invalid vote value. Must be between 1 and 5.' })
+      };
+    }
 
-  if (!songResult.Item) {
+    const songResult = await dynamodb.get({
+      TableName: 'bndy-artist-songs',
+      Key: { id: artistSongId }
+    }).promise();
+
+    if (!songResult.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Song not found' })
+      };
+    }
+
+    const song = songResult.Item;
+    const votes = song.votes || {};
+
+    votes[userId] = {
+      value: body.vote_value,
+      updated_at: now
+    };
+
+    const memberCountResult = await dynamodb.query({
+      TableName: 'bndy-memberships',
+      IndexName: 'artist_id-index',
+      KeyConditionExpression: 'artist_id = :artistId',
+      ExpressionAttributeValues: { ':artistId': artistId }
+    }).promise();
+
+    const memberCount = memberCountResult.Items.length;
+    const voteCount = Object.keys(votes).length;
+
+    const totalVotes = Object.values(votes).reduce((sum, v) => sum + v.value, 0);
+    const scorePercentage = Math.round((totalVotes / (memberCount * 5)) * 100);
+
+    const newStatus = (voteCount >= memberCount && song.status === 'voting') ? 'review' : song.status;
+    const statusChanged = newStatus !== song.status;
+
+    await dynamodb.update({
+      TableName: 'bndy-artist-songs',
+      Key: { id: artistSongId },
+      UpdateExpression: 'SET votes = :votes, vote_score_percentage = :score, #status = :status, updated_at = :now' +
+        (statusChanged ? ', last_status_change_at = :now' : ''),
+      ExpressionAttributeNames: { '#status': 'status' },
+      ExpressionAttributeValues: {
+        ':votes': votes,
+        ':score': scorePercentage,
+        ':status': newStatus,
+        ':now': now
+      }
+    }).promise();
+
+    const globalSong = await getGlobalSong(song.song_id);
+
     return {
-      statusCode: 404,
+      statusCode: 200,
       headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Song not found' })
+      body: JSON.stringify({
+        ...song,
+        votes,
+        vote_score_percentage: scorePercentage,
+        status: newStatus,
+        updated_at: now,
+        globalSong
+      })
+    };
+  } catch (error) {
+    console.error('Error in handleVote:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        error: 'Failed to submit vote',
+        message: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      })
     };
   }
-
-  const song = songResult.Item;
-  const votes = song.votes || {};
-
-  votes[userId] = {
-    value: body.vote_value,
-    updated_at: now
-  };
-
-  const memberCountResult = await dynamodb.query({
-    TableName: 'bndy-memberships',
-    IndexName: 'artist_id-index',
-    KeyConditionExpression: 'artist_id = :artistId',
-    ExpressionAttributeValues: { ':artistId': artistId }
-  }).promise();
-
-  const memberCount = memberCountResult.Items.length;
-  const voteCount = Object.keys(votes).length;
-
-  const totalVotes = Object.values(votes).reduce((sum, v) => sum + v.value, 0);
-  const scorePercentage = Math.round((totalVotes / (memberCount * 5)) * 100);
-
-  const newStatus = (voteCount >= memberCount && song.status === 'voting') ? 'review' : song.status;
-  const statusChanged = newStatus !== song.status;
-
-  await dynamodb.update({
-    TableName: 'bndy-artist-songs',
-    Key: { id: artistSongId },
-    UpdateExpression: 'SET votes = :votes, vote_score_percentage = :score, #status = :status, updated_at = :now' +
-      (statusChanged ? ', last_status_change_at = :now' : ''),
-    ExpressionAttributeNames: { '#status': 'status' },
-    ExpressionAttributeValues: {
-      ':votes': votes,
-      ':score': scorePercentage,
-      ':status': newStatus,
-      ':now': now
-    }
-  }).promise();
-
-  const globalSong = await getGlobalSong(song.song_id);
-
-  return {
-    statusCode: 200,
-    headers: getCorsHeaders(),
-    body: JSON.stringify({
-      ...song,
-      votes,
-      vote_score_percentage: scorePercentage,
-      status: newStatus,
-      updated_at: now,
-      globalSong
-    })
-  };
 }
 
 async function handleUpdateRagStatus(artistSongId, userId, body) {
