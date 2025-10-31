@@ -279,6 +279,7 @@ const handleOAuthCallback = async (event) => {
     console.log('AUTH CALLBACK: Session created, redirecting to dashboard');
 
     // Return 200 with HTML+JS redirect for reliable cookie setting
+    // Check for pending invite in localStorage and redirect accordingly
     const redirectHtml = `
 <!DOCTYPE html>
 <html>
@@ -288,7 +289,14 @@ const handleOAuthCallback = async (event) => {
 <body>
   <p>Authentication successful. Redirecting...</p>
   <script>
-    window.location.href = '${FRONTEND_URL}/dashboard';
+    // Check for pending invite token in localStorage
+    const pendingInvite = localStorage.getItem('pendingInvite');
+    if (pendingInvite) {
+      console.log('AUTH CALLBACK: Found pending invite, redirecting to /invite/' + pendingInvite);
+      window.location.href = '${FRONTEND_URL}/invite/' + pendingInvite;
+    } else {
+      window.location.href = '${FRONTEND_URL}/dashboard';
+    }
   </script>
 </body>
 </html>`;
@@ -996,7 +1004,14 @@ const handleMagicLinkAuth = async (event) => {
 <body>
   <p>Authentication successful. Redirecting...</p>
   <script>
-    window.location.href = '${FRONTEND_URL}/dashboard';
+    // Check for pending invite token in localStorage
+    const pendingInvite = localStorage.getItem('pendingInvite');
+    if (pendingInvite) {
+      console.log('EMAIL AUTH: Found pending invite, redirecting to /invite/' + pendingInvite);
+      window.location.href = '${FRONTEND_URL}/invite/' + pendingInvite;
+    } else {
+      window.location.href = '${FRONTEND_URL}/dashboard';
+    }
   </script>
 </body>
 </html>`;
