@@ -172,18 +172,18 @@ const handleCreateGeneralInvite = async (event, artistId) => {
     const now = new Date().toISOString();
     const expiresAt = Math.floor(Date.now() / 1000) + (INVITE_EXPIRY_DAYS * 24 * 60 * 60); // 7 days
 
-    // Store invite
+    // Store invite (multi-use enabled)
     const invite = {
       token,
       artistId,
       invitedByUserId: user.userId,
       phone: null, // General invite - no specific phone
       inviteType: 'general',
-      status: 'pending',
+      status: 'active', // active = multi-use enabled
       expiresAt,
       createdAt: now,
-      acceptedAt: null,
-      acceptedByUserId: null,
+      acceptanceCount: 0,
+      acceptedBy: [], // Track who accepted this invite
       metadata: {
         artistName: artist.name,
         inviterName
@@ -286,18 +286,18 @@ const handleCreatePhoneInvite = async (event, artistId) => {
     const now = new Date().toISOString();
     const expiresAt = Math.floor(Date.now() / 1000) + (INVITE_EXPIRY_DAYS * 24 * 60 * 60);
 
-    // Store invite
+    // Store invite (phone-specific, still single-use)
     const invite = {
       token,
       artistId,
       invitedByUserId: user.userId,
       phone,
       inviteType: 'phone-specific',
-      status: 'pending',
+      status: 'active',
       expiresAt,
       createdAt: now,
-      acceptedAt: null,
-      acceptedByUserId: null,
+      acceptanceCount: 0,
+      acceptedBy: [], // Track who accepted
       metadata: {
         artistName: artist.name,
         inviterName
@@ -486,9 +486,14 @@ const handleGetInvite = async (event, token) => {
       return createResponse(410, { error: 'Invite has expired' });
     }
 
-    // Check if already accepted
-    if (invite.status === 'accepted') {
-      return createResponse(410, { error: 'Invite has already been accepted' });
+    // Check if disabled
+    if (invite.status === 'disabled') {
+      return createResponse(410, { error: 'This invite has been disabled' });
+    }
+
+    // Check if active (multi-use invites are always 'active')
+    if (invite.status !== 'active') {
+      return createResponse(410, { error: 'Invite is no longer valid' });
     }
 
     console.log('[INVITES] Invite found and valid');
@@ -663,16 +668,20 @@ const handleAcceptInvite = async (event, token) => {
       ExpressionAttributeValues: { ':inc': 1 }
     }).promise();
 
-    // Mark invite as accepted
+    // Track acceptance (multi-use: increment count, add to acceptedBy list)
     await dynamodb.update({
       TableName: INVITES_TABLE,
       Key: { token },
-      UpdateExpression: 'SET #status = :accepted, acceptedAt = :now, acceptedByUserId = :userId',
-      ExpressionAttributeNames: { '#status': 'status' },
+      UpdateExpression: 'ADD acceptanceCount :inc SET acceptedBy = list_append(if_not_exists(acceptedBy, :emptyList), :newAcceptance), lastAcceptedAt = :now',
       ExpressionAttributeValues: {
-        ':accepted': 'accepted',
-        ':now': nowISO,
-        ':userId': user.userId
+        ':inc': 1,
+        ':emptyList': [],
+        ':newAcceptance': [{
+          userId: user.userId,
+          membershipId: membershipId,
+          acceptedAt: nowISO
+        }],
+        ':now': nowISO
       }
     }).promise();
 

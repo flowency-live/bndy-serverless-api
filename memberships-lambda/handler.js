@@ -127,6 +127,41 @@ const resolveMembershipProfile = async (membership, userId) => {
   };
 };
 
+// Get all memberships (godmode admin function)
+const handleGetAllMemberships = async (event) => {
+  const authResult = requireAuth(event);
+  if (authResult.error) {
+    return createResponse(401, { error: authResult.error });
+  }
+
+  try {
+    console.log('[MEMBERSHIPS] Getting all memberships (godmode)');
+
+    // Scan all memberships
+    const result = await dynamodb.scan({
+      TableName: MEMBERSHIPS_TABLE
+    }).promise();
+
+    console.log(`[MEMBERSHIPS] Retrieved ${result.Items.length} memberships`);
+
+    // Return raw membership data for godmode (no profile resolution needed)
+    const memberships = result.Items.map(m => ({
+      membership_id: m.membership_id,
+      user_id: m.user_id,
+      artist_id: m.artist_id,
+      role: m.role,
+      display_name: m.display_name,
+      status: m.status
+    }));
+
+    return createResponse(200, { memberships, count: memberships.length });
+
+  } catch (error) {
+    console.error('[MEMBERSHIPS] Get all memberships error:', error);
+    return createResponse(500, { error: 'Internal server error' });
+  }
+};
+
 // Get all members for an artist
 const handleGetArtistMembers = async (event, artistId) => {
   const authResult = requireAuth(event);
@@ -494,9 +529,10 @@ const handleGetMyMemberships = async (event) => {
       return createResponse(200, { user: { id: user.userId }, artists: [] });
     }
 
-    // Batch get artist details
+    // Batch get artist details (deduplicate artist IDs)
     const artistIds = membershipsResult.Items.map(m => m.artist_id);
-    const artistKeys = artistIds.map(id => ({ id }));
+    const uniqueArtistIds = [...new Set(artistIds)];
+    const artistKeys = uniqueArtistIds.map(id => ({ id }));
 
     const artistsResult = await dynamodb.batchGet({
       RequestItems: {
@@ -576,6 +612,10 @@ exports.handler = async (event, context) => {
     // Route requests
     if (method === 'GET' && path === '/api/memberships/me') {
       return await handleGetMyMemberships(event);
+    }
+
+    if (method === 'GET' && path === '/api/memberships/all') {
+      return await handleGetAllMemberships(event);
     }
 
     if (method === 'GET' && path.includes('/artists/') && path.includes('/members')) {
