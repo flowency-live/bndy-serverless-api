@@ -8,12 +8,15 @@ exports.handler = async (event, context) => {
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
 
   console.log('Artist Songs Lambda:', { method, path });
+  console.log('Request Context:', JSON.stringify(event.requestContext, null, 2));
   context.callbackWaitsForEmptyEventLoop = false;
 
   try {
     const artistId = event.pathParameters?.artistId;
     const artistSongId = event.pathParameters?.artistSongId;
     const userId = event.requestContext?.authorizer?.userId;
+
+    console.log('Extracted values:', { artistId, artistSongId, userId });
 
     // POST /api/artists/{artistId}/playbook - Add song
     if (method === 'POST' && path.includes('/playbook') && artistId) {
