@@ -295,16 +295,6 @@ const handleAddMember = async (event, artistId) => {
       Item: membership
     }).promise();
 
-    // Update artist member_count
-    await dynamodb.update({
-      TableName: ARTISTS_TABLE,
-      Key: { id: artistId },
-      UpdateExpression: 'ADD member_count :inc',
-      ExpressionAttributeValues: {
-        ':inc': 1
-      }
-    }).promise();
-
     // Resolve profile with inheritance
     const resolvedMembership = await resolveMembershipProfile(membership, userId);
 
@@ -479,16 +469,6 @@ const handleDeleteMembership = async (event, membershipId) => {
     await dynamodb.delete({
       TableName: MEMBERSHIPS_TABLE,
       Key: { membership_id: membershipId }
-    }).promise();
-
-    // Update artist member_count
-    await dynamodb.update({
-      TableName: ARTISTS_TABLE,
-      Key: { id: artistId },
-      UpdateExpression: 'ADD member_count :dec',
-      ExpressionAttributeValues: {
-        ':dec': -1
-      }
     }).promise();
 
     console.log('[MEMBERSHIPS] Membership deleted successfully');
