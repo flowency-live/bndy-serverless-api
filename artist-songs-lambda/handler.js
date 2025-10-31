@@ -382,7 +382,7 @@ async function handleVote(artistSongId, artistId, userId, body) {
     };
 
     const memberCountResult = await dynamodb.query({
-      TableName: 'bndy-memberships',
+      TableName: 'bndy-artist-memberships',
       IndexName: 'artist_id-index',
       KeyConditionExpression: 'artist_id = :artistId',
       ExpressionAttributeValues: { ':artistId': artistId }
