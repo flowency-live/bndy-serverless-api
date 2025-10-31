@@ -512,57 +512,97 @@ const handleGetInvite = async (event, token) => {
 
 // Handler: POST /api/invites/{token}/accept
 const handleAcceptInvite = async (event, token) => {
-  const authResult = requireAuth(event);
-  if (authResult.error) {
-    return createResponse(401, { error: authResult.error });
-  }
-
-  const { user } = authResult;
-
   try {
+    console.log('[INVITES] handleAcceptInvite called', {
+      hasToken: !!token,
+      tokenType: typeof token,
+      tokenValue: token ? token.substring(0, 20) : 'undefined'
+    });
+
+    const authResult = requireAuth(event);
+    if (authResult.error) {
+      return createResponse(401, { error: authResult.error });
+    }
+
+    const { user } = authResult;
+
     console.log('[INVITES] Accepting invite', {
-      token: token.substring(0, 8) + '...',
+      token: token ? token.substring(0, 8) + '...' : 'undefined',
       userId: user.userId
     });
 
     // Get invite
+    console.log('[INVITES] About to call DynamoDB get', {
+      tableName: INVITES_TABLE,
+      tokenLength: token ? token.length : 0
+    });
+
     const inviteResult = await dynamodb.get({
       TableName: INVITES_TABLE,
       Key: { token }
     }).promise();
 
+    console.log('[INVITES] DynamoDB get completed', {
+      hasItem: !!inviteResult.Item
+    });
+
+    console.log('[INVITES] CHECK 1: About to check if item exists');
+
     if (!inviteResult.Item) {
+      console.log('[INVITES] CHECK 2: Item not found, returning 404');
+
       return createResponse(404, { error: 'Invite not found' });
     }
 
     const invite = inviteResult.Item;
 
+    console.log('[INVITES] CHECK 3: Got invite item', {
+      status: invite.status,
+      expiresAt: invite.expiresAt
+    });
+
     // Check if expired
     const now = Math.floor(Date.now() / 1000);
     if (invite.expiresAt < now) {
+      console.log('[INVITES] CHECK 4: Invite expired');
       return createResponse(410, { error: 'Invite has expired' });
     }
 
     // Check if already accepted
     if (invite.status === 'accepted') {
+      console.log('[INVITES] CHECK 5: Invite already accepted');
       return createResponse(400, { error: 'Invite has already been accepted' });
     }
 
-    // Check if user is already a member
+    console.log('[INVITES] CHECK 6: Invite valid, checking membership');
+
+    // Check if user is already a member - query by user_id GSI and filter in code
+    console.log('[INVITES] CHECK 7: Querying user memberships');
+
     const existingMembershipResult = await dynamodb.query({
       TableName: MEMBERSHIPS_TABLE,
-      IndexName: 'artist_id-index',
-      KeyConditionExpression: 'artist_id = :artistId',
-      FilterExpression: 'user_id = :userId',
+      IndexName: 'user_id-index',
+      KeyConditionExpression: 'user_id = :userId',
       ExpressionAttributeValues: {
-        ':artistId': invite.artistId,
         ':userId': user.userId
       }
     }).promise();
 
-    if (existingMembershipResult.Items.length > 0) {
+    console.log('[INVITES] CHECK 8: Membership query completed', {
+      totalMemberships: existingMembershipResult.Items.length
+    });
+
+    // Check if user is already a member of THIS artist
+    const existingMembership = existingMembershipResult.Items.find(
+      m => m.artist_id === invite.artistId
+    );
+
+    if (existingMembership) {
+      console.log('[INVITES] CHECK 9: User already member of this artist');
       return createResponse(400, { error: 'You are already a member of this artist' });
     }
+
+    console.log('[INVITES] CHECK 10: User not yet a member, proceeding');
 
     // Get artist details
     const artistResult = await dynamodb.get({
@@ -655,11 +695,13 @@ const handleAcceptInvite = async (event, token) => {
   } catch (error) {
     console.error('[INVITES] Accept invite error:', error);
     console.error('[INVITES] Error stack:', error.stack);
-    console.error('[INVITES] Error details:', {
+    console.error('[INVITES] Error details:', JSON.stringify({
       name: error.name,
       message: error.message,
-      code: error.code
-    });
+      code: error.code,
+      type: typeof error,
+      keys: Object.keys(error)
+    }));
     return createResponse(500, { error: 'Internal server error', message: error.message });
   }
 };
