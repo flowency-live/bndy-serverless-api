@@ -21,29 +21,40 @@ const parseCookies = (cookieHeader) => {
 const extractUserId = (event) => {
   let sessionToken = null;
 
+  console.log('[AUTH] Extracting userId from cookies', {
+    hasCookiesArray: !!(event.cookies && Array.isArray(event.cookies)),
+    hasHeaders: !!(event.headers),
+    cookieHeader: event.headers?.Cookie ? 'present' : 'missing'
+  });
+
   if (event.cookies && Array.isArray(event.cookies)) {
     const cookieString = event.cookies.find(c => c.startsWith('bndy_session='));
     if (cookieString) {
       sessionToken = cookieString.split('=')[1];
+      console.log('[AUTH] Found session token in cookies array');
     }
   } else {
     const cookies = parseCookies(event.headers?.Cookie || event.headers?.cookie || '');
     sessionToken = cookies.bndy_session;
+    if (sessionToken) {
+      console.log('[AUTH] Found session token in Cookie header');
+    }
   }
 
   if (!sessionToken) {
-    console.log('[ARTIST-SONGS] No session token found');
+    console.log('[AUTH] No session token found in request');
     return null;
   }
 
   try {
     const session = jwt.verify(sessionToken, JWT_SECRET);
-    console.log('[ARTIST-SONGS] User authenticated via session', {
-      userId: session.userId.substring(0, 8) + '...'
+    console.log('[AUTH] User authenticated via JWT', {
+      userId: session.userId.substring(0, 8) + '...',
+      username: session.username
     });
     return session.userId;
   } catch (error) {
-    console.error('[ARTIST-SONGS] Invalid session token:', error.message);
+    console.error('[AUTH] JWT verification failed:', error.message);
     return null;
   }
 };
@@ -399,7 +410,24 @@ async function handleVote(artistSongId, artistId, userId, body) {
   try {
     const now = new Date().toISOString();
 
+    console.log('[VOTE] Starting vote handler', {
+      artistSongId: artistSongId?.substring(0, 8) + '...',
+      artistId: artistId?.substring(0, 8) + '...',
+      userId: userId?.substring(0, 8) + '...',
+      voteValue: body.vote_value
+    });
+
+    if (!userId) {
+      console.error('[VOTE] No userId provided - authentication failed');
+      return {
+        statusCode: 401,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Authentication required' })
+      };
+    }
+
     if (!body.vote_value || body.vote_value < 1 || body.vote_value > 5) {
+      console.error('[VOTE] Invalid vote value:', body.vote_value);
       return {
         statusCode: 400,
         headers: getCorsHeaders(),
@@ -423,10 +451,14 @@ async function handleVote(artistSongId, artistId, userId, body) {
     const song = songResult.Item;
     const votes = song.votes || {};
 
+    console.log('[VOTE] Current votes before update:', Object.keys(votes));
+
     votes[userId] = {
       value: body.vote_value,
       updated_at: now
     };
+
+    console.log('[VOTE] Votes after adding new vote:', Object.keys(votes));
 
     const memberCountResult = await dynamodb.query({
       TableName: 'bndy-artist-memberships',
@@ -438,11 +470,20 @@ async function handleVote(artistSongId, artistId, userId, body) {
     const memberCount = memberCountResult.Items.length;
     const voteCount = Object.keys(votes).length;
 
+    console.log('[VOTE] Member count:', memberCount, 'Vote count:', voteCount);
+
     const totalVotes = Object.values(votes).reduce((sum, v) => sum + v.value, 0);
     const scorePercentage = Math.round((totalVotes / (memberCount * 5)) * 100);
 
     const newStatus = (voteCount >= memberCount && song.status === 'voting') ? 'review' : song.status;
     const statusChanged = newStatus !== song.status;
+
+    console.log('[VOTE] Status transition:', {
+      oldStatus: song.status,
+      newStatus,
+      willPromote: statusChanged,
+      scorePercentage
+    });
 
     await dynamodb.update({
       TableName: 'bndy-artist-songs',
@@ -460,6 +501,13 @@ async function handleVote(artistSongId, artistId, userId, body) {
 
     const globalSong = await getGlobalSong(song.song_id);
 
+    console.log('[VOTE] Vote recorded successfully', {
+      songTitle: globalSong?.title,
+      finalVoteCount: voteCount,
+      finalMemberCount: memberCount,
+      finalStatus: newStatus
+    });
+
     return {
       statusCode: 200,
       headers: getCorsHeaders(),
@@ -473,7 +521,7 @@ async function handleVote(artistSongId, artistId, userId, body) {
       })
     };
   } catch (error) {
-    console.error('Error in handleVote:', error);
+    console.error('[VOTE] Error in handleVote:', error);
     return {
       statusCode: 500,
       headers: getCorsHeaders(),
