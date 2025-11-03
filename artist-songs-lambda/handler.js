@@ -2,21 +2,65 @@
 const AWS = require('aws-sdk');
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
+
+// Configuration
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// Parse cookies from event
+const parseCookies = (cookieHeader) => {
+  if (!cookieHeader) return {};
+  return cookieHeader.split(';').reduce((cookies, cookie) => {
+    const [name, value] = cookie.trim().split('=');
+    cookies[name] = value;
+    return cookies;
+  }, {});
+};
+
+// Extract userId from JWT session cookie
+const extractUserId = (event) => {
+  let sessionToken = null;
+
+  if (event.cookies && Array.isArray(event.cookies)) {
+    const cookieString = event.cookies.find(c => c.startsWith('bndy_session='));
+    if (cookieString) {
+      sessionToken = cookieString.split('=')[1];
+    }
+  } else {
+    const cookies = parseCookies(event.headers?.Cookie || event.headers?.cookie || '');
+    sessionToken = cookies.bndy_session;
+  }
+
+  if (!sessionToken) {
+    console.log('[ARTIST-SONGS] No session token found');
+    return null;
+  }
+
+  try {
+    const session = jwt.verify(sessionToken, JWT_SECRET);
+    console.log('[ARTIST-SONGS] User authenticated via session', {
+      userId: session.userId.substring(0, 8) + '...'
+    });
+    return session.userId;
+  } catch (error) {
+    console.error('[ARTIST-SONGS] Invalid session token:', error.message);
+    return null;
+  }
+};
 
 exports.handler = async (event, context) => {
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
 
   console.log('Artist Songs Lambda:', { method, path });
-  console.log('Request Context:', JSON.stringify(event.requestContext, null, 2));
   context.callbackWaitsForEmptyEventLoop = false;
 
   try {
     const artistId = event.pathParameters?.artistId;
     const artistSongId = event.pathParameters?.artistSongId;
-    const userId = event.requestContext?.authorizer?.userId;
+    const userId = extractUserId(event);
 
-    console.log('Extracted values:', { artistId, artistSongId, userId });
+    console.log('Extracted values:', { artistId, artistSongId, userId: userId ? userId.substring(0, 8) + '...' : 'none' });
 
     // POST /api/artists/{artistId}/playbook - Add song
     if (method === 'POST' && path.includes('/playbook') && artistId) {

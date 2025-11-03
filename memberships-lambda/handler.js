@@ -562,6 +562,32 @@ const handleGetMyMemberships = async (event) => {
   }
 };
 
+// GET /api/memberships/artist/{artistId} - Get all memberships for an artist
+const handleGetArtistMemberships = async (artistId) => {
+  try {
+    console.log('[MEMBERSHIPS] Getting memberships for artist', { artistId });
+
+    const result = await dynamodb.query({
+      TableName: MEMBERSHIPS_TABLE,
+      IndexName: 'artist_id-index',
+      KeyConditionExpression: 'artist_id = :artistId',
+      ExpressionAttributeValues: {
+        ':artistId': artistId
+      }
+    }).promise();
+
+    console.log('[MEMBERSHIPS] Found', result.Items.length, 'memberships for artist');
+
+    return createResponse(200, {
+      memberships: result.Items || []
+    });
+
+  } catch (error) {
+    console.error('[MEMBERSHIPS] Get artist memberships error:', error);
+    return createResponse(500, { error: 'Internal server error' });
+  }
+};
+
 // Main handler
 exports.handler = async (event, context) => {
   const method = event.requestContext?.http?.method || event.httpMethod;
@@ -596,6 +622,10 @@ exports.handler = async (event, context) => {
 
     if (method === 'GET' && path === '/api/memberships/all') {
       return await handleGetAllMemberships(event);
+    }
+
+    if (method === 'GET' && path.match(/\/api\/memberships\/artist\/[^/]+$/)) {
+      return await handleGetArtistMemberships(artistId);
     }
 
     if (method === 'GET' && path.includes('/artists/') && path.includes('/members')) {
