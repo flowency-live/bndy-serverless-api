@@ -540,7 +540,25 @@ function calculateMatchScore(artistName, artistLocation, queryName, queryLocatio
     return 90; // Same name, no location to compare
   }
 
-  // Calculate Levenshtein distance
+  // Starts with query = high score (e.g., "not" matches "Not Guilty")
+  if (nameLower.startsWith(queryLower)) {
+    return 95; // Very strong match
+  }
+
+  // Contains query = good score (e.g., "guilty" matches "Not Guilty")
+  if (nameLower.includes(queryLower)) {
+    return 85; // Good match
+  }
+
+  // Check if any word in artist name starts with query
+  const artistWords = nameLower.split(/\s+/);
+  for (const word of artistWords) {
+    if (word.startsWith(queryLower)) {
+      return 80; // Word-level match
+    }
+  }
+
+  // Calculate Levenshtein distance for fuzzy matching
   const distance = levenshteinDistance(nameLower, queryLower);
   const maxLength = Math.max(nameLower.length, queryLower.length);
   const similarity = (1 - distance / maxLength) * 100;
