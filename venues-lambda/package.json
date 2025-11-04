@@ -4,7 +4,8 @@
   "description": "BNDY Venues Lambda Function - DynamoDB Version",
   "main": "handler.js",
   "dependencies": {
-    "aws-sdk": "^2.1467.0"
+    "aws-sdk": "^2.1692.0",
+    "cheerio": "^1.0.0-rc.12"
   },
   "engines": {
     "node": ">=18.0.0"

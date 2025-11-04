@@ -767,14 +767,23 @@ async function enrichVenueWithFacebookUrl(venueId, facebookUrl) {
       return;
     }
 
-    // Only enrich if venue doesn't already have a Facebook URL
-    if (!venue.facebookUrl || venue.facebookUrl === '') {
+    // Check if venue already has Facebook in social_media_urls
+    const socialMediaUrls = venue.social_media_urls || [];
+    const hasFacebook = socialMediaUrls.some(s => s.platform === 'facebook' && s.url);
+
+    if (!hasFacebook) {
+      // Add Facebook URL to social_media_urls array
+      const updatedSocialMedia = [
+        ...socialMediaUrls,
+        { platform: 'facebook', url: facebookUrl }
+      ];
+
       await dynamodb.send(new UpdateCommand({
         TableName: VENUES_TABLE,
         Key: { id: venueId },
-        UpdateExpression: 'SET facebookUrl = :url, updatedAt = :now',
+        UpdateExpression: 'SET social_media_urls = :urls, updated_at = :now',
         ExpressionAttributeValues: {
-          ':url': facebookUrl,
+          ':urls': updatedSocialMedia,
           ':now': new Date().toISOString()
         }
       }));
@@ -786,6 +795,58 @@ async function enrichVenueWithFacebookUrl(venueId, facebookUrl) {
   } catch (error) {
     console.error(`Error enriching venue ${venueId} with Facebook URL:`, error);
     // Don't throw - enrichment failure shouldn't block the extraction
+  }
+}
+
+// Standalone endpoint for bulk venue enrichment
+async function enrichVenueFacebook(event) {
+  const authResult = requireAuth(event);
+  if (authResult.error) {
+    return createResponse(401, { error: authResult.error });
+  }
+
+  const body = event.body ? JSON.parse(event.body) : null;
+  if (!body || !body.venueId || !body.facebookUrl) {
+    return createResponse(400, { error: 'venueId and facebookUrl required' });
+  }
+
+  try {
+    await enrichVenueWithFacebookUrl(body.venueId, body.facebookUrl);
+    return createResponse(200, { success: true });
+  } catch (error) {
+    console.error('Error enriching venue:', error);
+    return createResponse(500, { error: 'Failed to enrich venue' });
+  }
+}
+
+// Standalone endpoint for updating venue Google Place ID
+async function updateVenuePlaceId(event) {
+  const authResult = requireAuth(event);
+  if (authResult.error) {
+    return createResponse(401, { error: authResult.error });
+  }
+
+  const body = event.body ? JSON.parse(event.body) : null;
+  if (!body || !body.venueId || !body.googlePlaceId) {
+    return createResponse(400, { error: 'venueId and googlePlaceId required' });
+  }
+
+  try {
+    await dynamodb.send(new UpdateCommand({
+      TableName: VENUES_TABLE,
+      Key: { id: body.venueId },
+      UpdateExpression: 'SET google_place_id = :placeId, updated_at = :now',
+      ExpressionAttributeValues: {
+        ':placeId': body.googlePlaceId,
+        ':now': new Date().toISOString()
+      }
+    }));
+
+    console.log(`Updated venue ${body.venueId} with Google Place ID: ${body.googlePlaceId}`);
+    return createResponse(200, { success: true });
+  } catch (error) {
+    console.error('Error updating venue Place ID:', error);
+    return createResponse(500, { error: 'Failed to update venue' });
   }
 }
 
@@ -960,6 +1021,14 @@ exports.handler = async (event) => {
 
     if (routeKey === 'POST /api/ingest/extract-venues') {
       return await extractVenues(event);
+    }
+
+    if (routeKey === 'POST /api/ingest/enrich-venue-facebook') {
+      return await enrichVenueFacebook(event);
+    }
+
+    if (routeKey === 'POST /api/ingest/update-venue-placeid') {
+      return await updateVenuePlaceId(event);
     }
 
     return createResponse(404, { error: 'Route not found' });

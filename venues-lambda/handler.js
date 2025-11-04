@@ -218,6 +218,9 @@ async function handleGetVenueById(venueId, event) {
       standardTicketed: result.Item.standard_ticketed || false,
       standardTicketInformation: result.Item.standard_ticket_information || '',
       standardTicketUrl: result.Item.standard_ticket_url || '',
+      enrichment_status: result.Item.enrichment_status,
+      enrichment_data: result.Item.enrichment_data,
+      enrichment_date: result.Item.enrichment_date,
       createdAt: result.Item.created_at,
       updatedAt: result.Item.updated_at
     };
@@ -284,35 +287,121 @@ async function handleCreateVenue(venueData, event) {
 
 async function handleUpdateVenue(venueId, venueData, event) {
   console.log(`[Venues] Venues Lambda: Updating venue: ${venueId}`);
+  console.log(`[Venues] Update data:`, JSON.stringify(venueData, null, 2));
 
   const now = new Date().toISOString();
+
+  // Build dynamic update expression - separate SET and REMOVE operations
+  const setExpressions = ['updated_at = :updated_at'];
+  const removeExpressions = [];
+  const expressionAttributeNames = {};
+  const expressionAttributeValues = {
+    ':updated_at': now
+  };
+
+  // Map frontend field names to DynamoDB field names
+  const fieldMappings = {
+    name: 'name',
+    address: 'address',
+    latitude: 'latitude',
+    longitude: 'longitude',
+    location: 'location_object',
+    googlePlaceId: 'google_place_id',
+    website: 'website',
+    validated: 'validated',
+    nameVariants: 'name_variants',
+    phone: 'phone',
+    postcode: 'postcode',
+    facilities: 'facilities',
+    socialMediaURLs: 'social_media_urls',
+    profileImageUrl: 'profile_image_url',
+    standardTicketed: 'standard_ticketed',
+    standardTicketInformation: 'standard_ticket_information',
+    standardTicketUrl: 'standard_ticket_url',
+    enrichment_status: 'enrichment_status',
+    enrichment_data: 'enrichment_data'
+  };
+
+  // Process each provided field
+  Object.keys(venueData).forEach(frontendKey => {
+    const dbKey = fieldMappings[frontendKey];
+    if (!dbKey) return; // Skip unknown fields
+
+    const value = venueData[frontendKey];
+
+    // Special handling for null values (REMOVE operation)
+    if (value === null) {
+      removeExpressions.push(dbKey);
+      return;
+    }
+
+    // Handle reserved keywords (like 'name')
+    if (dbKey === 'name') {
+      expressionAttributeNames['#name'] = 'name';
+      setExpressions.push(`#name = :${dbKey}`);
+    } else {
+      setExpressions.push(`${dbKey} = :${dbKey}`);
+    }
+
+    expressionAttributeValues[`:${dbKey}`] = value;
+  });
+
+  // Build update expression with both SET and REMOVE clauses
+  let updateExpression = `SET ${setExpressions.join(', ')}`;
+  if (removeExpressions.length > 0) {
+    updateExpression += ` REMOVE ${removeExpressions.join(', ')}`;
+  }
 
   const params = {
     TableName: 'bndy-venues',
     Key: { id: venueId },
-    UpdateExpression: 'SET #name = :name, address = :address, latitude = :latitude, longitude = :longitude, location_object = :location_object, google_place_id = :google_place_id, validated = :validated, updated_at = :updated_at',
-    ExpressionAttributeNames: {
-      '#name': 'name'
-    },
-    ExpressionAttributeValues: {
-      ':name': venueData.name,
-      ':address': venueData.address,
-      ':latitude': venueData.latitude || 0,
-      ':longitude': venueData.longitude || 0,
-      ':location_object': venueData.location || { lat: venueData.latitude, lng: venueData.longitude },
-      ':google_place_id': venueData.googlePlaceId || '',
-      ':validated': venueData.validated || false,
-      ':updated_at': now
-    },
+    UpdateExpression: updateExpression,
     ReturnValues: 'ALL_NEW'
   };
 
+  // Only add ExpressionAttributeNames if we have any
+  if (Object.keys(expressionAttributeNames).length > 0) {
+    params.ExpressionAttributeNames = expressionAttributeNames;
+  }
+
+  params.ExpressionAttributeValues = expressionAttributeValues;
+
+  console.log(`[Venues] Update expression:`, params.UpdateExpression);
+
   try {
     const result = await dynamodb.update(params).promise();
+
+    // Format response to match API format
+    const formattedVenue = {
+      id: result.Attributes.id,
+      name: result.Attributes.name,
+      address: result.Attributes.address,
+      latitude: result.Attributes.latitude,
+      longitude: result.Attributes.longitude,
+      location: result.Attributes.location_object || { lat: result.Attributes.latitude, lng: result.Attributes.longitude },
+      googlePlaceId: result.Attributes.google_place_id,
+      website: result.Attributes.website || '',
+      validated: result.Attributes.validated || false,
+      nameVariants: result.Attributes.name_variants || [],
+      phone: result.Attributes.phone || '',
+      postcode: result.Attributes.postcode || '',
+      facilities: result.Attributes.facilities || [],
+      socialMediaURLs: result.Attributes.social_media_urls || [],
+      profileImageUrl: result.Attributes.profile_image_url || null,
+      standardTicketed: result.Attributes.standard_ticketed || false,
+      standardTicketInformation: result.Attributes.standard_ticket_information || '',
+      standardTicketUrl: result.Attributes.standard_ticket_url || '',
+      enrichment_status: result.Attributes.enrichment_status,
+      enrichment_data: result.Attributes.enrichment_data,
+      enrichment_date: result.Attributes.enrichment_date,
+      createdAt: result.Attributes.created_at,
+      updatedAt: result.Attributes.updated_at
+    };
+
     return {
       statusCode: 200,
       headers: getCorsHeaders(event),
-      body: JSON.stringify(result.Attributes)
+      body: JSON.stringify(formattedVenue)
     };
   } catch (error) {
     console.error('[ERROR] DynamoDB update failed:', error);

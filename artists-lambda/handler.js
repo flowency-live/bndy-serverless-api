@@ -196,6 +196,9 @@ async function handleGetArtistById(artistId) {
       facebookUrl: result.Item.facebookUrl || '',
       instagramUrl: result.Item.instagramUrl || '',
       websiteUrl: result.Item.websiteUrl || '',
+      youtubeUrl: result.Item.youtubeUrl || '',
+      spotifyUrl: result.Item.spotifyUrl || '',
+      twitterUrl: result.Item.twitterUrl || '',
       socialMediaUrls: result.Item.socialMediaUrls || [],
       profileImageUrl: result.Item.profileImageUrl || '',
       isVerified: result.Item.isVerified || false,
@@ -344,7 +347,7 @@ async function handleUpdateArtist(artistId, artistData) {
   const params = {
     TableName: 'bndy-artists',
     Key: { id: artistId },
-    UpdateExpression: 'SET #name = :name, bio = :bio, #location = :location, locationLat = :locationLat, locationLng = :locationLng, genres = :genres, isVerified = :isVerified, profileImageUrl = :profileImageUrl, allowedEventTypes = :allowedEventTypes, displayColour = :displayColour, updated_at = :updated_at',
+    UpdateExpression: 'SET #name = :name, bio = :bio, #location = :location, locationLat = :locationLat, locationLng = :locationLng, genres = :genres, isVerified = :isVerified, profileImageUrl = :profileImageUrl, allowedEventTypes = :allowedEventTypes, displayColour = :displayColour, facebookUrl = :facebookUrl, instagramUrl = :instagramUrl, websiteUrl = :websiteUrl, youtubeUrl = :youtubeUrl, spotifyUrl = :spotifyUrl, twitterUrl = :twitterUrl, updated_at = :updated_at',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location'
@@ -360,6 +363,12 @@ async function handleUpdateArtist(artistId, artistData) {
       ':profileImageUrl': artistData.profileImageUrl || '',
       ':allowedEventTypes': artistData.allowedEventTypes || ['practice', 'public_gig'],
       ':displayColour': artistData.displayColour || '#f97316',
+      ':facebookUrl': artistData.facebookUrl || null,
+      ':instagramUrl': artistData.instagramUrl || null,
+      ':websiteUrl': artistData.websiteUrl || null,
+      ':youtubeUrl': artistData.youtubeUrl || null,
+      ':spotifyUrl': artistData.spotifyUrl || null,
+      ':twitterUrl': artistData.twitterUrl || null,
       ':updated_at': now
     },
     ReturnValues: 'ALL_NEW'

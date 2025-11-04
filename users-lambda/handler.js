@@ -10,6 +10,7 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 
 // Configuration
 const USERS_TABLE = 'bndy-users';
+const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
 const FRONTEND_URL = 'https://backstage.bndy.co.uk';
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -216,7 +217,22 @@ const handleUpdateProfile = async (event) => {
   }
 };
 
-// List all users (admin function - future god mode)
+// Determine auth type from cognito_id and username
+const getAuthType = (cognitoId, username) => {
+  if (cognitoId.startsWith('phone_')) {
+    return 'Phone';
+  }
+  if (username.startsWith('google_')) {
+    return 'Google';
+  }
+  if (username.startsWith('facebook_')) {
+    return 'Facebook';
+  }
+  // Default to email-based auth
+  return 'Email';
+};
+
+// List all users (admin function - godmode)
 const handleListUsers = async (event) => {
   const authResult = requireAuth(event);
 
@@ -225,29 +241,128 @@ const handleListUsers = async (event) => {
   }
 
   try {
-    console.log(' USERS: List users request');
+    console.log(' USERS: List users request (godmode)');
 
-    const result = await dynamodb.scan({
+    // Fetch all users
+    const usersResult = await dynamodb.scan({
       TableName: USERS_TABLE,
-      ProjectionExpression: 'user_id, cognito_id, email, username, display_name, profile_complete, created_at'
+      ProjectionExpression: 'user_id, cognito_id, email, phone, username, first_name, last_name, display_name, profile_complete, created_at'
     }).promise();
 
-    const users = result.Items.map(user => ({
+    // Fetch all memberships to count per user
+    const membershipsResult = await dynamodb.scan({
+      TableName: MEMBERSHIPS_TABLE,
+      ProjectionExpression: 'user_id, membership_id'
+    }).promise();
+
+    // Create membership count map using cognito_id (memberships.user_id = users.cognito_id)
+    const membershipCounts = {};
+    membershipsResult.Items.forEach(membership => {
+      const cognitoId = membership.user_id; // membership.user_id contains cognito_id
+      membershipCounts[cognitoId] = (membershipCounts[cognitoId] || 0) + 1;
+    });
+
+    // Build user list with membership counts and auth type
+    const users = usersResult.Items.map(user => ({
       id: user.user_id,
-      cognitoId: user.cognito_id,
-      email: user.email,
+      cognitoId: user.cognito_id, // Added for matching with memberships
+      email: user.email || null,
+      phone: user.phone || null,
       username: user.username,
-      displayName: user.display_name,
-      profileCompleted: user.profile_complete,
+      firstName: user.first_name || null,
+      lastName: user.last_name || null,
+      displayName: user.display_name || null,
+      profileCompleted: user.profile_complete || false,
+      membershipCount: membershipCounts[user.cognito_id] || 0,
+      authType: getAuthType(user.cognito_id, user.username),
       createdAt: user.created_at
     }));
 
-    console.log(` USERS: Retrieved ${users.length} users`);
+    console.log(` USERS: Retrieved ${users.length} users with membership counts`);
 
     return createResponse(200, { users, count: users.length });
 
   } catch (error) {
     console.error(' USERS: List users error:', error);
+    return createResponse(500, { error: 'Internal server error' });
+  }
+};
+
+// Delete user (admin function - godmode)
+const handleDeleteUser = async (event) => {
+  const authResult = requireAuth(event);
+
+  if (authResult.error) {
+    return createResponse(401, { error: authResult.error });
+  }
+
+  try {
+    // Extract user_id from path parameters
+    const userId = event.pathParameters?.userId;
+
+    if (!userId) {
+      return createResponse(400, { error: 'User ID is required' });
+    }
+
+    console.log(` USERS: Delete user request (godmode)`, { userId: userId.substring(0, 8) + '...' });
+
+    // Get user to find cognito_id
+    const userResult = await dynamodb.scan({
+      TableName: USERS_TABLE,
+      FilterExpression: 'user_id = :userId',
+      ExpressionAttributeValues: {
+        ':userId': userId
+      }
+    }).promise();
+
+    if (!userResult.Items || userResult.Items.length === 0) {
+      console.error(` USERS: User not found for deletion: ${userId}`);
+      return createResponse(404, { error: 'User not found' });
+    }
+
+    const user = userResult.Items[0];
+    const cognitoId = user.cognito_id;
+
+    console.log(` USERS: Found user to delete`, { cognitoId: cognitoId.substring(0, 8) + '...' });
+
+    // Get all memberships for this user (using cognito_id)
+    const membershipsResult = await dynamodb.scan({
+      TableName: MEMBERSHIPS_TABLE,
+      FilterExpression: 'user_id = :cognitoId',
+      ExpressionAttributeValues: {
+        ':cognitoId': cognitoId
+      }
+    }).promise();
+
+    console.log(` USERS: Found ${membershipsResult.Items?.length || 0} memberships to delete`);
+
+    // Delete all memberships
+    if (membershipsResult.Items && membershipsResult.Items.length > 0) {
+      const deletePromises = membershipsResult.Items.map(membership =>
+        dynamodb.delete({
+          TableName: MEMBERSHIPS_TABLE,
+          Key: { membership_id: membership.membership_id }
+        }).promise()
+      );
+      await Promise.all(deletePromises);
+      console.log(` USERS: Deleted ${membershipsResult.Items.length} memberships`);
+    }
+
+    // Delete the user
+    await dynamodb.delete({
+      TableName: USERS_TABLE,
+      Key: { cognito_id: cognitoId }
+    }).promise();
+
+    console.log(` USERS: User deleted successfully`, { userId });
+
+    return createResponse(200, {
+      message: 'User deleted successfully',
+      deletedMemberships: membershipsResult.Items?.length || 0
+    });
+
+  } catch (error) {
+    console.error(' USERS: Delete user error:', error);
     return createResponse(500, { error: 'Internal server error' });
   }
 };
@@ -287,6 +402,10 @@ exports.handler = async (event, context) => {
 
     if (routeKey === 'GET /users') {
       return await handleListUsers(event);
+    }
+
+    if (routeKey.startsWith('DELETE /users/')) {
+      return await handleDeleteUser(event);
     }
 
     // Route not found

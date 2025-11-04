@@ -289,10 +289,10 @@ const handleOAuthCallback = async (event) => {
 <body>
   <p>Authentication successful. Redirecting...</p>
   <script>
-    // Check for pending invite token in localStorage
+    // Check for pending invite and redirect accordingly
     const pendingInvite = localStorage.getItem('pendingInvite');
     if (pendingInvite) {
-      console.log('AUTH CALLBACK: Found pending invite, redirecting to /invite/' + pendingInvite);
+      console.log('AUTH CALLBACK: Found pending invite, redirecting to invite page');
       window.location.href = '${FRONTEND_URL}/invite/' + pendingInvite;
     } else {
       window.location.href = '${FRONTEND_URL}/dashboard';
@@ -1004,10 +1004,10 @@ const handleMagicLinkAuth = async (event) => {
 <body>
   <p>Authentication successful. Redirecting...</p>
   <script>
-    // Check for pending invite token in localStorage
+    // Check for pending invite and redirect accordingly
     const pendingInvite = localStorage.getItem('pendingInvite');
     if (pendingInvite) {
-      console.log('EMAIL AUTH: Found pending invite, redirecting to /invite/' + pendingInvite);
+      console.log('EMAIL AUTH: Found pending invite, redirecting to invite page');
       window.location.href = '${FRONTEND_URL}/invite/' + pendingInvite;
     } else {
       window.location.href = '${FRONTEND_URL}/dashboard';

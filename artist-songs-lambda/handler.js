@@ -21,37 +21,27 @@ const parseCookies = (cookieHeader) => {
 const extractUserId = (event) => {
   let sessionToken = null;
 
-  console.log('[AUTH] Extracting userId from cookies', {
-    hasCookiesArray: !!(event.cookies && Array.isArray(event.cookies)),
-    hasHeaders: !!(event.headers),
-    cookieHeader: event.headers?.Cookie ? 'present' : 'missing'
-  });
-
+  // HTTP API v2 format - cookies array
   if (event.cookies && Array.isArray(event.cookies)) {
     const cookieString = event.cookies.find(c => c.startsWith('bndy_session='));
     if (cookieString) {
       sessionToken = cookieString.split('=')[1];
-      console.log('[AUTH] Found session token in cookies array');
-    }
-  } else {
-    const cookies = parseCookies(event.headers?.Cookie || event.headers?.cookie || '');
-    sessionToken = cookies.bndy_session;
-    if (sessionToken) {
-      console.log('[AUTH] Found session token in Cookie header');
     }
   }
 
+  // HTTP API v1 format OR fallback - Cookie header
   if (!sessionToken) {
-    console.log('[AUTH] No session token found in request');
+    const cookieHeader = event.headers?.Cookie || event.headers?.cookie || '';
+    const cookies = parseCookies(cookieHeader);
+    sessionToken = cookies.bndy_session;
+  }
+
+  if (!sessionToken) {
     return null;
   }
 
   try {
     const session = jwt.verify(sessionToken, JWT_SECRET);
-    console.log('[AUTH] User authenticated via JWT', {
-      userId: session.userId.substring(0, 8) + '...',
-      username: session.username
-    });
     return session.userId;
   } catch (error) {
     console.error('[AUTH] JWT verification failed:', error.message);
@@ -63,15 +53,13 @@ exports.handler = async (event, context) => {
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
 
-  console.log('Artist Songs Lambda:', { method, path });
+  console.log('[Artist Songs Lambda] Processing request:', { method, path });
   context.callbackWaitsForEmptyEventLoop = false;
 
   try {
     const artistId = event.pathParameters?.artistId;
     const artistSongId = event.pathParameters?.artistSongId;
     const userId = extractUserId(event);
-
-    console.log('Extracted values:', { artistId, artistSongId, userId: userId ? userId.substring(0, 8) + '...' : 'none' });
 
     // POST /api/artists/{artistId}/playbook - Add song
     if (method === 'POST' && path.includes('/playbook') && artistId) {
@@ -106,6 +94,11 @@ exports.handler = async (event, context) => {
     // POST /api/artists/{artistId}/pipeline/{artistSongId}/vote - Vote on song
     if (method === 'POST' && artistSongId && path.includes('/vote')) {
       return await handleVote(artistSongId, artistId, userId, JSON.parse(event.body));
+    }
+
+    // DELETE /api/artists/{artistId}/pipeline/{artistSongId} - Delete suggestion (only by suggester)
+    if (method === 'DELETE' && artistSongId && path.includes('/pipeline')) {
+      return await handleDeleteSuggestion(artistSongId, userId);
     }
 
     // POST /api/artists/{artistId}/pipeline/{artistSongId}/rag - Update RAG status
@@ -195,7 +188,6 @@ async function handleGetPlaybook(artistId, queryParams) {
 
       // Skip if global song has been deleted (orphaned record)
       if (!globalSong) {
-        console.log(`Warning: Orphaned artist-song record ${artistSong.id} references deleted song ${artistSong.song_id}`);
         return null;
       }
 
@@ -263,6 +255,14 @@ async function handleUpdateSong(artistSongId, body) {
     updates.push('reference_url = :reference_url');
     values[':reference_url'] = body.reference_url;
   }
+  if (body.additional_url !== undefined) {
+    updates.push('additional_url = :additional_url');
+    values[':additional_url'] = body.additional_url;
+  }
+  if (body.guitar_chords_url !== undefined) {
+    updates.push('guitar_chords_url = :guitar_chords_url');
+    values[':guitar_chords_url'] = body.guitar_chords_url;
+  }
 
   updates.push('updated_at = :now');
 
@@ -319,6 +319,16 @@ async function getGlobalSong(songId) {
 }
 
 async function handleAddSuggestion(body, artistId, userId) {
+  console.log('[Artist Songs Lambda] Adding suggestion to pipeline');
+
+  if (!userId) {
+    return {
+      statusCode: 401,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Authentication required' })
+    };
+  }
+
   const now = new Date().toISOString();
   const artistSong = {
     id: crypto.randomUUID(),
@@ -355,6 +365,8 @@ async function handleAddSuggestion(body, artistId, userId) {
     updated_at: now,
     last_status_change_at: now
   };
+
+  console.log('[ADD_SUGGESTION] Created artistSong with vote for userId:', userId.substring(0, 8) + '...');
 
   await dynamodb.put({
     TableName: 'bndy-artist-songs',
@@ -426,12 +438,12 @@ async function handleVote(artistSongId, artistId, userId, body) {
       };
     }
 
-    if (!body.vote_value || body.vote_value < 1 || body.vote_value > 5) {
+    if (body.vote_value === undefined || body.vote_value === null || body.vote_value < 0 || body.vote_value > 5) {
       console.error('[VOTE] Invalid vote value:', body.vote_value);
       return {
         statusCode: 400,
         headers: getCorsHeaders(),
-        body: JSON.stringify({ error: 'Invalid vote value. Must be between 1 and 5.' })
+        body: JSON.stringify({ error: 'Invalid vote value. Must be between 0 and 5.' })
       };
     }
 
@@ -634,6 +646,62 @@ async function handleUpdateComment(artistSongId, body) {
     statusCode: 200,
     headers: getCorsHeaders(),
     body: JSON.stringify({ ...result.Attributes, globalSong })
+  };
+}
+
+async function handleDeleteSuggestion(artistSongId, userId) {
+  console.log('[DELETE_SUGGESTION] Starting', {
+    artistSongId: artistSongId?.substring(0, 8) + '...',
+    userId: userId ? userId.substring(0, 8) + '...' : 'NULL'
+  });
+
+  if (!userId) {
+    console.error('[DELETE_SUGGESTION] ERROR: No userId provided - authentication required');
+    return {
+      statusCode: 401,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Authentication required' })
+    };
+  }
+
+  const songResult = await dynamodb.get({
+    TableName: 'bndy-artist-songs',
+    Key: { id: artistSongId }
+  }).promise();
+
+  if (!songResult.Item) {
+    return {
+      statusCode: 404,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Song not found' })
+    };
+  }
+
+  const song = songResult.Item;
+
+  if (song.suggested_by_user_id !== userId) {
+    console.error('[DELETE_SUGGESTION] ERROR: User is not the suggester', {
+      requestingUserId: userId.substring(0, 8) + '...',
+      suggestedByUserId: song.suggested_by_user_id?.substring(0, 8) + '...'
+    });
+    return {
+      statusCode: 403,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Only the suggester can delete this song' })
+    };
+  }
+
+  await dynamodb.delete({
+    TableName: 'bndy-artist-songs',
+    Key: { id: artistSongId }
+  }).promise();
+
+  console.log('[DELETE_SUGGESTION] SUCCESS: Song deleted by suggester');
+
+  return {
+    statusCode: 204,
+    headers: getCorsHeaders(),
+    body: ''
   };
 }
 

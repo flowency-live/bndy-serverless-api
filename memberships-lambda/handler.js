@@ -453,7 +453,7 @@ const handleDeleteMembership = async (event, membershipId) => {
   try {
     console.log('[MEMBERSHIPS] Deleting membership', { membershipId });
 
-    // Get membership to get artist_id for member_count update
+    // Get membership to get artist_id and user_id for cleanup
     const membershipResult = await dynamodb.get({
       TableName: MEMBERSHIPS_TABLE,
       Key: { membership_id: membershipId }
@@ -464,6 +464,36 @@ const handleDeleteMembership = async (event, membershipId) => {
     }
 
     const artistId = membershipResult.Item.artist_id;
+    const userId = membershipResult.Item.user_id;
+
+    console.log('[MEMBERSHIPS] Cleaning up votes for removed member', { artistId, userId });
+
+    // Get all songs for this artist
+    const songsResult = await dynamodb.scan({
+      TableName: 'bndy-artist-songs',
+      FilterExpression: 'artist_id = :artistId',
+      ExpressionAttributeValues: {
+        ':artistId': artistId
+      }
+    }).promise();
+
+    // Remove user's votes from all songs
+    const updatePromises = songsResult.Items
+      .filter(song => song.votes && song.votes[userId])
+      .map(song => {
+        return dynamodb.update({
+          TableName: 'bndy-artist-songs',
+          Key: { id: song.id },
+          UpdateExpression: 'REMOVE votes.#userId',
+          ExpressionAttributeNames: {
+            '#userId': userId
+          }
+        }).promise();
+      });
+
+    await Promise.all(updatePromises);
+
+    console.log('[MEMBERSHIPS] Removed votes from', updatePromises.length, 'songs');
 
     // Delete membership
     await dynamodb.delete({

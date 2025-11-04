@@ -28,7 +28,12 @@ function createResponse(statusCode, body) {
 
 // Helper function to enrich setlist songs with tuning data
 async function enrichSetlistWithTuning(setlist) {
+  console.log('========== ENRICHMENT FUNCTION CALLED ==========');
+  console.log('Enriching setlist:', setlist.name);
+  console.log('Artist ID:', setlist.artist_id);
+
   if (!setlist.sets || setlist.sets.length === 0) {
+    console.log('No sets found, returning setlist unchanged');
     return setlist;
   }
 
@@ -49,8 +54,8 @@ async function enrichSetlistWithTuning(setlist) {
 
   console.log(`[ENRICH] Found ${songIds.size} unique song_ids to lookup tuning for`);
 
-  // Fetch all artist songs from playbook to get tuning data
-  const tuningMap = {};
+  // Fetch all artist songs from playbook to get tuning and duration data
+  const enrichmentMap = {};
   const artistId = setlist.artist_id;
 
   console.log(`[ENRICH] Fetching all playbook songs for artist: ${artistId}`);
@@ -69,36 +74,54 @@ async function enrichSetlistWithTuning(setlist) {
 
     console.log(`[ENRICH] Found ${result.Items ? result.Items.length : 0} playbook songs`);
 
-    // Build tuning map from playbook songs
+    // Build enrichment map from playbook songs (tuning + custom_duration)
+    // NOTE: Setlists store the artist-song 'id', NOT the global 'song_id'
     if (result.Items) {
       result.Items.forEach(item => {
-        if (item.song_id && item.tuning) {
-          tuningMap[item.song_id] = item.tuning;
-          if (item.tuning !== 'standard') {
-            console.log(`[ENRICH] Mapped ${item.song_id} -> ${item.tuning}`);
+        if (item.id) {
+          enrichmentMap[item.id] = {
+            tuning: item.tuning || 'standard',
+            custom_duration: item.custom_duration || null
+          };
+          if (item.tuning !== 'standard' || item.custom_duration) {
+            console.log(`[ENRICH] Mapped artist-song ID ${item.id} (global song: ${item.song_id}) -> tuning: ${item.tuning}, custom_duration: ${item.custom_duration}`);
           }
         }
       });
     }
 
-    console.log(`[ENRICH] Built tuning map with ${Object.keys(tuningMap).length} entries`);
+    console.log(`[ENRICH] Built enrichment map with ${Object.keys(enrichmentMap).length} entries`);
   } catch (error) {
     console.error(`[ENRICH] Error fetching playbook songs:`, error);
   }
 
-  // Enrich songs with tuning data
+  // Enrich songs with tuning and custom_duration data
   const enrichedSets = setlist.sets.map(set => ({
     ...set,
-    songs: set.songs.map(song => ({
-      ...song,
-      tuning: tuningMap[song.song_id] || 'standard',
-    })),
+    songs: set.songs.map(song => {
+      const enrichment = enrichmentMap[song.song_id] || { tuning: 'standard', custom_duration: null };
+      if (enrichment.tuning !== 'standard' || enrichment.custom_duration) {
+        console.log(`[ENRICH] Applied to "${song.title}": tuning=${enrichment.tuning}, custom_duration=${enrichment.custom_duration}`);
+      }
+      return {
+        ...song,
+        tuning: enrichment.tuning,
+        custom_duration: enrichment.custom_duration,
+      };
+    }),
   }));
 
-  return {
+  const enrichedSetlist = {
     ...setlist,
     sets: enrichedSets,
   };
+
+  console.log('========== ENRICHMENT COMPLETE ==========');
+  const allEnrichedSongs = enrichedSets.flatMap(set => set.songs || []);
+  const nonStandardCount = allEnrichedSongs.filter(s => s.tuning !== 'standard').length;
+  console.log(`Returning setlist with ${allEnrichedSongs.length} songs, ${nonStandardCount} with non-standard tuning`);
+
+  return enrichedSetlist;
 }
 
 exports.handler = async (event) => {

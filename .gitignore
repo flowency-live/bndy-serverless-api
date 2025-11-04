@@ -1,7 +1,31 @@
+# Dependencies
 node_modules/
+*/node_modules/
+
+# AWS SAM
 .aws-sam/
 packaged*.yaml
+
+# Build artifacts
 *.zip
 *.tar.gz
+!_production_baselines/*.zip
+
+# Environment
 .env
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Temporary/backup directories
+*-backup-*/
+*-backups/
+*-deployed/
+*-deployed-temp/
+*-current-check/
+
+# Test files
+test.json
+lambda-test.json
+*.log
