@@ -523,58 +523,43 @@ function levenshteinDistance(str1, str2) {
   return matrix[str2.length][str1.length];
 }
 
-// Calculate match score (0-100)
+// Simple match score - just contains/starts-with matching
 function calculateMatchScore(artistName, artistLocation, queryName, queryLocation) {
   const nameLower = artistName.toLowerCase().trim();
   const queryLower = queryName.toLowerCase().trim();
 
   // Exact match = 100
   if (nameLower === queryLower) {
-    // If locations also match, definitely 100
-    if (queryLocation && artistLocation) {
-      const locLower = artistLocation.toLowerCase().trim();
-      const queryLocLower = queryLocation.toLowerCase().trim();
-      if (locLower.includes(queryLocLower) || queryLocLower.includes(locLower)) {
-        return 100;
-      }
-      return 80; // Same name, different location
-    }
-    return 90; // Same name, no location to compare
+    return 100;
   }
 
-  // Starts with query = high score (e.g., "not" matches "Not Guilty")
+  // Starts with query = very high score
   if (nameLower.startsWith(queryLower)) {
-    return 95; // Very strong match
+    return 95;
   }
 
-  // Contains query = good score (e.g., "guilty" matches "Not Guilty")
+  // Contains query anywhere = good score
   if (nameLower.includes(queryLower)) {
-    return 85; // Good match
+    return 85;
   }
 
-  // Check if any word in artist name starts with query
+  // Check if any word starts with query
   const artistWords = nameLower.split(/\s+/);
   for (const word of artistWords) {
     if (word.startsWith(queryLower)) {
-      return 80; // Word-level match
+      return 80;
     }
   }
 
-  // Calculate Levenshtein distance for fuzzy matching
-  const distance = levenshteinDistance(nameLower, queryLower);
-  const maxLength = Math.max(nameLower.length, queryLower.length);
-  const similarity = (1 - distance / maxLength) * 100;
-
-  // Bonus points for location match
-  if (queryLocation && artistLocation) {
-    const locLower = artistLocation.toLowerCase().trim();
-    const queryLocLower = queryLocation.toLowerCase().trim();
-    if (locLower.includes(queryLocLower) || queryLocLower.includes(locLower)) {
-      return Math.min(100, similarity + 10);
+  // Check if any word contains query
+  for (const word of artistWords) {
+    if (word.includes(queryLower)) {
+      return 70;
     }
   }
 
-  return Math.round(similarity);
+  // No match
+  return 0;
 }
 
 // Search artists (fuzzy matching for duplicate prevention)
@@ -611,7 +596,7 @@ async function handleSearchArtists(event) {
         profileImageUrl: artist.profileImageUrl || null,
         matchScore: calculateMatchScore(artist.name, artist.location, name, location || '')
       }))
-      .filter(artist => artist.matchScore >= 60)  // Only show matches >= 60%
+      .filter(artist => artist.matchScore > 0)  // Only show actual matches
       .sort((a, b) => b.matchScore - a.matchScore)  // Highest score first
       .slice(0, 10);  // Top 10 matches
 
