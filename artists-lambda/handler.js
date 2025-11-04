@@ -134,6 +134,7 @@ async function handleGetAllArtists() {
     const formattedArtists = result.Items.map(artist => ({
       id: artist.id,
       name: artist.name,
+      artist_type: artist.artist_type || null,
       bio: artist.bio || '',
       location: artist.location || '',
       locationLat: artist.locationLat || null,
@@ -188,6 +189,7 @@ async function handleGetArtistById(artistId) {
     const artist = {
       id: result.Item.id,
       name: result.Item.name,
+      artist_type: result.Item.artist_type || null,
       bio: result.Item.bio || '',
       location: result.Item.location || '',
       locationLat: result.Item.locationLat || null,
