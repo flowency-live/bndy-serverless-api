@@ -1380,6 +1380,17 @@ const handleGetAllPublicEvents = async (event) => {
 
 // GET /api/artists/:artistId/public-events - Get public events for an artist (NO AUTH)
 const handleGetArtistPublicEvents = async (event) => {
+  console.log('ARTIST_PUBLIC_EVENTS: Handler invoked', { pathParameters: event.pathParameters, queryStringParameters: event.queryStringParameters });
+
+  if (!event.pathParameters || !event.pathParameters.artistId) {
+    console.error('ARTIST_PUBLIC_EVENTS: Missing artistId in pathParameters');
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'artistId is required' })
+    };
+  }
+
   const { artistId } = event.pathParameters;
   const { startDate, endDate } = event.queryStringParameters || {};
 
