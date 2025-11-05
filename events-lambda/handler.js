@@ -1378,6 +1378,81 @@ const handleGetAllPublicEvents = async (event) => {
   }
 };
 
+// GET /api/artists/:artistId/public-events - Get public events for an artist (NO AUTH)
+const handleGetArtistPublicEvents = async (event) => {
+  const { artistId } = event.pathParameters;
+  const { startDate, endDate } = event.queryStringParameters || {};
+
+  // Default to today if no startDate provided
+  const today = new Date().toISOString().split('T')[0];
+  const start = startDate || today;
+  const end = endDate || '2099-12-31';
+
+  console.log('ARTIST_PUBLIC_EVENTS: Query received', { artistId, startDate: start, endDate: end });
+
+  try {
+    // Query events for this artist using the artistId-date-index GSI
+    const result = await dynamodb.query({
+      TableName: EVENTS_TABLE,
+      IndexName: 'artistId-date-index',
+      KeyConditionExpression: 'artistId = :artistId AND #date BETWEEN :start AND :end',
+      FilterExpression: 'isPublic = :true',
+      ExpressionAttributeNames: { '#date': 'date' },
+      ExpressionAttributeValues: {
+        ':artistId': artistId,
+        ':start': start,
+        ':end': end,
+        ':true': true
+      }
+    }).promise();
+
+    const events = result.Items || [];
+
+    console.log('ARTIST_PUBLIC_EVENTS: Found events', { artistId, count: events.length });
+
+    // Enrich events with venue data
+    const venueIds = [...new Set(events.map(e => e.venueId).filter(Boolean))];
+    const venuePromises = venueIds.map(id =>
+      dynamodb.get({
+        TableName: VENUES_TABLE,
+        Key: { id }
+      }).promise()
+    );
+
+    const venueResults = await Promise.all(venuePromises);
+
+    // Build venue lookup map
+    const venueMap = {};
+    venueResults.forEach((result, idx) => {
+      if (result.Item) {
+        venueMap[venueIds[idx]] = result.Item;
+      }
+    });
+
+    // Join events with venue data
+    const enrichedEvents = events.map(e => {
+      const venue = venueMap[e.venueId];
+      return {
+        ...e,
+        venueName: venue?.name || e.venueName || 'Unknown Venue'
+      };
+    });
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ events: enrichedEvents })
+    };
+  } catch (error) {
+    console.error('ARTIST_PUBLIC_EVENTS: Error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Failed to fetch artist events' })
+    };
+  }
+};
+
 // ============================================================================
 // COMMUNITY WIZARD ENDPOINT (Public, No Auth Required)
 // ============================================================================
@@ -1519,6 +1594,10 @@ exports.handler = async (event, context) => {
 
     if (routeKey.match(/GET \/api\/events\/public$/)) {
       return await handleGetAllPublicEvents(event);
+    }
+
+    if (routeKey.match(/GET \/api\/artists\/[^/]+\/public-events/)) {
+      return await handleGetArtistPublicEvents(event);
     }
 
     if (routeKey.match(/POST \/api\/events\/batch/)) {
