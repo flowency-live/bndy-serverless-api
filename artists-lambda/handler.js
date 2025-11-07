@@ -391,33 +391,97 @@ async function handleUpdateArtist(artistId, artistData) {
 
   const now = new Date().toISOString();
 
+  // Build update expression dynamically to only update provided fields
+  const updateParts = [];
+  const expressionAttributeNames = {
+    '#name': 'name',
+    '#location': 'location'
+  };
+  const expressionAttributeValues = {
+    ':updated_at': now
+  };
+
+  // Always update timestamp
+  updateParts.push('updated_at = :updated_at');
+
+  // Update only fields that are provided in artistData
+  if (artistData.name !== undefined) {
+    updateParts.push('#name = :name');
+    expressionAttributeValues[':name'] = artistData.name;
+  }
+  if (artistData.bio !== undefined) {
+    updateParts.push('bio = :bio');
+    expressionAttributeValues[':bio'] = artistData.bio || '';
+  }
+  if (artistData.location !== undefined) {
+    updateParts.push('#location = :location');
+    expressionAttributeValues[':location'] = artistData.location || '';
+  }
+  if (artistData.locationLat !== undefined) {
+    updateParts.push('locationLat = :locationLat');
+    expressionAttributeValues[':locationLat'] = artistData.locationLat;
+  }
+  if (artistData.locationLng !== undefined) {
+    updateParts.push('locationLng = :locationLng');
+    expressionAttributeValues[':locationLng'] = artistData.locationLng;
+  }
+  if (artistData.genres !== undefined) {
+    updateParts.push('genres = :genres');
+    expressionAttributeValues[':genres'] = artistData.genres || [];
+  }
+  if (artistData.isVerified !== undefined) {
+    updateParts.push('isVerified = :isVerified');
+    expressionAttributeValues[':isVerified'] = artistData.isVerified;
+  }
+  if (artistData.profileImageUrl !== undefined) {
+    updateParts.push('profileImageUrl = :profileImageUrl');
+    expressionAttributeValues[':profileImageUrl'] = artistData.profileImageUrl || '';
+  }
+  if (artistData.allowedEventTypes !== undefined) {
+    updateParts.push('allowedEventTypes = :allowedEventTypes');
+    expressionAttributeValues[':allowedEventTypes'] = artistData.allowedEventTypes;
+  }
+  if (artistData.displayColour !== undefined) {
+    updateParts.push('displayColour = :displayColour');
+    expressionAttributeValues[':displayColour'] = artistData.displayColour;
+  }
+  if (artistData.facebookUrl !== undefined) {
+    updateParts.push('facebookUrl = :facebookUrl');
+    expressionAttributeValues[':facebookUrl'] = artistData.facebookUrl || null;
+  }
+  if (artistData.instagramUrl !== undefined) {
+    updateParts.push('instagramUrl = :instagramUrl');
+    expressionAttributeValues[':instagramUrl'] = artistData.instagramUrl || null;
+  }
+  if (artistData.websiteUrl !== undefined) {
+    updateParts.push('websiteUrl = :websiteUrl');
+    expressionAttributeValues[':websiteUrl'] = artistData.websiteUrl || null;
+  }
+  if (artistData.youtubeUrl !== undefined) {
+    updateParts.push('youtubeUrl = :youtubeUrl');
+    expressionAttributeValues[':youtubeUrl'] = artistData.youtubeUrl || null;
+  }
+  if (artistData.spotifyUrl !== undefined) {
+    updateParts.push('spotifyUrl = :spotifyUrl');
+    expressionAttributeValues[':spotifyUrl'] = artistData.spotifyUrl || null;
+  }
+  if (artistData.twitterUrl !== undefined) {
+    updateParts.push('twitterUrl = :twitterUrl');
+    expressionAttributeValues[':twitterUrl'] = artistData.twitterUrl || null;
+  }
+
+  // Allow updating needs_review (for admin review workflow)
+  if (artistData.needs_review !== undefined) {
+    updateParts.push('needs_review = :needs_review');
+    expressionAttributeValues[':needs_review'] = artistData.needs_review;
+  }
+
   const params = {
     TableName: 'bndy-artists',
     Key: { id: artistId },
-    UpdateExpression: 'SET #name = :name, bio = :bio, #location = :location, locationLat = :locationLat, locationLng = :locationLng, genres = :genres, isVerified = :isVerified, profileImageUrl = :profileImageUrl, allowedEventTypes = :allowedEventTypes, displayColour = :displayColour, facebookUrl = :facebookUrl, instagramUrl = :instagramUrl, websiteUrl = :websiteUrl, youtubeUrl = :youtubeUrl, spotifyUrl = :spotifyUrl, twitterUrl = :twitterUrl, updated_at = :updated_at',
-    ExpressionAttributeNames: {
-      '#name': 'name',
-      '#location': 'location'
-    },
-    ExpressionAttributeValues: {
-      ':name': artistData.name,
-      ':bio': artistData.bio || '',
-      ':location': artistData.location || '',
-      ':locationLat': artistData.locationLat !== undefined ? artistData.locationLat : null,
-      ':locationLng': artistData.locationLng !== undefined ? artistData.locationLng : null,
-      ':genres': artistData.genres || [],
-      ':isVerified': artistData.isVerified || false,
-      ':profileImageUrl': artistData.profileImageUrl || '',
-      ':allowedEventTypes': artistData.allowedEventTypes || ['practice', 'public_gig'],
-      ':displayColour': artistData.displayColour || '#f97316',
-      ':facebookUrl': artistData.facebookUrl || null,
-      ':instagramUrl': artistData.instagramUrl || null,
-      ':websiteUrl': artistData.websiteUrl || null,
-      ':youtubeUrl': artistData.youtubeUrl || null,
-      ':spotifyUrl': artistData.spotifyUrl || null,
-      ':twitterUrl': artistData.twitterUrl || null,
-      ':updated_at': now
-    },
+    UpdateExpression: `SET ${updateParts.join(', ')}`,
+    ExpressionAttributeNames: expressionAttributeNames,
+    ExpressionAttributeValues: expressionAttributeValues,
     ReturnValues: 'ALL_NEW'
   };
 
