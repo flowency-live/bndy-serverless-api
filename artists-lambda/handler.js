@@ -6,11 +6,43 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
+const ssm = new AWS.SSM({ region: 'eu-west-2' });
 
 // Configuration
-const JWT_SECRET = process.env.JWT_SECRET;
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
 const FRONTEND_URL = 'https://backstage.bndy.co.uk';
+
+// JWT Secret - cached after first retrieval
+let JWT_SECRET = null;
+
+/**
+ * Get JWT secret from SSM Parameter Store with fallback to env var
+ */
+async function getJWTSecret() {
+  if (JWT_SECRET) {
+    return JWT_SECRET; // Return cached value
+  }
+
+  // Try SSM first
+  try {
+    const result = await ssm.getParameter({
+      Name: '/bndy/auth/jwt-secret',
+      WithDecryption: true
+    }).promise();
+    JWT_SECRET = result.Parameter.Value;
+    console.log('[ARTISTS] JWT_SECRET loaded from SSM');
+    return JWT_SECRET;
+  } catch (error) {
+    console.error('[ARTISTS] Failed to get JWT_SECRET from SSM:', error.message);
+    // Fallback to environment variable
+    if (process.env.JWT_SECRET) {
+      JWT_SECRET = process.env.JWT_SECRET;
+      console.log('[ARTISTS] JWT_SECRET loaded from environment variable (fallback)');
+      return JWT_SECRET;
+    }
+    throw new Error('JWT_SECRET not available from SSM or environment');
+  }
+}
 
 // Parse cookies from event
 const parseCookies = (cookieHeader) => {
@@ -23,7 +55,7 @@ const parseCookies = (cookieHeader) => {
 };
 
 // Authentication middleware
-const requireAuth = (event) => {
+const requireAuth = async (event) => {
   let sessionToken = null;
 
   if (event.cookies && Array.isArray(event.cookies)) {
@@ -41,10 +73,11 @@ const requireAuth = (event) => {
   }
 
   try {
-    const session = jwt.verify(sessionToken, JWT_SECRET);
+    const jwtSecret = await getJWTSecret();
+    const session = jwt.verify(sessionToken, jwtSecret);
     return { user: session };
   } catch (error) {
-    console.error('🔐 Invalid session token:', error.message);
+    console.error(' Invalid session token:', error.message);
     return { error: 'Invalid session' };
   }
 };
@@ -54,7 +87,7 @@ exports.handler = async (event, context) => {
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
 
-  console.log('🎵 Artists Lambda: Request received', {
+  console.log(' Artists Lambda: Request received', {
     method,
     path,
     pathParameters: event.pathParameters
@@ -106,7 +139,7 @@ exports.handler = async (event, context) => {
     };
 
   } catch (error) {
-    console.error('❌ Artists Lambda: Error:', error);
+    console.error(' Artists Lambda: Error:', error);
     return {
       statusCode: 500,
       headers: getCorsHeaders(),
@@ -116,14 +149,15 @@ exports.handler = async (event, context) => {
 };
 
 async function handleGetAllArtists() {
-  console.log('🎵 Artists Lambda: Scanning all artists from DynamoDB...');
+  console.log(' Artists Lambda: Scanning all artists from DynamoDB...');
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, createdAt',
+    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, #source, needs_review, owner_user_id, createdAt',
     ExpressionAttributeNames: {
       '#name': 'name',
-      '#location': 'location'
+      '#location': 'location',
+      '#source': 'source'
     }
   };
 
@@ -148,12 +182,15 @@ async function handleGetAllArtists() {
       isVerified: artist.isVerified || false,
       followerCount: artist.followerCount || 0,
       claimedByUserId: artist.claimedByUserId || null,
+      owner_user_id: artist.owner_user_id || null,
       allowedEventTypes: artist.allowedEventTypes || ['practice', 'public_gig'],
       displayColour: artist.displayColour || '#f97316',
+      source: artist.source || null,
+      needs_review: artist.needs_review !== undefined ? artist.needs_review : null,
       createdAt: artist.createdAt
     }));
 
-    console.log(`🎵 Artists Lambda: Served ${formattedArtists.length} artists`);
+    console.log(` Artists Lambda: Served ${formattedArtists.length} artists`);
 
     return {
       statusCode: 200,
@@ -161,13 +198,13 @@ async function handleGetAllArtists() {
       body: JSON.stringify(formattedArtists)
     };
   } catch (error) {
-    console.error('❌ DynamoDB scan failed:', error);
+    console.error(' DynamoDB scan failed:', error);
     throw error;
   }
 }
 
 async function handleGetArtistById(artistId) {
-  console.log(`🎵 Artists Lambda: Getting artist by ID: ${artistId}`);
+  console.log(` Artists Lambda: Getting artist by ID: ${artistId}`);
 
   const params = {
     TableName: 'bndy-artists',
@@ -206,8 +243,11 @@ async function handleGetArtistById(artistId) {
       isVerified: result.Item.isVerified || false,
       followerCount: result.Item.followerCount || 0,
       claimedByUserId: result.Item.claimedByUserId || null,
+      owner_user_id: result.Item.owner_user_id || null,
       allowedEventTypes: result.Item.allowedEventTypes || ['practice', 'public_gig'],
       displayColour: result.Item.displayColour || '#f97316',
+      source: result.Item.source || null,
+      needs_review: result.Item.needs_review !== undefined ? result.Item.needs_review : null,
       createdAt: result.Item.createdAt,
       updatedAt: result.Item.updatedAt
     };
@@ -218,16 +258,16 @@ async function handleGetArtistById(artistId) {
       body: JSON.stringify(artist)
     };
   } catch (error) {
-    console.error('❌ DynamoDB get failed:', error);
+    console.error(' DynamoDB get failed:', error);
     throw error;
   }
 }
 
 async function handleCreateArtist(event) {
-  console.log('🎵 Artists Lambda: Creating new artist');
+  console.log(' Artists Lambda: Creating new artist');
 
   // Require authentication for creating artists
-  const authResult = requireAuth(event);
+  const authResult = await requireAuth(event);
   if (authResult.error) {
     return {
       statusCode: 401,
@@ -271,6 +311,11 @@ async function handleCreateArtist(event) {
     isVerified: false,
     followerCount: 0,
     claimedByUserId: null, // Deprecated - use owner_user_id
+
+    // Data quality tracking
+    source: 'backstage',   // Artist self-created = cleanest data
+    needs_review: false,   // No review needed for authenticated artist creation
+
     created_at: now,
     updated_at: now
   };
@@ -324,7 +369,7 @@ async function handleCreateArtist(event) {
       Item: membership
     }).promise();
 
-    console.log('✅ Artist and owner membership created successfully');
+    console.log(' Artist and owner membership created successfully');
 
     return {
       statusCode: 201,
@@ -336,13 +381,13 @@ async function handleCreateArtist(event) {
       })
     };
   } catch (error) {
-    console.error('❌ DynamoDB put failed:', error);
+    console.error(' DynamoDB put failed:', error);
     throw error;
   }
 }
 
 async function handleUpdateArtist(artistId, artistData) {
-  console.log(`🎵 Artists Lambda: Updating artist: ${artistId}`);
+  console.log(` Artists Lambda: Updating artist: ${artistId}`);
 
   const now = new Date().toISOString();
 
@@ -384,13 +429,13 @@ async function handleUpdateArtist(artistId, artistData) {
       body: JSON.stringify(result.Attributes)
     };
   } catch (error) {
-    console.error('❌ DynamoDB update failed:', error);
+    console.error(' DynamoDB update failed:', error);
     throw error;
   }
 }
 
 async function handleCheckName(event) {
-  console.log('🎵 Artists Lambda: Checking name availability');
+  console.log(' Artists Lambda: Checking name availability');
 
   const name = event.queryStringParameters?.name;
 
@@ -424,7 +469,7 @@ async function handleCheckName(event) {
 
     const available = matches.length === 0;
 
-    console.log(`🎵 Name "${name}" availability: ${available}, found ${matches.length} matches`);
+    console.log(` Name "${name}" availability: ${available}, found ${matches.length} matches`);
 
     return {
       statusCode: 200,
@@ -443,13 +488,13 @@ async function handleCheckName(event) {
       })
     };
   } catch (error) {
-    console.error('❌ DynamoDB scan failed:', error);
+    console.error(' DynamoDB scan failed:', error);
     throw error;
   }
 }
 
 async function handleDeleteArtist(artistId) {
-  console.log(`🎵 Artists Lambda: Deleting artist: ${artistId}`);
+  console.log(` Artists Lambda: Deleting artist: ${artistId}`);
 
   try {
     // Step 1: Query all memberships for this artist
@@ -463,7 +508,7 @@ async function handleDeleteArtist(artistId) {
     };
 
     const membershipsResult = await dynamodb.query(membershipQueryParams).promise();
-    console.log(`🎵 Found ${membershipsResult.Items.length} memberships to delete`);
+    console.log(` Found ${membershipsResult.Items.length} memberships to delete`);
 
     // Step 2: Delete all memberships (cascade delete)
     for (const membership of membershipsResult.Items) {
@@ -471,7 +516,7 @@ async function handleDeleteArtist(artistId) {
         TableName: MEMBERSHIPS_TABLE,
         Key: { membership_id: membership.membership_id }
       }).promise();
-      console.log(`✅ Deleted membership: ${membership.membership_id} for user: ${membership.user_id}`);
+      console.log(` Deleted membership: ${membership.membership_id} for user: ${membership.user_id}`);
     }
 
     // Step 3: Delete the artist record
@@ -481,7 +526,7 @@ async function handleDeleteArtist(artistId) {
     };
 
     await dynamodb.delete(artistParams).promise();
-    console.log(`✅ Artist deleted successfully with ${membershipsResult.Items.length} cascaded membership deletions`);
+    console.log(` Artist deleted successfully with ${membershipsResult.Items.length} cascaded membership deletions`);
 
     return {
       statusCode: 204,
@@ -489,7 +534,7 @@ async function handleDeleteArtist(artistId) {
       body: ''
     };
   } catch (error) {
-    console.error('❌ Artist deletion failed:', error);
+    console.error(' Artist deletion failed:', error);
     throw error;
   }
 }
@@ -564,7 +609,7 @@ function calculateMatchScore(artistName, artistLocation, queryName, queryLocatio
 
 // Search artists (fuzzy matching for duplicate prevention)
 async function handleSearchArtists(event) {
-  console.log('🔍 Artists Lambda: Searching artists with fuzzy matching');
+  console.log(' Artists Lambda: Searching artists with fuzzy matching');
 
   const { name, location } = event.queryStringParameters || {};
 
@@ -600,7 +645,7 @@ async function handleSearchArtists(event) {
       .sort((a, b) => b.matchScore - a.matchScore)  // Highest score first
       .slice(0, 10);  // Top 10 matches
 
-    console.log(`🔍 Found ${matches.length} matches for "${name}"`);
+    console.log(` Found ${matches.length} matches for "${name}"`);
 
     return {
       statusCode: 200,
@@ -608,7 +653,7 @@ async function handleSearchArtists(event) {
       body: JSON.stringify({ matches })
     };
   } catch (error) {
-    console.error('❌ Artist search failed:', error);
+    console.error(' Artist search failed:', error);
     throw error;
   }
 }
@@ -621,7 +666,7 @@ function randomColor() {
 
 // Create community artist (public endpoint, no auth)
 async function handleCreateCommunityArtist(event) {
-  console.log('🎵 Artists Lambda: Creating community artist');
+  console.log(' Artists Lambda: Creating community artist');
 
   try {
     const body = JSON.parse(event.body);
@@ -671,6 +716,10 @@ async function handleCreateCommunityArtist(event) {
       member_count: 0,
       allowedEventTypes: ['public_gig'],
 
+      // Data quality tracking (NEW)
+      source: 'frontstage',  // frontstage = public, unauthenticated (dirtiest data)
+      needs_review: true,    // Requires admin review before considered clean
+
       created_at: now,
       updated_at: now
     };
@@ -680,7 +729,7 @@ async function handleCreateCommunityArtist(event) {
       Item: newArtist
     }).promise();
 
-    console.log(`✅ Community artist created: ${artistId} (${name})`);
+    console.log(` Community artist created: ${artistId} (${name})`);
 
     return {
       statusCode: 201,
@@ -695,7 +744,7 @@ async function handleCreateCommunityArtist(event) {
       })
     };
   } catch (error) {
-    console.error('❌ Community artist creation failed:', error);
+    console.error(' Community artist creation failed:', error);
     return {
       statusCode: 500,
       headers: getCommunityHeaders(),
