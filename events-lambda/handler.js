@@ -192,6 +192,48 @@ const computeGeohashFields = (venue) => {
   };
 };
 
+// Generate occurrences from recurring event rules
+const generateOccurrences = (event, rangeStart, rangeEnd) => {
+  if (!event.recurring) return [event];
+
+  const occurrences = [];
+  const start = new Date(event.date);
+  const end = new Date(rangeEnd);
+  let current = new Date(start);
+  let count = 0;
+
+  while (current <= end) {
+    if (current >= new Date(rangeStart)) {
+      occurrences.push({
+        ...event,
+        parentEventId: event.id,
+        instanceDate: current.toISOString().split('T')[0],
+        isRecurringInstance: true,
+        date: current.toISOString().split('T')[0]
+      });
+    }
+
+    // Advance by interval
+    if (event.recurring.type === 'day') {
+      current.setDate(current.getDate() + event.recurring.interval);
+    } else if (event.recurring.type === 'week') {
+      current.setDate(current.getDate() + (event.recurring.interval * 7));
+    } else if (event.recurring.type === 'month') {
+      current.setMonth(current.getMonth() + event.recurring.interval);
+    } else if (event.recurring.type === 'year') {
+      current.setFullYear(current.getFullYear() + event.recurring.interval);
+    }
+
+    count++;
+
+    // Check duration conditions
+    if (event.recurring.duration === 'count' && count >= event.recurring.count) break;
+    if (event.recurring.duration === 'until' && current > new Date(event.recurring.until)) break;
+  }
+
+  return occurrences;
+};
+
 // GET /api/artists/:artistId/calendar - Unified calendar (3 sources)
 const handleGetCalendar = async (event, session) => {
   console.log('CALENDAR DEBUG: Start', { session, pathParameters: event.pathParameters, queryStringParameters: event.queryStringParameters });
@@ -477,6 +519,11 @@ const handleGetCalendar = async (event, session) => {
     }
   }
 
+  // Expand recurring events into occurrences
+  const expandRecurring = (events) => events.flatMap(event =>
+    generateOccurrences(event, startDate, endDate)
+  );
+
   // Post-filter to exact date range
   const filterToRange = (events) => events.filter(e => {
     const eventStart = e.date;
@@ -484,11 +531,16 @@ const handleGetCalendar = async (event, session) => {
     return eventStart <= endDate && eventEnd >= startDate;
   });
 
+  // Expand recurring events BEFORE filtering
+  const expandedArtistEvents = expandRecurring(artistEventsResult.Items || []);
+  const expandedUserEvents = expandRecurring(userEventsResult || []);
+  const expandedOtherArtistEvents = expandRecurring(otherArtistEvents);
+
   // Collect all unique venueIds from events
   const allFilteredEvents = [
-    ...filterToRange(artistEventsResult.Items || []),
-    ...filterToRange(userEventsResult || []),
-    ...filterToRange(otherArtistEvents)
+    ...filterToRange(expandedArtistEvents),
+    ...filterToRange(expandedUserEvents),
+    ...filterToRange(expandedOtherArtistEvents)
   ];
 
   const venueIds = [...new Set(
@@ -537,12 +589,12 @@ const handleGetCalendar = async (event, session) => {
   };
 
   const responseData = {
-    artistEvents: filterToRange(artistEventsResult.Items || []).map(e => ({
+    artistEvents: filterToRange(expandedArtistEvents).map(e => ({
       ...transformEvent(e),
       artistDisplayColour: currentArtistDisplayColour
     })),
-    userEvents: filterToRange(userEventsResult || []).map(transformEvent),
-    otherArtistEvents: filterToRange(otherArtistEvents).map(transformEvent) // Already has artistDisplayColour
+    userEvents: filterToRange(expandedUserEvents).map(transformEvent),
+    otherArtistEvents: filterToRange(expandedOtherArtistEvents).map(transformEvent) // Already has artistDisplayColour
   };
 
   console.log('CALENDAR: Response structure', {
