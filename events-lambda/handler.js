@@ -1042,7 +1042,13 @@ const handleCheckConflicts = async (event, session) => {
     allMemberUnavailability = unavailabilityResults.flatMap(result => result.Items || []);
   }
 
-  const allEvents = [...(artistEventsResult.Items || []), ...allMemberUnavailability];
+  let allEvents = [...(artistEventsResult.Items || []), ...allMemberUnavailability];
+
+  // Exclude the event being edited (if provided)
+  if (eventData.excludeEventId) {
+    allEvents = allEvents.filter(e => e.id !== eventData.excludeEventId);
+    console.log('CONFLICTS: Excluding event being edited', { excludeEventId: eventData.excludeEventId });
+  }
 
   console.log('CONFLICTS: Found events', {
     artistEvents: artistEventsResult.Items?.length || 0,
