@@ -7,14 +7,46 @@ const crypto = require('crypto');
 const ngeohash = require('ngeohash');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
+const ssm = new AWS.SSM({ region: 'eu-west-2' });
 
 // Configuration
-const JWT_SECRET = process.env.JWT_SECRET;
 const EVENTS_TABLE = 'bndy-events';
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
 const ARTISTS_TABLE = 'bndy-artists';
 const VENUES_TABLE = 'bndy-venues';
 const USERS_TABLE = 'bndy-users';
+
+// JWT Secret - cached after first retrieval
+let JWT_SECRET = null;
+
+/**
+ * Get JWT secret from SSM Parameter Store with fallback to env var
+ */
+async function getJWTSecret() {
+  if (JWT_SECRET) {
+    return JWT_SECRET; // Return cached value
+  }
+
+  // Try SSM first
+  try {
+    const result = await ssm.getParameter({
+      Name: '/bndy/auth/jwt-secret',
+      WithDecryption: true
+    }).promise();
+    JWT_SECRET = result.Parameter.Value;
+    console.log('[EVENTS] JWT_SECRET loaded from SSM');
+    return JWT_SECRET;
+  } catch (error) {
+    console.error('[EVENTS] Failed to get JWT_SECRET from SSM:', error.message);
+    // Fallback to environment variable
+    if (process.env.JWT_SECRET) {
+      JWT_SECRET = process.env.JWT_SECRET;
+      console.log('[EVENTS] JWT_SECRET loaded from environment variable (fallback)');
+      return JWT_SECRET;
+    }
+    throw new Error('JWT_SECRET not available from SSM or environment');
+  }
+}
 
 // CORS headers
 const getCorsHeaders = () => ({
@@ -36,7 +68,7 @@ const parseCookies = (cookieHeader) => {
 };
 
 // Authentication middleware
-const requireAuth = (event) => {
+const requireAuth = async (event) => {
   let sessionToken = null;
 
   if (event.cookies && Array.isArray(event.cookies)) {
@@ -58,7 +90,8 @@ const requireAuth = (event) => {
   }
 
   try {
-    const session = jwt.verify(sessionToken, JWT_SECRET);
+    const jwtSecret = await getJWTSecret();
+    const session = jwt.verify(sessionToken, jwtSecret);
     return { session };
   } catch (error) {
     console.error('AUTH: Invalid session token:', error.message);
@@ -95,6 +128,40 @@ const addDays = (dateStr, days) => {
 
 const subtractDays = (dateStr, days) => {
   return addDays(dateStr, -days);
+};
+
+// Validate recurring event rules
+const validateRecurring = (recurring) => {
+  if (!recurring) return null;
+
+  const validTypes = ['day', 'week', 'month', 'year'];
+  const validDurations = ['forever', 'count', 'until'];
+
+  if (!validTypes.includes(recurring.type)) {
+    return 'recurring.type must be one of: day, week, month, year';
+  }
+
+  if (typeof recurring.interval !== 'number' || recurring.interval < 1 || recurring.interval > 99) {
+    return 'recurring.interval must be a number between 1 and 99';
+  }
+
+  if (!validDurations.includes(recurring.duration)) {
+    return 'recurring.duration must be one of: forever, count, until';
+  }
+
+  if (recurring.duration === 'count') {
+    if (typeof recurring.count !== 'number' || recurring.count < 1) {
+      return 'recurring.count must be a number greater than 0';
+    }
+  }
+
+  if (recurring.duration === 'until') {
+    if (!recurring.until || !/^\d{4}-\d{2}-\d{2}$/.test(recurring.until)) {
+      return 'recurring.until must be a valid date in YYYY-MM-DD format';
+    }
+  }
+
+  return null;
 };
 
 // Helper: Fetch venue from database
@@ -527,6 +594,18 @@ const handleCreateArtistEvent = async (event, session) => {
     };
   }
 
+  // Validate recurring rules if present
+  if (eventData.recurring) {
+    const recurringError = validateRecurring(eventData.recurring);
+    if (recurringError) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: recurringError })
+      };
+    }
+  }
+
   const eventId = crypto.randomUUID();
   const now = new Date().toISOString();
 
@@ -551,6 +630,7 @@ const handleCreateArtistEvent = async (event, session) => {
   if (eventData.endTime) newEvent.endTime = eventData.endTime;
   if (eventData.location) newEvent.location = eventData.location;
   if (eventData.notes) newEvent.notes = eventData.notes;
+  if (eventData.recurring) newEvent.recurring = eventData.recurring;
 
   // Sparse GSI keys - only include if present (NOT null)
   if (eventData.venueId) {
@@ -591,6 +671,18 @@ const handleCreateUserUnavailability = async (event, session) => {
     };
   }
 
+  // Validate recurring rules if present
+  if (eventData.recurring) {
+    const recurringError = validateRecurring(eventData.recurring);
+    if (recurringError) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: recurringError })
+      };
+    }
+  }
+
   const eventId = crypto.randomUUID();
   const now = new Date().toISOString();
 
@@ -611,6 +703,7 @@ const handleCreateUserUnavailability = async (event, session) => {
 
   // Optional fields - only include if present
   if (eventData.endDate) unavailableEvent.endDate = eventData.endDate;
+  if (eventData.recurring) unavailableEvent.recurring = eventData.recurring;
 
   // User events never have: venueId, geohash, location, startTime, endTime (all-day only)
 
@@ -1548,7 +1641,7 @@ const handleCreateCommunityEvent = async (event) => {
       Item: newEvent
     }).promise();
 
-    console.log(`✅ Community event created: ${eventId} (${artist.name} @ ${venue.name})`);
+    console.log(` Community event created: ${eventId} (${artist.name} @ ${venue.name})`);
 
     return {
       statusCode: 201,
@@ -1566,7 +1659,7 @@ const handleCreateCommunityEvent = async (event) => {
       })
     };
   } catch (error) {
-    console.error('❌ Community event creation failed:', error);
+    console.error(' Community event creation failed:', error);
     return {
       statusCode: 500,
       headers: getCorsHeaders(),
@@ -1625,7 +1718,7 @@ exports.handler = async (event, context) => {
     }
 
     // AUTHENTICATED ROUTES - Require auth for everything else
-    const authResult = requireAuth(event);
+    const authResult = await requireAuth(event);
     if (authResult.statusCode === 401) {
       return authResult;
     }
