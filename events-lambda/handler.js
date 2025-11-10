@@ -15,6 +15,7 @@ const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
 const ARTISTS_TABLE = 'bndy-artists';
 const VENUES_TABLE = 'bndy-venues';
 const USERS_TABLE = 'bndy-users';
+const ARTIST_VENUES_TABLE = 'bndy-artist-venues';
 
 // JWT Secret - cached after first retrieval
 let JWT_SECRET = null;
@@ -190,6 +191,77 @@ const computeGeohashFields = (venue) => {
     geoLat: venue.latitude,
     geoLng: venue.longitude
   };
+};
+
+// Helper: Ensure artist-venue relationship exists (auto-create for Venue CRM)
+const ensureVenueRelationship = async (artistId, venueId, gigDate) => {
+  try {
+    // Check if relationship already exists
+    const existingRelationship = await dynamodb.query({
+      TableName: ARTIST_VENUES_TABLE,
+      IndexName: 'artist_id-venue_id-index',
+      KeyConditionExpression: 'artist_id = :artistId',
+      FilterExpression: 'venue_id = :venueId',
+      ExpressionAttributeValues: {
+        ':artistId': artistId,
+        ':venueId': venueId
+      }
+    }).promise();
+
+    if (existingRelationship.Items && existingRelationship.Items.length > 0) {
+      console.log('VENUE_CRM: Relationship already exists', { artistId, venueId });
+
+      // Update first_gig_date if this gig is earlier
+      const relationship = existingRelationship.Items[0];
+      if (!relationship.first_gig_date || gigDate < relationship.first_gig_date) {
+        await dynamodb.update({
+          TableName: ARTIST_VENUES_TABLE,
+          Key: { id: relationship.id },
+          UpdateExpression: 'SET first_gig_date = :date, updated_at = :now',
+          ExpressionAttributeValues: {
+            ':date': gigDate,
+            ':now': new Date().toISOString()
+          }
+        }).promise();
+        console.log('VENUE_CRM: Updated first_gig_date', { artistId, venueId, date: gigDate });
+      }
+
+      return;
+    }
+
+    // Create new artist-venue relationship
+    const relationshipId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    const newRelationship = {
+      id: relationshipId,
+      artist_id: artistId,
+      venue_id: venueId,
+      first_gig_date: gigDate,
+      managed_on_bndy: false,
+      created_at: now,
+      updated_at: now
+    };
+
+    await dynamodb.put({
+      TableName: ARTIST_VENUES_TABLE,
+      Item: newRelationship
+    }).promise();
+
+    console.log('VENUE_CRM: Auto-created venue relationship', {
+      relationshipId,
+      artistId,
+      venueId,
+      firstGigDate: gigDate
+    });
+  } catch (error) {
+    // Log error but don't fail the gig creation
+    console.error('VENUE_CRM: Failed to auto-create venue relationship', {
+      error: error.message,
+      artistId,
+      venueId
+    });
+  }
 };
 
 // Generate occurrences from recurring event rules
@@ -656,6 +728,11 @@ const handleCreateArtistEvent = async (event, session) => {
         body: JSON.stringify({ error: recurringError })
       };
     }
+  }
+
+  // Auto-create venue relationship if this is a gig with a venueId
+  if (eventData.venueId && (eventData.type === 'gig' || eventData.type === 'public_gig')) {
+    await ensureVenueRelationship(artistId, eventData.venueId, eventData.date);
   }
 
   const eventId = crypto.randomUUID();
@@ -1229,6 +1306,9 @@ const handleCreatePublicGig = async (event, session) => {
       })
     };
   }
+
+  // Auto-create venue relationship before creating the event
+  await ensureVenueRelationship(artistId, gigData.venueId, gigData.date);
 
   // Create the event
   await dynamodb.put({
