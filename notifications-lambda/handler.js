@@ -290,7 +290,7 @@ function buildMessage(type, performedByName, metadata) {
     case 'song_added':
       return `${performedByName} suggested "${metadata.songTitle}" by ${metadata.songArtist}`;
     case 'song_ready':
-      return `"${metadata.songTitle}" is ready to perform (${metadata.voteCount} votes)`;
+      return `"${metadata.songTitle}" is ready to review (${metadata.voteCount} votes)`;
     case 'gig_added':
       return `${performedByName} added a gig at ${metadata.venueName} on ${metadata.eventDate}`;
     case 'gig_removed':

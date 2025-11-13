@@ -1439,6 +1439,18 @@ const handleCreatePublicGig = async (event, session) => {
     coordinates: { lat: geohashFields.geoLat, lng: geohashFields.geoLng }
   });
 
+  // Trigger gig_added notification
+  await triggerNotification(
+    'gig_added',
+    artistId,
+    session.userId,
+    {
+      eventId: eventId,
+      venueName: gigData.title || venue.name || 'TBA',
+      eventDate: gigData.date
+    }
+  );
+
   return {
     statusCode: 201,
     headers: getCorsHeaders(),
