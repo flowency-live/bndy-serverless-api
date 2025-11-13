@@ -1010,8 +1010,8 @@ async function handleDeleteSuggestion(artistSongId, userId) {
 
 async function handleCheckVoteReminders(artistId, userId) {
   console.log('[CHECK_VOTE_REMINDERS] Checking for unvoted songs', {
-    artistId: artistId.substring(0, 8) + '...',
-    userId: userId.substring(0, 8) + '...'
+    artistId: artistId ? artistId.substring(0, 8) + '...' : 'null',
+    userId: userId ? userId.substring(0, 8) + '...' : 'null'
   });
 
   if (!userId) {
