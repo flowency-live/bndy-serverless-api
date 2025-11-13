@@ -267,7 +267,7 @@ const ensureVenueRelationship = async (artistId, venueId, gigDate) => {
     // Check if relationship already exists
     const existingRelationship = await dynamodb.query({
       TableName: ARTIST_VENUES_TABLE,
-      IndexName: 'artist_id-venue_id-index',
+      IndexName: 'artist_id-index',
       KeyConditionExpression: 'artist_id = :artistId',
       FilterExpression: 'venue_id = :venueId',
       ExpressionAttributeValues: {
