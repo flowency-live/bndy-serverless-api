@@ -384,12 +384,38 @@ async function triggerNotification(type, artistId, userId, metadata) {
   }
 
   try {
+    // Get performer's display name
     let performedByName;
 
     if (type === 'vote_reminder') {
       // For vote_reminder, use System as performer (notification is to self)
       performedByName = 'System';
-    } else if (type === 'song_added') {
+
+      // vote_reminder notifications are sent to the user themselves
+      const payload = {
+        action: 'create',
+        type: type,
+        priority: 'high',
+        artistId: artistId,
+        performedByUserId: userId,
+        performedByName: performedByName,
+        recipientUserId: userId,
+        metadata: metadata
+      };
+
+      console.log('[NOTIFICATION] Triggering vote_reminder for user');
+
+      await lambda.invoke({
+        FunctionName: notificationsFunctionName,
+        InvocationType: 'Event',
+        Payload: JSON.stringify(payload)
+      }).promise();
+
+      return;
+    }
+
+    // For event-based notifications, get performer name
+    if (type === 'song_added') {
       // For song_added, query bndy-artist-memberships (anonymous)
       const membershipResult = await dynamodb.query({
         TableName: 'bndy-artist-memberships',
@@ -416,28 +442,48 @@ async function triggerNotification(type, artistId, userId, metadata) {
                        'Unknown User';
     }
 
-    const payload = {
-      action: 'create',
-      type: type,
-      priority: type === 'vote_reminder' ? 'high' : 'normal',
-      artistId: artistId,
-      performedByUserId: userId,
-      performedByName: performedByName,
-      metadata: metadata
-    };
+    // Query all artist members
+    const membershipsResult = await dynamodb.query({
+      TableName: 'bndy-artist-memberships',
+      IndexName: 'artist_id-index',
+      KeyConditionExpression: 'artist_id = :artistId',
+      ExpressionAttributeValues: {
+        ':artistId': artistId
+      }
+    }).promise();
+
+    // Filter out the performer - they shouldn't get notified about their own action
+    const recipients = (membershipsResult.Items || [])
+      .filter(member => member.user_id !== userId)
+      .map(member => member.user_id);
 
     console.log('[NOTIFICATION] Triggering notification:', {
       type,
-      artistId: artistId.substring(0, 8) + '...'
+      artistId: artistId.substring(0, 8) + '...',
+      recipientCount: recipients.length
     });
 
-    await lambda.invoke({
-      FunctionName: notificationsFunctionName,
-      InvocationType: 'Event',
-      Payload: JSON.stringify(payload)
-    }).promise();
+    // Create notification for each recipient
+    for (const recipientUserId of recipients) {
+      const payload = {
+        action: 'create',
+        type: type,
+        priority: 'normal',
+        artistId: artistId,
+        performedByUserId: userId,
+        performedByName: performedByName,
+        recipientUserId: recipientUserId,
+        metadata: metadata
+      };
 
-    console.log('[NOTIFICATION] Notification triggered successfully');
+      await lambda.invoke({
+        FunctionName: notificationsFunctionName,
+        InvocationType: 'Event',
+        Payload: JSON.stringify(payload)
+      }).promise();
+    }
+
+    console.log('[NOTIFICATION] Notifications triggered successfully for', recipients.length, 'recipients');
   } catch (error) {
     console.error('[NOTIFICATION] Failed to trigger notification (non-blocking):', error.message);
   }

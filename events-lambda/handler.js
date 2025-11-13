@@ -131,6 +131,7 @@ async function triggerNotification(type, artistId, userId, metadata) {
   }
 
   try {
+    // Get performer name
     const userResult = await dynamodb.get({
       TableName: USERS_TABLE,
       Key: { cognito_id: userId }
@@ -140,28 +141,48 @@ async function triggerNotification(type, artistId, userId, metadata) {
                            userResult.Item?.first_name ||
                            'Unknown User';
 
-    const payload = {
-      action: 'create',
-      type: type,
-      priority: 'normal',
-      artistId: artistId,
-      performedByUserId: userId,
-      performedByName: performedByName,
-      metadata: metadata
-    };
+    // Query all artist members
+    const membershipsResult = await dynamodb.query({
+      TableName: MEMBERSHIPS_TABLE,
+      IndexName: 'artist_id-index',
+      KeyConditionExpression: 'artist_id = :artistId',
+      ExpressionAttributeValues: {
+        ':artistId': artistId
+      }
+    }).promise();
+
+    // Filter out the performer - they shouldn't get notified about their own action
+    const recipients = (membershipsResult.Items || [])
+      .filter(member => member.user_id !== userId)
+      .map(member => member.user_id);
 
     console.log('[NOTIFICATION] Triggering notification:', {
       type,
-      artistId: artistId.substring(0, 8) + '...'
+      artistId: artistId.substring(0, 8) + '...',
+      recipientCount: recipients.length
     });
 
-    await lambda.invoke({
-      FunctionName: notificationsFunctionName,
-      InvocationType: 'Event',
-      Payload: JSON.stringify(payload)
-    }).promise();
+    // Create notification for each recipient
+    for (const recipientUserId of recipients) {
+      const payload = {
+        action: 'create',
+        type: type,
+        priority: 'normal',
+        artistId: artistId,
+        performedByUserId: userId,
+        performedByName: performedByName,
+        recipientUserId: recipientUserId,
+        metadata: metadata
+      };
 
-    console.log('[NOTIFICATION] Notification triggered successfully');
+      await lambda.invoke({
+        FunctionName: notificationsFunctionName,
+        InvocationType: 'Event',
+        Payload: JSON.stringify(payload)
+      }).promise();
+    }
+
+    console.log('[NOTIFICATION] Notifications triggered successfully for', recipients.length, 'recipients');
   } catch (error) {
     console.error('[NOTIFICATION] Failed to trigger notification (non-blocking):', error.message);
   }

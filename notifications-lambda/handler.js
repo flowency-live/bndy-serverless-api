@@ -201,11 +201,15 @@ async function dismissNotification(event, user) {
 }
 
 async function createNotification(payload) {
-  const { type, artistId, performedByUserId, performedByName, metadata } = payload;
+  const { type, artistId, performedByUserId, performedByName, recipientUserId, metadata } = payload;
 
   if (!type || !artistId || !performedByUserId || !performedByName) {
     return buildResponse(400, { error: 'Missing required fields' });
   }
+
+  // recipientUserId is the user who will receive the notification
+  // If not specified, default to performedByUserId (for backwards compatibility / vote_reminder)
+  const targetUserId = recipientUserId || performedByUserId;
 
   const validTypes = ['song_added', 'song_ready', 'gig_added', 'gig_removed', 'rehearsal_added', 'rehearsal_removed', 'vote_reminder'];
   if (!validTypes.includes(type)) {
@@ -264,7 +268,7 @@ async function createNotification(payload) {
 
   const newNotification = {
     id: notificationId,
-    user_id: performedByUserId,
+    user_id: targetUserId,
     artist_id: artistId,
     type,
     priority,
