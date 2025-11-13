@@ -1041,9 +1041,10 @@ async function handleCheckVoteReminders(artistId, userId) {
     const votingSongs = votingSongsResult.Items || [];
 
     // Filter to songs where user hasn't voted
+    // votes is an object with userId keys: { "userId1": { value: 5, updated_at: "..." }, ... }
     const unvotedSongs = votingSongs.filter(song => {
-      const votes = song.votes || [];
-      return !votes.some(vote => vote.user_id === userId);
+      const votes = song.votes || {};
+      return !votes[userId];  // Check if userId exists as a key in votes object
     });
 
     const count = unvotedSongs.length;
