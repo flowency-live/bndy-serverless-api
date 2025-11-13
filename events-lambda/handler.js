@@ -8,6 +8,7 @@ const ngeohash = require('ngeohash');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 const ssm = new AWS.SSM({ region: 'eu-west-2' });
+const lambda = new AWS.Lambda({ region: 'eu-west-2' });
 
 // Configuration
 const EVENTS_TABLE = 'bndy-events';
@@ -119,6 +120,52 @@ const verifyMembership = async (userId, artistId) => {
 
   return result.Items && result.Items.length > 0 ? result.Items[0] : null;
 };
+
+// Trigger notification via NotificationsFunction
+async function triggerNotification(type, artistId, userId, metadata) {
+  const notificationsFunctionName = process.env.NOTIFICATIONS_FUNCTION_NAME;
+
+  if (!notificationsFunctionName) {
+    console.log('[NOTIFICATION] NOTIFICATIONS_FUNCTION_NAME not configured, skipping notification');
+    return;
+  }
+
+  try {
+    const userResult = await dynamodb.get({
+      TableName: USERS_TABLE,
+      Key: { cognito_id: userId }
+    }).promise();
+
+    const performedByName = userResult.Item?.display_name ||
+                           userResult.Item?.first_name ||
+                           'Unknown User';
+
+    const payload = {
+      action: 'create',
+      type: type,
+      priority: 'normal',
+      artistId: artistId,
+      performedByUserId: userId,
+      performedByName: performedByName,
+      metadata: metadata
+    };
+
+    console.log('[NOTIFICATION] Triggering notification:', {
+      type,
+      artistId: artistId.substring(0, 8) + '...'
+    });
+
+    await lambda.invoke({
+      FunctionName: notificationsFunctionName,
+      InvocationType: 'Event',
+      Payload: JSON.stringify(payload)
+    }).promise();
+
+    console.log('[NOTIFICATION] Notification triggered successfully');
+  } catch (error) {
+    console.error('[NOTIFICATION] Failed to trigger notification (non-blocking):', error.message);
+  }
+}
 
 // Date helpers
 const addDays = (dateStr, days) => {
@@ -780,6 +827,31 @@ const handleCreateArtistEvent = async (event, session) => {
 
   console.log('EVENT: Created artist event', { eventId, artistId, type: eventData.type });
 
+  // Trigger notifications for gigs and rehearsals
+  if (eventData.type === 'gig' || eventData.type === 'public_gig') {
+    await triggerNotification(
+      'gig_added',
+      artistId,
+      session.userId,
+      {
+        eventId: eventId,
+        venueName: eventData.title || eventData.location || 'TBA',
+        eventDate: eventData.date
+      }
+    );
+  } else if (eventData.type === 'practice') {
+    await triggerNotification(
+      'rehearsal_added',
+      artistId,
+      session.userId,
+      {
+        eventId: eventId,
+        eventDate: eventData.date,
+        startTime: eventData.startTime
+      }
+    );
+  }
+
   return {
     statusCode: 201,
     headers: getCorsHeaders(),
@@ -1038,6 +1110,28 @@ const handleDeleteEvent = async (event, session) => {
   }).promise();
 
   console.log('EVENT: Deleted event', { eventId: id });
+
+  // Trigger notifications for deleted gigs and rehearsals
+  if (existingEvent.type === 'gig' || existingEvent.type === 'public_gig') {
+    await triggerNotification(
+      'gig_removed',
+      artistId,
+      session.userId,
+      {
+        venueName: existingEvent.title || existingEvent.location || 'TBA',
+        eventDate: existingEvent.date
+      }
+    );
+  } else if (existingEvent.type === 'practice') {
+    await triggerNotification(
+      'rehearsal_removed',
+      artistId,
+      session.userId,
+      {
+        eventDate: existingEvent.date
+      }
+    );
+  }
 
   return {
     statusCode: 200,

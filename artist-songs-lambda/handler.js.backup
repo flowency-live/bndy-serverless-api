@@ -1,42 +1,14 @@
 // BNDY Artist Songs Lambda - MVP: Add to Playbook
 const AWS = require('aws-sdk');
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
-const lambda = new AWS.Lambda({ region: 'eu-west-2' });
-const ssm = new AWS.SSM({ region: 'eu-west-2' });
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const https = require('https');
 
-// JWT Secret - cached after first retrieval
-let JWT_SECRET = null;
-
-/**
- * Get JWT secret from SSM Parameter Store with fallback to env var
- */
-async function getJWTSecret() {
-  if (JWT_SECRET) {
-    return JWT_SECRET; // Return cached value
-  }
-
-  // Try SSM first
-  try {
-    const result = await ssm.getParameter({
-      Name: '/bndy/auth/jwt-secret',
-      WithDecryption: true
-    }).promise();
-    JWT_SECRET = result.Parameter.Value;
-    console.log('[ARTIST-SONGS] JWT_SECRET loaded from SSM');
-    return JWT_SECRET;
-  } catch (error) {
-    console.error('[ARTIST-SONGS] Failed to get JWT_SECRET from SSM:', error.message);
-    // Fallback to environment variable
-    if (process.env.JWT_SECRET) {
-      JWT_SECRET = process.env.JWT_SECRET;
-      console.log('[ARTIST-SONGS] JWT_SECRET loaded from environment variable (fallback)');
-      return JWT_SECRET;
-    }
-    throw new Error('JWT_SECRET not available from SSM or environment');
-  }
-}
+// Configuration
+const JWT_SECRET = process.env.JWT_SECRET;
+const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 
 // Parse cookies from event
 const parseCookies = (cookieHeader) => {
@@ -49,7 +21,7 @@ const parseCookies = (cookieHeader) => {
 };
 
 // Extract userId from JWT session cookie
-const extractUserId = async (event) => {
+const extractUserId = (event) => {
   let sessionToken = null;
 
   // HTTP API v2 format - cookies array
@@ -72,8 +44,7 @@ const extractUserId = async (event) => {
   }
 
   try {
-    const jwtSecret = await getJWTSecret();
-    const session = jwt.verify(sessionToken, jwtSecret);
+    const session = jwt.verify(sessionToken, JWT_SECRET);
     return session.userId;
   } catch (error) {
     console.error('[AUTH] JWT verification failed:', error.message);
@@ -91,7 +62,7 @@ exports.handler = async (event, context) => {
   try {
     const artistId = event.pathParameters?.artistId;
     const artistSongId = event.pathParameters?.artistSongId;
-    const userId = await extractUserId(event);
+    const userId = extractUserId(event);
 
     // POST /api/artists/{artistId}/playbook - Add song
     if (method === 'POST' && path.includes('/playbook') && artistId) {
@@ -148,11 +119,6 @@ exports.handler = async (event, context) => {
       return await handleUpdateComment(artistSongId, JSON.parse(event.body));
     }
 
-    // POST /api/artists/{artistId}/check-vote-reminders - Check for unvoted songs
-    if (method === 'POST' && path.includes('/check-vote-reminders') && artistId) {
-      return await handleCheckVoteReminders(artistId, userId);
-    }
-
     return {
       statusCode: 404,
       headers: getCorsHeaders(),
@@ -168,22 +134,231 @@ exports.handler = async (event, context) => {
   }
 };
 
-async function handleAddSongToPlaybook(body, artistId) {
-  // Validate required fields
-  if (!body.song_id || typeof body.song_id !== 'string') {
-    console.error('[ARTIST-SONGS] Invalid song_id in request body:', { song_id: body.song_id, type: typeof body.song_id });
-    return {
-      statusCode: 400,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'song_id is required and must be a valid string' })
-    };
+// Helper: Find song by Spotify URL
+async function findSongBySpotifyUrl(spotifyUrl) {
+  const result = await dynamodb.scan({
+    TableName: 'bndy-songs',
+    FilterExpression: 'spotifyUrl = :url',
+    ExpressionAttributeValues: {
+      ':url': spotifyUrl
+    },
+    Limit: 1
+  }).promise();
+
+  return result.Items && result.Items.length > 0 ? result.Items[0] : null;
+}
+
+// Helper: Extract Spotify track ID from URL
+function extractSpotifyTrackId(spotifyUrl) {
+  const match = spotifyUrl.match(/track\/([a-zA-Z0-9]+)/);
+  return match ? match[1] : null;
+}
+
+// Helper: Get Spotify track metadata with enrichment
+async function getSpotifyTrackMetadata(trackId) {
+  if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
+    console.error('[SPOTIFY] Credentials not configured');
+    return null;
   }
 
+  try {
+    // Get access token
+    const authString = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64');
+
+    const tokenOptions = {
+      hostname: 'accounts.spotify.com',
+      path: '/api/token',
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${authString}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    };
+
+    const token = await new Promise((resolve, reject) => {
+      const req = https.request(tokenOptions, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode === 200) {
+            const response = JSON.parse(data);
+            resolve(response.access_token);
+          } else {
+            reject(new Error(`Token request failed: ${res.statusCode}`));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.write('grant_type=client_credentials');
+      req.end();
+    });
+
+    // Get track metadata
+    const trackOptions = {
+      hostname: 'api.spotify.com',
+      path: `/v1/tracks/${trackId}`,
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    };
+
+    const trackData = await new Promise((resolve, reject) => {
+      const req = https.request(trackOptions, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode === 200) {
+            resolve(JSON.parse(data));
+          } else {
+            reject(new Error(`Track request failed: ${res.statusCode}`));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    // Get artist genres
+    const artistId = trackData.artists[0]?.id;
+    let genre = null;
+
+    if (artistId) {
+      const artistOptions = {
+        hostname: 'api.spotify.com',
+        path: `/v1/artists/${artistId}`,
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      };
+
+      const artistData = await new Promise((resolve, reject) => {
+        const req = https.request(artistOptions, (res) => {
+          let data = '';
+          res.on('data', (chunk) => { data += chunk; });
+          res.on('end', () => {
+            if (res.statusCode === 200) {
+              resolve(JSON.parse(data));
+            } else {
+              resolve(null);
+            }
+          });
+        });
+        req.on('error', () => resolve(null));
+        req.end();
+      });
+
+      if (artistData && artistData.genres && artistData.genres.length > 0) {
+        genre = artistData.genres[0];
+      }
+    }
+
+    return {
+      title: trackData.name,
+      artistName: trackData.artists.map(a => a.name).join(', '),
+      album: trackData.album.name,
+      albumImageUrl: trackData.album.images[0]?.url || null,
+      duration: Math.floor(trackData.duration_ms / 1000),
+      releaseDate: trackData.album.release_date || null,
+      previewUrl: trackData.preview_url || null,
+      genre: genre
+    };
+  } catch (error) {
+    console.error('[SPOTIFY] Error fetching metadata:', error.message);
+    return null;
+  }
+}
+
+// Helper: Create enriched song in bndy-songs
+async function createEnrichedSong(spotifyUrl, metadata) {
+  const songId = crypto.randomUUID();
   const now = new Date().toISOString();
+
+  const song = {
+    id: songId,
+    title: metadata.title,
+    artistName: metadata.artistName,
+    album: metadata.album || null,
+    albumImageUrl: metadata.albumImageUrl || null,
+    duration: metadata.duration || null,
+    genre: metadata.genre || '',
+    releaseDate: metadata.releaseDate || null,
+    previewUrl: metadata.previewUrl || null,
+    spotifyUrl: spotifyUrl,
+    appleMusicUrl: '',
+    youtubeUrl: '',
+    audioFileUrl: '',
+    isFeatured: false,
+    tags: [],
+    createdAt: now,
+    updatedAt: now
+  };
+
+  await dynamodb.put({
+    TableName: 'bndy-songs',
+    Item: song
+  }).promise();
+
+  console.log('[ADD_SONG] Created enriched song:', songId, 'Genre:', metadata.genre || 'none');
+
+  return song;
+}
+
+async function handleAddSongToPlaybook(body, artistId) {
+  const now = new Date().toISOString();
+  let songId = body.song_id; // Legacy support
+
+  // Handle spotifyUrl from frontend
+  if (!songId && body.spotifyUrl) {
+    try {
+      // Check if song already exists
+      let existingSong = await findSongBySpotifyUrl(body.spotifyUrl);
+
+      if (existingSong) {
+        console.log('[ADD_SONG] Found existing song:', existingSong.id);
+        songId = existingSong.id;
+      } else {
+        // Extract Spotify track ID
+        const trackId = extractSpotifyTrackId(body.spotifyUrl);
+
+        if (trackId) {
+          console.log('[ADD_SONG] Creating new song from Spotify:', trackId);
+
+          // Get metadata from Spotify (with enrichment)
+          const metadata = await getSpotifyTrackMetadata(trackId);
+
+          if (metadata) {
+            // Create song with enriched data
+            const newSong = await createEnrichedSong(body.spotifyUrl, metadata);
+            songId = newSong.id;
+          } else {
+            console.error('[ADD_SONG] Failed to get Spotify metadata, creating basic song');
+            // Fallback: create basic song
+            const basicSong = {
+              id: crypto.randomUUID(),
+              spotifyUrl: body.spotifyUrl,
+              title: 'Unknown',
+              artistName: 'Unknown',
+              genre: '',
+              createdAt: now,
+              updatedAt: now
+            };
+            await dynamodb.put({ TableName: 'bndy-songs', Item: basicSong }).promise();
+            songId = basicSong.id;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[ADD_SONG] Error handling spotifyUrl:', error);
+      // Continue without failing - song_id will be undefined (logged for debugging)
+    }
+  }
+
   const artistSong = {
     id: crypto.randomUUID(),
     artist_id: artistId,
-    song_id: body.song_id,
+    song_id: songId,
     status: 'playbook',
     custom_key: body.custom_key || null,
     custom_tempo: body.custom_tempo || null,
@@ -267,7 +442,6 @@ async function handleGetPlaybook(artistId, queryParams) {
 }
 
 async function handleUpdateSong(artistSongId, body) {
-  console.log('[UPDATE-SONG] Received update request:', { artistSongId: artistSongId.substring(0, 8) + '...', body });
   const updates = [];
   const values = { ':now': new Date().toISOString() };
 
@@ -344,21 +518,12 @@ async function handleDeleteSong(artistSongId) {
 
 async function getGlobalSong(songId) {
   try {
-    // Validate songId
-    if (!songId || typeof songId !== 'string') {
-      console.error('[ARTIST-SONGS] Invalid songId:', { songId, type: typeof songId });
-      return null;
-    }
-
     const result = await dynamodb.get({
       TableName: 'bndy-songs',
       Key: { id: songId }
     }).promise();
 
-    if (!result.Item) {
-      console.log('[ARTIST-SONGS] Global song not found:', songId);
-      return null;
-    }
+    if (!result.Item) return null;
 
     // Map DB fields to frontend expected fields
     const song = result.Item;
@@ -370,76 +535,8 @@ async function getGlobalSong(songId) {
       preview_url: song.previewUrl || song.preview_url
     };
   } catch (error) {
-    console.error('[ARTIST-SONGS] Error fetching global song:', { songId, error: error.message });
+    console.error('Error fetching global song:', error);
     return null;
-  }
-}
-
-async function triggerNotification(type, artistId, userId, metadata) {
-  const notificationsFunctionName = process.env.NOTIFICATIONS_FUNCTION_NAME;
-
-  if (!notificationsFunctionName) {
-    console.log('[NOTIFICATION] NOTIFICATIONS_FUNCTION_NAME not configured, skipping notification');
-    return;
-  }
-
-  try {
-    let performedByName;
-
-    if (type === 'vote_reminder') {
-      // For vote_reminder, use System as performer (notification is to self)
-      performedByName = 'System';
-    } else if (type === 'song_added') {
-      // For song_added, query bndy-artist-memberships (anonymous)
-      const membershipResult = await dynamodb.query({
-        TableName: 'bndy-artist-memberships',
-        IndexName: 'user_id-index',
-        KeyConditionExpression: 'user_id = :userId',
-        FilterExpression: 'artist_id = :artistId',
-        ExpressionAttributeValues: {
-          ':userId': userId,
-          ':artistId': artistId
-        },
-        Limit: 1
-      }).promise();
-
-      performedByName = membershipResult.Items?.[0]?.display_name || 'A member';
-    } else {
-      // For all other types, query bndy-users (named)
-      const userResult = await dynamodb.get({
-        TableName: 'bndy-users',
-        Key: { cognito_id: userId }
-      }).promise();
-
-      performedByName = userResult.Item?.display_name ||
-                       userResult.Item?.first_name ||
-                       'Unknown User';
-    }
-
-    const payload = {
-      action: 'create',
-      type: type,
-      priority: type === 'vote_reminder' ? 'high' : 'normal',
-      artistId: artistId,
-      performedByUserId: userId,
-      performedByName: performedByName,
-      metadata: metadata
-    };
-
-    console.log('[NOTIFICATION] Triggering notification:', {
-      type,
-      artistId: artistId.substring(0, 8) + '...'
-    });
-
-    await lambda.invoke({
-      FunctionName: notificationsFunctionName,
-      InvocationType: 'Event',
-      Payload: JSON.stringify(payload)
-    }).promise();
-
-    console.log('[NOTIFICATION] Notification triggered successfully');
-  } catch (error) {
-    console.error('[NOTIFICATION] Failed to trigger notification (non-blocking):', error.message);
   }
 }
 
@@ -499,17 +596,6 @@ async function handleAddSuggestion(body, artistId, userId) {
   }).promise();
 
   const globalSong = await getGlobalSong(body.song_id);
-
-  await triggerNotification(
-    'song_added',
-    artistId,
-    userId,
-    {
-      songId: globalSong.id,
-      songTitle: globalSong.title,
-      songArtist: globalSong.artist_name || globalSong.artistName
-    }
-  );
 
   return {
     statusCode: 201,
@@ -655,99 +741,6 @@ async function handleVote(artistSongId, artistId, userId, body) {
       finalMemberCount: memberCount,
       finalStatus: newStatus
     });
-
-    // Trigger song_ready notification when all members have voted
-    if (statusChanged && newStatus === 'review') {
-      await triggerNotification(
-        'song_ready',
-        artistId,
-        userId,
-        {
-          songId: song.song_id,
-          songTitle: globalSong?.title || 'Unknown Song',
-          songArtist: globalSong?.artist_name || globalSong?.artistName || '',
-          voteCount: voteCount
-        }
-      );
-    }
-
-    // Update vote_reminder notification after voting
-    try {
-      // Query for existing vote_reminder for this user + artist
-      const voteReminderResult = await dynamodb.query({
-        TableName: 'bndy-notifications',
-        IndexName: 'user_id-index',
-        KeyConditionExpression: 'user_id = :userId',
-        FilterExpression: '#type = :type AND artist_id = :artistId AND #read = :false',
-        ExpressionAttributeNames: {
-          '#type': 'type',
-          '#read': 'read'
-        },
-        ExpressionAttributeValues: {
-          ':userId': userId,
-          ':type': 'vote_reminder',
-          ':artistId': artistId,
-          ':false': false
-        }
-      }).promise();
-
-      if (voteReminderResult.Items?.length > 0) {
-        // Recalculate unvoted songs count
-        const allVotingSongsResult = await dynamodb.query({
-          TableName: 'bndy-artist-songs',
-          IndexName: 'artist_id-index',
-          KeyConditionExpression: 'artist_id = :artistId',
-          FilterExpression: '#status = :voting',
-          ExpressionAttributeNames: { '#status': 'status' },
-          ExpressionAttributeValues: {
-            ':artistId': artistId,
-            ':voting': 'voting'
-          }
-        }).promise();
-
-        const remainingUnvoted = (allVotingSongsResult.Items || []).filter(s => {
-          const v = s.votes || {};
-          return !v[userId];
-        }).length;
-
-        console.log('[VOTE] Updating vote_reminder:', { remainingUnvoted });
-
-        const voteReminder = voteReminderResult.Items[0];
-
-        if (remainingUnvoted === 0) {
-          // Mark as read if no more unvoted songs
-          await dynamodb.update({
-            TableName: 'bndy-notifications',
-            Key: { id: voteReminder.id },
-            UpdateExpression: 'SET #read = :true, updated_at = :now',
-            ExpressionAttributeNames: { '#read': 'read' },
-            ExpressionAttributeValues: {
-              ':true': true,
-              ':now': now
-            }
-          }).promise();
-          console.log('[VOTE] Marked vote_reminder as read (count=0)');
-        } else {
-          // Update count in metadata
-          const existingMetadata = JSON.parse(voteReminder.metadata || '{}');
-          const updatedMetadata = { ...existingMetadata, count: remainingUnvoted };
-
-          await dynamodb.update({
-            TableName: 'bndy-notifications',
-            Key: { id: voteReminder.id },
-            UpdateExpression: 'SET metadata = :metadata, message = :message, updated_at = :now',
-            ExpressionAttributeValues: {
-              ':metadata': JSON.stringify(updatedMetadata),
-              ':message': `There ${remainingUnvoted === 1 ? 'is' : 'are'} ${remainingUnvoted} song suggestion${remainingUnvoted === 1 ? '' : 's'} that need${remainingUnvoted === 1 ? 's' : ''} your vote!`,
-              ':now': now
-            }
-          }).promise();
-          console.log('[VOTE] Updated vote_reminder count:', remainingUnvoted);
-        }
-      }
-    } catch (reminderError) {
-      console.error('[VOTE] Failed to update vote_reminder (non-blocking):', reminderError.message);
-    }
 
     return {
       statusCode: 200,
@@ -932,107 +925,6 @@ async function handleDeleteSuggestion(artistSongId, userId) {
     headers: getCorsHeaders(),
     body: ''
   };
-}
-
-async function handleCheckVoteReminders(artistId, userId) {
-  console.log('[CHECK_VOTE_REMINDERS] Checking for unvoted songs', {
-    artistId: artistId.substring(0, 8) + '...',
-    userId: userId.substring(0, 8) + '...'
-  });
-
-  if (!userId) {
-    return {
-      statusCode: 401,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Authentication required' })
-    };
-  }
-
-  try {
-    // Query all songs in voting status for this artist
-    const votingSongsResult = await dynamodb.query({
-      TableName: 'bndy-artist-songs',
-      IndexName: 'artist_id-index',
-      KeyConditionExpression: 'artist_id = :artistId',
-      FilterExpression: '#status = :status',
-      ExpressionAttributeNames: {
-        '#status': 'status'
-      },
-      ExpressionAttributeValues: {
-        ':artistId': artistId,
-        ':status': 'voting'
-      }
-    }).promise();
-
-    const votingSongs = votingSongsResult.Items || [];
-
-    // Filter to songs where user hasn't voted
-    const unvotedSongs = votingSongs.filter(song => {
-      const votes = song.votes || [];
-      return !votes.some(vote => vote.user_id === userId);
-    });
-
-    const count = unvotedSongs.length;
-
-    console.log('[CHECK_VOTE_REMINDERS] Found unvoted songs:', { count });
-
-    // If count is 0, delete any existing vote_reminder notifications
-    if (count === 0) {
-      // Query for existing vote_reminder notifications for this user + artist
-      const existingNotificationsResult = await dynamodb.query({
-        TableName: 'bndy-notifications',
-        IndexName: 'user_id-index',
-        KeyConditionExpression: 'user_id = :userId',
-        FilterExpression: '#type = :type AND artist_id = :artistId',
-        ExpressionAttributeNames: {
-          '#type': 'type'
-        },
-        ExpressionAttributeValues: {
-          ':userId': userId,
-          ':type': 'vote_reminder',
-          ':artistId': artistId
-        }
-      }).promise();
-
-      // Delete any found notifications
-      for (const notification of existingNotificationsResult.Items || []) {
-        await dynamodb.delete({
-          TableName: 'bndy-notifications',
-          Key: { id: notification.id }
-        }).promise();
-        console.log('[CHECK_VOTE_REMINDERS] Deleted vote_reminder notification');
-      }
-
-      return {
-        statusCode: 200,
-        headers: getCorsHeaders(),
-        body: JSON.stringify({ count: 0, message: 'No pending votes' })
-      };
-    }
-
-    // Create/update vote_reminder notification
-    await triggerNotification(
-      'vote_reminder',
-      artistId,
-      userId,
-      {
-        count: count
-      }
-    );
-
-    return {
-      statusCode: 200,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ count, message: 'Vote reminder created' })
-    };
-  } catch (error) {
-    console.error('[CHECK_VOTE_REMINDERS] Error:', error);
-    return {
-      statusCode: 500,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: error.message })
-    };
-  }
 }
 
 function getCorsHeaders() {
