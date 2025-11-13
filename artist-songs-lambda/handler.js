@@ -1026,9 +1026,8 @@ async function handleCheckVoteReminders(artistId, userId) {
     // Query all songs in voting status for this artist
     const votingSongsResult = await dynamodb.query({
       TableName: 'bndy-artist-songs',
-      IndexName: 'artist_id-index',
-      KeyConditionExpression: 'artist_id = :artistId',
-      FilterExpression: '#status = :status',
+      IndexName: 'artist_id-status-index',
+      KeyConditionExpression: 'artist_id = :artistId AND #status = :status',
       ExpressionAttributeNames: {
         '#status': 'status'
       },
@@ -1085,20 +1084,72 @@ async function handleCheckVoteReminders(artistId, userId) {
       };
     }
 
-    // Create/update vote_reminder notification
-    await triggerNotification(
-      'vote_reminder',
-      artistId,
-      userId,
-      {
-        count: count
+    // Check if a vote_reminder notification already exists for this user + artist (dismissed or not)
+    const existingNotificationsResult = await dynamodb.query({
+      TableName: 'bndy-notifications',
+      IndexName: 'user_id-index',
+      KeyConditionExpression: 'user_id = :userId',
+      FilterExpression: '#type = :type AND artist_id = :artistId',
+      ExpressionAttributeNames: {
+        '#type': 'type'
+      },
+      ExpressionAttributeValues: {
+        ':userId': userId,
+        ':type': 'vote_reminder',
+        ':artistId': artistId
       }
-    );
+    }).promise();
+
+    const existingNotifications = existingNotificationsResult.Items || [];
+
+    if (existingNotifications.length === 0) {
+      // No existing notification - create new one
+      await triggerNotification(
+        'vote_reminder',
+        artistId,
+        userId,
+        {
+          count: count
+        }
+      );
+      console.log('[CHECK_VOTE_REMINDERS] Created new vote_reminder notification');
+    } else {
+      // Existing notification(s) found
+      const existingNotification = existingNotifications[0];
+      const existingMetadata = JSON.parse(existingNotification.metadata || '{}');
+      const existingCount = existingMetadata.count || 0;
+      const isDismissed = existingNotification.dismissed || false;
+
+      if (existingCount !== count || isDismissed) {
+        // Count changed OR notification was dismissed - delete old and create new
+        // Delete ALL existing vote_reminder notifications for this user+artist
+        for (const notification of existingNotifications) {
+          await dynamodb.delete({
+            TableName: 'bndy-notifications',
+            Key: { id: notification.id }
+          }).promise();
+        }
+        console.log('[CHECK_VOTE_REMINDERS] Deleted', existingNotifications.length, 'old vote_reminder notification(s)');
+
+        // Create fresh notification
+        await triggerNotification(
+          'vote_reminder',
+          artistId,
+          userId,
+          {
+            count: count
+          }
+        );
+        console.log('[CHECK_VOTE_REMINDERS] Created new vote_reminder notification (count changed from', existingCount, 'to', count, 'or was dismissed)');
+      } else {
+        console.log('[CHECK_VOTE_REMINDERS] Vote_reminder notification exists with same count and not dismissed, no action needed');
+      }
+    }
 
     return {
       statusCode: 200,
       headers: getCorsHeaders(),
-      body: JSON.stringify({ count, message: 'Vote reminder created' })
+      body: JSON.stringify({ count, message: existingNotificationsResult.Items?.length > 0 ? 'Existing reminder found' : 'Vote reminder created' })
     };
   } catch (error) {
     console.error('[CHECK_VOTE_REMINDERS] Error:', error);
