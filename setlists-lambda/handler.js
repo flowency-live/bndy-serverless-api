@@ -74,17 +74,19 @@ async function enrichSetlistWithTuning(setlist) {
 
     console.log(`[ENRICH] Found ${result.Items ? result.Items.length : 0} playbook songs`);
 
-    // Build enrichment map from playbook songs (tuning + custom_duration)
+    // Build enrichment map from playbook songs (tuning + custom_duration + custom_key + notes)
     // NOTE: Setlists store the artist-song 'id', NOT the global 'song_id'
     if (result.Items) {
       result.Items.forEach(item => {
         if (item.id) {
           enrichmentMap[item.id] = {
             tuning: item.tuning || 'standard',
-            custom_duration: item.custom_duration || null
+            custom_duration: item.custom_duration || null,
+            custom_key: item.custom_key || null,
+            notes: item.notes || ''
           };
-          if (item.tuning !== 'standard' || item.custom_duration) {
-            console.log(`[ENRICH] Mapped artist-song ID ${item.id} (global song: ${item.song_id}) -> tuning: ${item.tuning}, custom_duration: ${item.custom_duration}`);
+          if (item.tuning !== 'standard' || item.custom_duration || item.custom_key || item.notes) {
+            console.log(`[ENRICH] Mapped artist-song ID ${item.id} (global song: ${item.song_id}) -> tuning: ${item.tuning}, custom_duration: ${item.custom_duration}, custom_key: ${item.custom_key}, notes: ${item.notes ? 'yes' : 'no'}`);
           }
         }
       });
@@ -95,18 +97,20 @@ async function enrichSetlistWithTuning(setlist) {
     console.error(`[ENRICH] Error fetching playbook songs:`, error);
   }
 
-  // Enrich songs with tuning and custom_duration data
+  // Enrich songs with tuning, custom_duration, custom_key, and notes data
   const enrichedSets = setlist.sets.map(set => ({
     ...set,
     songs: set.songs.map(song => {
-      const enrichment = enrichmentMap[song.song_id] || { tuning: 'standard', custom_duration: null };
-      if (enrichment.tuning !== 'standard' || enrichment.custom_duration) {
-        console.log(`[ENRICH] Applied to "${song.title}": tuning=${enrichment.tuning}, custom_duration=${enrichment.custom_duration}`);
+      const enrichment = enrichmentMap[song.song_id] || { tuning: 'standard', custom_duration: null, custom_key: null, notes: '' };
+      if (enrichment.tuning !== 'standard' || enrichment.custom_duration || enrichment.custom_key || enrichment.notes) {
+        console.log(`[ENRICH] Applied to "${song.title}": tuning=${enrichment.tuning}, custom_duration=${enrichment.custom_duration}, custom_key=${enrichment.custom_key}, notes=${enrichment.notes ? 'yes' : 'no'}`);
       }
       return {
         ...song,
         tuning: enrichment.tuning,
         custom_duration: enrichment.custom_duration,
+        key: enrichment.custom_key || song.key,
+        notes: enrichment.notes
       };
     }),
   }));
