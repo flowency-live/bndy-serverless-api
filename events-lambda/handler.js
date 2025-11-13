@@ -1104,25 +1104,28 @@ const handleDeleteEvent = async (event, session) => {
   const existingEvent = existing.Item;
 
   // Permission check: user events only deletable by owner
-  if (existingEvent.type === 'unavailable' && existingEvent.ownerUserId !== session.userId) {
-    return {
-      statusCode: 403,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Can only delete your own unavailability' })
-    };
-  }
-
-  // Permission check: artist events must belong to the artist context
-  if (existingEvent.artistId && existingEvent.artistId !== artistId) {
-    return {
-      statusCode: 403,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({
-        error: 'Cannot delete events from a different artist context',
-        eventArtistId: existingEvent.artistId,
-        currentArtistId: artistId
-      })
-    };
+  if (existingEvent.type === 'unavailable') {
+    if (existingEvent.ownerUserId !== session.userId) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Can only delete your own unavailability' })
+      };
+    }
+    // For unavailability events, skip the artistId check (they don't have artistId)
+  } else {
+    // Permission check: artist events must belong to the artist context
+    if (existingEvent.artistId && existingEvent.artistId !== artistId) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'Cannot delete events from a different artist context',
+          eventArtistId: existingEvent.artistId,
+          currentArtistId: artistId
+        })
+      };
+    }
   }
 
   await dynamodb.delete({

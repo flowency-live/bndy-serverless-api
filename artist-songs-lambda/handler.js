@@ -557,6 +557,34 @@ async function handleAddSuggestion(body, artistId, userId) {
     }
   );
 
+  // Trigger vote_reminder for all members who haven't voted on this song (everyone except suggester)
+  // Query all artist members
+  const membershipsResult = await dynamodb.query({
+    TableName: 'bndy-artist-memberships',
+    IndexName: 'artist_id-index',
+    KeyConditionExpression: 'artist_id = :artistId',
+    ExpressionAttributeValues: {
+      ':artistId': artistId
+    }
+  }).promise();
+
+  // Filter out the suggester (they already voted)
+  const otherMembers = (membershipsResult.Items || [])
+    .filter(member => member.user_id !== userId)
+    .map(member => member.user_id);
+
+  // Send vote_reminder to each member (they have 1 new song to vote on)
+  for (const memberId of otherMembers) {
+    await triggerNotification(
+      'vote_reminder',
+      artistId,
+      memberId,
+      {
+        count: 1  // They have at least this new song to vote on
+      }
+    );
+  }
+
   return {
     statusCode: 201,
     headers: getCorsHeaders(),
