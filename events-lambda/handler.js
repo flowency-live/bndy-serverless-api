@@ -753,6 +753,84 @@ const handleGetCalendar = async (event, session) => {
   };
 };
 
+// GET /api/artists/:artistId/events - Get all artist events (no date filter)
+const handleGetAllArtistEvents = async (event, session) => {
+  const { artistId } = event.pathParameters;
+
+  // Verify membership
+  const membership = await verifyMembership(session.userId, artistId);
+  if (!membership) {
+    return {
+      statusCode: 403,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Not a member of this artist' })
+    };
+  }
+
+  console.log('EVENTS: Fetching all events for artist', { artistId });
+
+  // Query all events for this artist (no date filter)
+  const eventsResult = await dynamodb.query({
+    TableName: EVENTS_TABLE,
+    IndexName: 'artistId-date-index',
+    KeyConditionExpression: 'artistId = :artistId',
+    ExpressionAttributeValues: {
+      ':artistId': artistId
+    }
+  }).promise();
+
+  const events = eventsResult.Items || [];
+
+  // Enrich with venue data if venueId exists
+  const venueIds = [...new Set(events.filter(e => e.venueId).map(e => e.venueId))];
+  const venueMap = {};
+
+  if (venueIds.length > 0) {
+    const venuePromises = venueIds.map(id =>
+      dynamodb.get({
+        TableName: VENUES_TABLE,
+        Key: { id }
+      }).promise()
+    );
+
+    const venueResults = await Promise.all(venuePromises);
+    venueResults.forEach((result, idx) => {
+      if (result.Item) {
+        const venue = result.Item;
+        venueMap[venueIds[idx]] = {
+          name: venue.name,
+          address: venue.address,
+          latitude: venue.latitude,
+          longitude: venue.longitude,
+          googlePlaceId: venue.google_place_id
+        };
+      }
+    });
+  }
+
+  // Transform events to match frontend interface
+  const transformedEvents = events.map(e => {
+    const venueData = e.venueId ? venueMap[e.venueId] : null;
+    return {
+      ...e,
+      eventType: e.type,
+      venue: venueData?.name || null,
+      venueAddress: venueData?.address || null,
+      venueLatitude: venueData?.latitude || null,
+      venueLongitude: venueData?.longitude || null,
+      venueGooglePlaceId: venueData?.googlePlaceId || null
+    };
+  });
+
+  console.log('EVENTS: Returning all events', { count: transformedEvents.length });
+
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(),
+    body: JSON.stringify(transformedEvents)
+  };
+};
+
 // POST /api/artists/:artistId/events - Create artist event
 const handleCreateArtistEvent = async (event, session) => {
   const { artistId } = event.pathParameters;
@@ -1995,6 +2073,11 @@ exports.handler = async (event, context) => {
     // Unified calendar
     if (routeKey.match(/GET \/api\/artists\/[^/]+\/calendar/)) {
       return await handleGetCalendar(event, session);
+    }
+
+    // Get all artist events (no date filter)
+    if (routeKey.match(/GET \/api\/artists\/[^/]+\/events$/) && !path.includes('/check-conflicts')) {
+      return await handleGetAllArtistEvents(event, session);
     }
 
     // Create artist event
