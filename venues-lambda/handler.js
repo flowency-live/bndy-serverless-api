@@ -22,6 +22,60 @@ function normalizeForSearch(str) {
     .trim();
 }
 
+// Check if two lat/lng coordinates are within specified distance in meters
+function isWithinDistance(lat1, lng1, lat2, lng2, meters) {
+  const R = 6371000; // Earth radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const distance = R * c;
+  return distance <= meters;
+}
+
+// Calculate string similarity percentage using Levenshtein distance
+function calculateSimilarity(str1, str2) {
+  const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
+  const maxLength = Math.max(str1.length, str2.length);
+  return ((maxLength - distance) / maxLength) * 100;
+}
+
+// Calculate address overlap percentage using token-based Jaccard similarity
+function calculateAddressOverlap(addr1, addr2) {
+  const tokens1 = new Set(addr1.toLowerCase().split(/[\s,]+/));
+  const tokens2 = new Set(addr2.toLowerCase().split(/[\s,]+/));
+  const intersection = new Set([...tokens1].filter(x => tokens2.has(x)));
+  const union = new Set([...tokens1, ...tokens2]);
+  return (intersection.size / union.size) * 100;
+}
+
+// Levenshtein distance algorithm for string comparison
+function levenshteinDistance(str1, str2) {
+  const matrix = [];
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[str2.length][str1.length];
+}
+
 // ===== END FUZZY MATCHING HELPERS =====
 
 // Safe JSON parse helper - handles both string and object body
@@ -134,8 +188,15 @@ async function handleGetAllVenues(event) {
         const normalizedName = normalizeForSearch(venue.name);
         const normalizedAddress = normalizeForSearch(venue.address);
 
-        // Match if normalized search is found in normalized name or address
-        return normalizedName.includes(normalizedSearch) || normalizedAddress.includes(normalizedSearch);
+        // Check name variants (alternative names) as well
+        const nameVariants = venue.name_variants || [];
+        const normalizedVariants = nameVariants.map(variant => normalizeForSearch(variant));
+        const matchesVariant = normalizedVariants.some(variant => variant.includes(normalizedSearch));
+
+        // Match if normalized search is found in name, address, or any name variant
+        return normalizedName.includes(normalizedSearch) ||
+               normalizedAddress.includes(normalizedSearch) ||
+               matchesVariant;
       });
 
       console.log(`[Venues] Venues Lambda: Search for "${searchTerm}" returned ${validVenues.length} results`);
@@ -163,7 +224,10 @@ async function handleGetAllVenues(event) {
       standardTicketUrl: venue.standard_ticket_url || '',
       enrichment_status: venue.enrichment_status,
       enrichment_data: venue.enrichment_data,
-      enrichment_date: venue.enrichment_date
+      enrichment_date: venue.enrichment_date,
+      ai_created: venue.ai_created,
+      needs_review: venue.needs_review,
+      created_source: venue.created_source
     }));
 
     console.log(`[Venues] Venues Lambda: Served ${formattedVenues.length} venues (${result.Items.length} total in DB)`);
@@ -221,6 +285,9 @@ async function handleGetVenueById(venueId, event) {
       enrichment_status: result.Item.enrichment_status,
       enrichment_data: result.Item.enrichment_data,
       enrichment_date: result.Item.enrichment_date,
+      ai_created: result.Item.ai_created,
+      needs_review: result.Item.needs_review,
+      created_source: result.Item.created_source,
       createdAt: result.Item.created_at,
       updatedAt: result.Item.updated_at
     };
@@ -259,6 +326,9 @@ async function handleCreateVenue(venueData, event) {
     standard_ticketed: venueData.standardTicketed || false,
     standard_ticket_information: venueData.standardTicketInformation || '',
     standard_ticket_url: venueData.standardTicketUrl || '',
+    ai_created: venueData.ai_created || false,
+    needs_review: venueData.needs_review || false,
+    created_source: venueData.created_source || venueData.source,
     created_at: now,
     updated_at: now
   };
@@ -394,6 +464,9 @@ async function handleUpdateVenue(venueId, venueData, event) {
       enrichment_status: result.Attributes.enrichment_status,
       enrichment_data: result.Attributes.enrichment_data,
       enrichment_date: result.Attributes.enrichment_date,
+      ai_created: result.Attributes.ai_created,
+      needs_review: result.Attributes.needs_review,
+      created_source: result.Attributes.created_source,
       createdAt: result.Attributes.created_at,
       updatedAt: result.Attributes.updated_at
     };
