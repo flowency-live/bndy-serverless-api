@@ -1467,6 +1467,7 @@ const handleCreatePublicGig = async (event, session) => {
 
   // Optional fields
   if (gigData.title) newEvent.title = gigData.title;
+  if (gigData.hasCustomTitle !== undefined) newEvent.hasCustomTitle = gigData.hasCustomTitle;
   if (gigData.description) newEvent.description = gigData.description;
   if (gigData.endDate) newEvent.endDate = gigData.endDate;
   if (gigData.startTime) newEvent.startTime = gigData.startTime;
@@ -1913,7 +1914,7 @@ const handleCreateCommunityEvent = async (event) => {
 
   try {
     const body = JSON.parse(event.body);
-    const { artistId, venueId, date, startTime, endTime, title } = body;
+    const { artistId, venueId, date, startTime, endTime, title, isPublic, source } = body;
 
     // Validation
     if (!artistId || !venueId || !date || !startTime) {
@@ -1965,14 +1966,14 @@ const handleCreateCommunityEvent = async (event) => {
       startTime: startTime,
       endTime: endTime || '00:00',
       type: 'gig',
-      isPublic: true,
+      isPublic: isPublic !== undefined ? isPublic : true,
       isAllDay: false,
 
       // Geolocation
       ...geohashFields,
 
       // Community event flags
-      source: 'community_wizard',
+      source: source || 'community_wizard',
       verifiedByArtist: false,  // Ghost checkmark
       verifiedByVenue: false,   // Future feature
       createdByUserId: null,    // Anonymous community builder
