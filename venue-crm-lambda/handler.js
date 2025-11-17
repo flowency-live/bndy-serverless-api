@@ -138,20 +138,60 @@ exports.handler = async (event) => {
         return createResponse(400, { error: 'Artist ID and body are required' });
       }
 
-      const { venueId, notes, customVenueName } = body;
+      const { venueId, notes, customVenueName, newVenueData } = body;
 
-      if (!venueId) {
-        return createResponse(400, { error: 'venueId is required' });
-      }
+      let finalVenueId = venueId;
 
-      // Check if venue exists
-      const venueResult = await dynamodb.get({
-        TableName: 'bndy-venues',
-        Key: { id: venueId },
-      }).promise();
+      // If newVenueData is provided, create the venue first
+      if (newVenueData) {
+        const { name, address, city, postcode, googlePlaceId, latitude, longitude, socialMediaUrls } = newVenueData;
 
-      if (!venueResult.Item) {
-        return createResponse(404, { error: 'Venue not found' });
+        if (!name || !address) {
+          return createResponse(400, { error: 'newVenueData requires name and address' });
+        }
+
+        // Generate a new venue ID
+        finalVenueId = uuidv4();
+        const now = new Date().toISOString();
+
+        const newVenue = {
+          id: finalVenueId,
+          name,
+          address,
+          city: city || null,
+          postcode: postcode || null,
+          googlePlaceId: googlePlaceId || null,
+          latitude: latitude || 0,
+          longitude: longitude || 0,
+          created_at: now,
+          updated_at: now,
+        };
+
+        // Add social media URLs if provided
+        if (socialMediaUrls && Array.isArray(socialMediaUrls) && socialMediaUrls.length > 0) {
+          newVenue.socialMediaUrls = socialMediaUrls;
+        }
+
+        await dynamodb.put({
+          TableName: 'bndy-venues',
+          Item: newVenue,
+        }).promise();
+
+        console.log('Created new venue:', finalVenueId, name);
+      } else {
+        // Existing venue flow - check if it exists
+        if (!finalVenueId) {
+          return createResponse(400, { error: 'venueId is required when not creating a new venue' });
+        }
+
+        const venueResult = await dynamodb.get({
+          TableName: 'bndy-venues',
+          Key: { id: finalVenueId },
+        }).promise();
+
+        if (!venueResult.Item) {
+          return createResponse(404, { error: 'Venue not found' });
+        }
       }
 
       // Check if relationship already exists
@@ -162,7 +202,7 @@ exports.handler = async (event) => {
         FilterExpression: 'venue_id = :venueId',
         ExpressionAttributeValues: {
           ':artistId': artistId,
-          ':venueId': venueId,
+          ':venueId': finalVenueId,
         },
       }).promise();
 
@@ -170,15 +210,21 @@ exports.handler = async (event) => {
         return createResponse(409, { error: 'Venue relationship already exists' });
       }
 
+      // Fetch venue details for managed_on_bndy flag
+      const finalVenueResult = await dynamodb.get({
+        TableName: 'bndy-venues',
+        Key: { id: finalVenueId },
+      }).promise();
+
       const now = new Date().toISOString();
       const artistVenue = {
         id: uuidv4(),
         artist_id: artistId,
-        venue_id: venueId,
+        venue_id: finalVenueId,
         notes: notes || '',
         custom_venue_name: customVenueName || null,
         first_gig_date: null,
-        managed_on_bndy: Boolean(venueResult.Item.managed_by_user_id),
+        managed_on_bndy: Boolean(finalVenueResult.Item?.managed_by_user_id),
         last_venue_update_at: null,
         created_at: now,
         updated_at: now,
@@ -534,6 +580,187 @@ exports.handler = async (event) => {
       });
 
       return createResponse(200, gigs);
+    }
+
+    // GET /api/artists/{artistId}/crm/venues/{venueId}/notes - List notes for venue
+    if (method === 'GET' && path.match(/\/api\/artists\/[^/]+\/crm\/venues\/[^/]+\/notes$/)) {
+      const artistId = event.pathParameters?.artistId;
+      const venueId = event.pathParameters?.venueId;
+
+      if (!artistId || !venueId) {
+        return createResponse(400, { error: 'Artist ID and venue ID are required' });
+      }
+
+      // Find artist-venue relationship
+      const queryResult = await dynamodb.query({
+        TableName: 'bndy-artist-venues',
+        IndexName: 'artist_id-index',
+        KeyConditionExpression: 'artist_id = :artistId',
+        FilterExpression: 'venue_id = :venueId',
+        ExpressionAttributeValues: {
+          ':artistId': artistId,
+          ':venueId': venueId,
+        },
+      }).promise();
+
+      if (!queryResult.Items || queryResult.Items.length === 0) {
+        return createResponse(404, { error: 'Venue relationship not found' });
+      }
+
+      const artistVenue = queryResult.Items[0];
+
+      // Query notes (most recent first with ScanIndexForward: false)
+      const notesResult = await dynamodb.query({
+        TableName: 'bndy-venue-notes',
+        IndexName: 'artist_venue_id-index',
+        KeyConditionExpression: 'artist_venue_id = :artistVenueId',
+        ExpressionAttributeValues: {
+          ':artistVenueId': artistVenue.id,
+        },
+        ScanIndexForward: false,
+      }).promise();
+
+      return createResponse(200, notesResult.Items || []);
+    }
+
+    // POST /api/artists/{artistId}/crm/venues/{venueId}/notes - Create note
+    if (method === 'POST' && path.match(/\/api\/artists\/[^/]+\/crm\/venues\/[^/]+\/notes$/)) {
+      const artistId = event.pathParameters?.artistId;
+      const venueId = event.pathParameters?.venueId;
+      const body = parseBody(event);
+
+      if (!artistId || !venueId || !body) {
+        return createResponse(400, { error: 'Artist ID, venue ID, and body are required' });
+      }
+
+      const { note_text, created_by_user_id, created_by_display_name } = body;
+
+      if (!note_text || !created_by_user_id || !created_by_display_name) {
+        return createResponse(400, { error: 'note_text, created_by_user_id, and created_by_display_name are required' });
+      }
+
+      // Find artist-venue relationship
+      const queryResult = await dynamodb.query({
+        TableName: 'bndy-artist-venues',
+        IndexName: 'artist_id-index',
+        KeyConditionExpression: 'artist_id = :artistId',
+        FilterExpression: 'venue_id = :venueId',
+        ExpressionAttributeValues: {
+          ':artistId': artistId,
+          ':venueId': venueId,
+        },
+      }).promise();
+
+      if (!queryResult.Items || queryResult.Items.length === 0) {
+        return createResponse(404, { error: 'Venue relationship not found' });
+      }
+
+      const artistVenue = queryResult.Items[0];
+
+      const now = new Date().toISOString();
+      const note = {
+        id: uuidv4(),
+        artist_venue_id: artistVenue.id,
+        artist_id: artistId,
+        venue_id: venueId,
+        note_text: note_text,
+        created_by_user_id: created_by_user_id,
+        created_by_display_name: created_by_display_name,
+        is_edited: false,
+        created_at: now,
+        updated_at: now,
+      };
+
+      await dynamodb.put({
+        TableName: 'bndy-venue-notes',
+        Item: note,
+      }).promise();
+
+      return createResponse(201, note);
+    }
+
+    // PUT /api/artists/{artistId}/crm/venues/{venueId}/notes/{noteId} - Update note
+    if (method === 'PUT' && path.match(/\/api\/artists\/[^/]+\/crm\/venues\/[^/]+\/notes\/[^/]+$/)) {
+      const noteId = event.pathParameters?.noteId;
+      const body = parseBody(event);
+
+      if (!noteId || !body) {
+        return createResponse(400, { error: 'Note ID and body are required' });
+      }
+
+      const { note_text, user_id } = body;
+
+      if (!note_text || !user_id) {
+        return createResponse(400, { error: 'note_text and user_id are required' });
+      }
+
+      // Fetch existing note
+      const noteResult = await dynamodb.get({
+        TableName: 'bndy-venue-notes',
+        Key: { id: noteId },
+      }).promise();
+
+      if (!noteResult.Item) {
+        return createResponse(404, { error: 'Note not found' });
+      }
+
+      // Check ownership
+      if (noteResult.Item.created_by_user_id !== user_id) {
+        return createResponse(403, { error: 'You can only edit your own notes' });
+      }
+
+      // Update note
+      await dynamodb.update({
+        TableName: 'bndy-venue-notes',
+        Key: { id: noteId },
+        UpdateExpression: 'SET note_text = :noteText, is_edited = :isEdited, updated_at = :updatedAt',
+        ExpressionAttributeValues: {
+          ':noteText': note_text,
+          ':isEdited': true,
+          ':updatedAt': new Date().toISOString(),
+        },
+      }).promise();
+
+      // Fetch updated note
+      const updatedResult = await dynamodb.get({
+        TableName: 'bndy-venue-notes',
+        Key: { id: noteId },
+      }).promise();
+
+      return createResponse(200, updatedResult.Item);
+    }
+
+    // DELETE /api/artists/{artistId}/crm/venues/{venueId}/notes/{noteId} - Delete note
+    if (method === 'DELETE' && path.match(/\/api\/artists\/[^/]+\/crm\/venues\/[^/]+\/notes\/[^/]+$/)) {
+      const noteId = event.pathParameters?.noteId;
+      const queryParams = event.queryStringParameters || {};
+      const userId = queryParams.user_id;
+
+      if (!noteId || !userId) {
+        return createResponse(400, { error: 'Note ID and user_id are required' });
+      }
+
+      // Fetch existing note
+      const noteResult = await dynamodb.get({
+        TableName: 'bndy-venue-notes',
+        Key: { id: noteId },
+      }).promise();
+
+      if (!noteResult.Item) {
+        return createResponse(404, { error: 'Note not found' });
+      }
+
+      // Check ownership
+      if (noteResult.Item.created_by_user_id !== userId) {
+        return createResponse(403, { error: 'You can only delete your own notes' });
+      }
+
+      await dynamodb.delete({
+        TableName: 'bndy-venue-notes',
+        Key: { id: noteId },
+      }).promise();
+
+      return createResponse(204, {});
     }
 
     // Route not found
