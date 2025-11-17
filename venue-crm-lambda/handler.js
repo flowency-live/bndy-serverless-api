@@ -66,6 +66,17 @@ async function enrichArtistVenue(artistVenue) {
       Select: 'COUNT',
     }).promise();
 
+    // Count notes
+    const notesResult = await dynamodb.query({
+      TableName: 'bndy-venue-notes',
+      IndexName: 'artist_venue_id-index',
+      KeyConditionExpression: 'artist_venue_id = :artistVenueId',
+      ExpressionAttributeValues: {
+        ':artistVenueId': artistVenue.id,
+      },
+      Select: 'COUNT',
+    }).promise();
+
     // Compute managed_on_bndy flag
     const managedOnBndy = Boolean(venue.managed_by_user_id);
 
@@ -86,6 +97,7 @@ async function enrichArtistVenue(artistVenue) {
       },
       contactCount: contactsResult.Count || 0,
       gigCount: gigsResult.Count || 0,
+      noteCount: notesResult.Count || 0,
     };
   } catch (error) {
     console.error('Error enriching artist-venue:', error);
