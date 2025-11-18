@@ -1802,11 +1802,43 @@ const handleGetAllPublicEvents = async (event) => {
 
     console.log('PUBLIC_ALL: Found events', { count: allEvents.length });
 
+    // Enrich events with artist and venue data
+    const artistIds = [...new Set(allEvents.map(e => e.artistId).filter(Boolean))];
+    const venueIds = [...new Set(allEvents.map(e => e.venueId).filter(Boolean))];
+
+    const [artistResults, venueResults] = await Promise.all([
+      Promise.all(artistIds.map(id => dynamodb.get({ TableName: ARTISTS_TABLE, Key: { id } }).promise())),
+      Promise.all(venueIds.map(id => dynamodb.get({ TableName: VENUES_TABLE, Key: { id } }).promise()))
+    ]);
+
+    // Build lookup maps
+    const artistMap = {};
+    artistResults.forEach((result, idx) => {
+      if (result.Item) artistMap[artistIds[idx]] = result.Item;
+    });
+
+    const venueMap = {};
+    venueResults.forEach((result, idx) => {
+      if (result.Item) venueMap[venueIds[idx]] = result.Item;
+    });
+
+    // Join events with artist and venue data
+    const enrichedEvents = allEvents.map(e => ({
+      ...e,
+      artistName: artistMap[e.artistId]?.name,
+      venueName: venueMap[e.venueId]?.name,
+      venue: venueMap[e.venueId] ? {
+        city: venueMap[e.venueId].city
+      } : null
+    }));
+
+    console.log('PUBLIC_ALL: Enriched events with artist and venue data');
+
     // Return full event data (clustering on client will handle display)
     return {
       statusCode: 200,
       headers: getCorsHeaders(),
-      body: JSON.stringify({ events: allEvents })
+      body: JSON.stringify({ events: enrichedEvents })
     };
   } catch (error) {
     console.error('PUBLIC_ALL: Error:', error);
