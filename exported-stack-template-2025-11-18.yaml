@@ -1,0 +1,1833 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "BNDY Platform Serverless API - Lambda Functions + API Gateway (Redeploying)",
+    "Parameters": {
+        "Stage": {
+            "Type": "String",
+            "Default": "prod",
+            "Description": "Deployment stage (dev, staging, prod)"
+        }
+    },
+    "Outputs": {
+        "BndyHttpApi": {
+            "Description": "HTTP API Gateway endpoint URL for BNDY API",
+            "Value": {
+                "Fn::Sub": "https://${BndyHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-HttpApiUrl"
+                }
+            }
+        },
+        "VenuesFunctionArn": {
+            "Description": "Venues Lambda Function ARN",
+            "Value": {
+                "Fn::GetAtt": [
+                    "VenuesFunction",
+                    "Arn"
+                ]
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-VenuesFunctionArn"
+                }
+            }
+        },
+        "AuthFunctionArn": {
+            "Description": "Auth Lambda Function ARN",
+            "Value": {
+                "Fn::GetAtt": [
+                    "AuthFunction",
+                    "Arn"
+                ]
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-AuthFunctionArn"
+                }
+            }
+        },
+        "UsersFunctionArn": {
+            "Description": "Users Lambda Function ARN",
+            "Value": {
+                "Fn::GetAtt": [
+                    "UsersFunction",
+                    "Arn"
+                ]
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-UsersFunctionArn"
+                }
+            }
+        },
+        "ArtistsFunctionArn": {
+            "Description": "Artists Lambda Function ARN",
+            "Value": {
+                "Fn::GetAtt": [
+                    "ArtistsFunction",
+                    "Arn"
+                ]
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-ArtistsFunctionArn"
+                }
+            }
+        },
+        "SongsFunctionArn": {
+            "Description": "Songs Lambda Function ARN",
+            "Value": {
+                "Fn::GetAtt": [
+                    "SongsFunction",
+                    "Arn"
+                ]
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-SongsFunctionArn"
+                }
+            }
+        },
+        "AuthLogGroupName": {
+            "Description": "Auth Lambda CloudWatch Log Group Name",
+            "Value": {
+                "Ref": "AuthLogGroup"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-AuthLogGroup"
+                }
+            }
+        },
+        "UsersLogGroupName": {
+            "Description": "Users Lambda CloudWatch Log Group Name",
+            "Value": {
+                "Ref": "UsersLogGroup"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-UsersLogGroup"
+                }
+            }
+        },
+        "EventsLogGroupName": {
+            "Description": "Events Lambda CloudWatch Log Group Name",
+            "Value": {
+                "Ref": "EventsLogGroup"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-EventsLogGroup"
+                }
+            }
+        }
+    },
+    "Resources": {
+        "ArtistMembershipsTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "TableName": "bndy-artist-memberships",
+                "BillingMode": "PAY_PER_REQUEST",
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "membership_id",
+                        "AttributeType": "S"
+                    },
+                    {
+                        "AttributeName": "user_id",
+                        "AttributeType": "S"
+                    },
+                    {
+                        "AttributeName": "artist_id",
+                        "AttributeType": "S"
+                    }
+                ],
+                "KeySchema": [
+                    {
+                        "AttributeName": "membership_id",
+                        "KeyType": "HASH"
+                    }
+                ],
+                "GlobalSecondaryIndexes": [
+                    {
+                        "IndexName": "user_id-index",
+                        "KeySchema": [
+                            {
+                                "AttributeName": "user_id",
+                                "KeyType": "HASH"
+                            }
+                        ],
+                        "Projection": {
+                            "ProjectionType": "ALL"
+                        }
+                    },
+                    {
+                        "IndexName": "artist_id-index",
+                        "KeySchema": [
+                            {
+                                "AttributeName": "artist_id",
+                                "KeyType": "HASH"
+                            }
+                        ],
+                        "Projection": {
+                            "ProjectionType": "ALL"
+                        }
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Project",
+                        "Value": "BNDY"
+                    },
+                    {
+                        "Key": "Environment",
+                        "Value": {
+                            "Ref": "Stage"
+                        }
+                    },
+                    {
+                        "Key": "Component",
+                        "Value": "Memberships"
+                    }
+                ]
+            },
+            "Metadata": {
+                "SamResourceId": "ArtistMembershipsTable"
+            }
+        },
+        "AuthLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Sub": "/aws/lambda/${AuthFunction}"
+                },
+                "RetentionInDays": 30
+            },
+            "Metadata": {
+                "SamResourceId": "AuthLogGroup"
+            }
+        },
+        "UsersLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Sub": "/aws/lambda/${UsersFunction}"
+                },
+                "RetentionInDays": 30
+            },
+            "Metadata": {
+                "SamResourceId": "UsersLogGroup"
+            }
+        },
+        "EventsLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Sub": "/aws/lambda/${EventsFunction}"
+                },
+                "RetentionInDays": 30
+            },
+            "Metadata": {
+                "SamResourceId": "EventsLogGroup"
+            }
+        },
+        "VenuesLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Sub": "/aws/lambda/${VenuesFunction}"
+                },
+                "RetentionInDays": 30
+            },
+            "Metadata": {
+                "SamResourceId": "VenuesLogGroup"
+            }
+        },
+        "ArtistsLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Sub": "/aws/lambda/${ArtistsFunction}"
+                },
+                "RetentionInDays": 30
+            },
+            "Metadata": {
+                "SamResourceId": "ArtistsLogGroup"
+            }
+        },
+        "SongsLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Sub": "/aws/lambda/${SongsFunction}"
+                },
+                "RetentionInDays": 30
+            },
+            "Metadata": {
+                "SamResourceId": "SongsLogGroup"
+            }
+        },
+        "MembershipsLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Sub": "/aws/lambda/${MembershipsFunction}"
+                },
+                "RetentionInDays": 30
+            },
+            "Metadata": {
+                "SamResourceId": "MembershipsLogGroup"
+            }
+        },
+        "AuthErrorAlarm": {
+            "Type": "AWS::CloudWatch::Alarm",
+            "Properties": {
+                "AlarmName": {
+                    "Fn::Sub": "${AWS::StackName}-AuthFunction-Errors"
+                },
+                "AlarmDescription": "Alarm for Auth Lambda function errors",
+                "MetricName": "Errors",
+                "Namespace": "AWS/Lambda",
+                "Statistic": "Sum",
+                "Period": 300,
+                "EvaluationPeriods": 2,
+                "Threshold": 5,
+                "ComparisonOperator": "GreaterThanThreshold",
+                "Dimensions": [
+                    {
+                        "Name": "FunctionName",
+                        "Value": {
+                            "Ref": "AuthFunction"
+                        }
+                    }
+                ]
+            },
+            "Metadata": {
+                "SamResourceId": "AuthErrorAlarm"
+            }
+        },
+        "VenuesFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Metadata": {
+                "SamResourceId": "VenuesFunction"
+            },
+            "Properties": {
+                "Code": {
+                    "S3Bucket": "bndy-deployment-artifacts-1758805276",
+                    "S3Key": "e856862c5513a07bbe838f5621cca68f"
+                },
+                "Description": "BNDY Venues API - handles /api/venues endpoints",
+                "Handler": "handler.handler",
+                "MemorySize": 512,
+                "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+                "Runtime": "nodejs18.x",
+                "Timeout": 30,
+                "Environment": {
+                    "Variables": {
+                        "NODE_ENV": "production",
+                        "JWT_SECRET": "2c7fccb87d98f68d36b19d528aa81a61afacf91058c18ee49738c35b50b81aa5",
+                        "_X_AMZN_TRACE_ID": {
+                            "Ref": "AWS::NoValue"
+                        }
+                    }
+                },
+                "Tags": [
+                    {
+                        "Key": "lambda:createdBy",
+                        "Value": "SAM"
+                    }
+                ],
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },
+        "VenuesFunctionGetAllVenuesPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "VenuesFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/api/venues",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "VenuesFunctionCreateVenuePermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "VenuesFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/POST/api/venues",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "VenuesFunctionGetVenueByIdPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "VenuesFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/api/venues/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "VenuesFunctionUpdateVenuePermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "VenuesFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/PUT/api/venues/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "VenuesFunctionDeleteVenuePermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "VenuesFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/DELETE/api/venues/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "AuthFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Metadata": {
+                "SamResourceId": "AuthFunction"
+            },
+            "Properties": {
+                "Code": {
+                    "S3Bucket": "bndy-deployment-artifacts-1758805276",
+                    "S3Key": "717be2e551766aadfc25976a321d4ed5"
+                },
+                "Description": "BNDY Authentication API - handles OAuth and sessions",
+                "Handler": "handler.handler",
+                "MemorySize": 512,
+                "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+                "Runtime": "nodejs18.x",
+                "Timeout": 30,
+                "Environment": {
+                    "Variables": {
+                        "NODE_ENV": "production",
+                        "JWT_SECRET": "2c7fccb87d98f68d36b19d528aa81a61afacf91058c18ee49738c35b50b81aa5",
+                        "_X_AMZN_TRACE_ID": {
+                            "Ref": "AWS::NoValue"
+                        }
+                    }
+                },
+                "Tags": [
+                    {
+                        "Key": "lambda:createdBy",
+                        "Value": "SAM"
+                    }
+                ],
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },
+        "AuthFunctionApiMePermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "AuthFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/api/me",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "AuthFunctionAuthCallbackPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "AuthFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/auth/callback",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "AuthFunctionAuthGooglePermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "AuthFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/auth/google",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "AuthFunctionAuthLandingPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "AuthFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/auth/landing",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "AuthFunctionAuthLogoutPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "AuthFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/POST/auth/logout",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "UsersFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Metadata": {
+                "SamResourceId": "UsersFunction"
+            },
+            "Properties": {
+                "Code": {
+                    "S3Bucket": "bndy-deployment-artifacts-1758805276",
+                    "S3Key": "9de1de53039653f510a8e381fe8bbc3c"
+                },
+                "Description": "BNDY Users API - handles user profile management",
+                "Handler": "handler.handler",
+                "MemorySize": 512,
+                "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+                "Runtime": "nodejs18.x",
+                "Timeout": 30,
+                "Environment": {
+                    "Variables": {
+                        "NODE_ENV": "production",
+                        "JWT_SECRET": "2c7fccb87d98f68d36b19d528aa81a61afacf91058c18ee49738c35b50b81aa5",
+                        "_X_AMZN_TRACE_ID": {
+                            "Ref": "AWS::NoValue"
+                        }
+                    }
+                },
+                "Tags": [
+                    {
+                        "Key": "lambda:createdBy",
+                        "Value": "SAM"
+                    }
+                ],
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },
+        "UsersFunctionListUsersPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "UsersFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/users",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "UsersFunctionGetUserProfilePermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "UsersFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/users/profile",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "UsersFunctionUpdateUserProfilePermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "UsersFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/PUT/users/profile",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "EventsFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Metadata": {
+                "SamResourceId": "EventsFunction"
+            },
+            "Properties": {
+                "Code": {
+                    "S3Bucket": "bndy-deployment-artifacts-1758805276",
+                    "S3Key": "a917a77bfe26e706f7c8a3ee5dbdf894"
+                },
+                "Description": "BNDY Events API - handles calendar and event management",
+                "Handler": "handler.handler",
+                "MemorySize": 512,
+                "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+                "Runtime": "nodejs18.x",
+                "Timeout": 30,
+                "Environment": {
+                    "Variables": {
+                        "NODE_ENV": "production",
+                        "JWT_SECRET": "2c7fccb87d98f68d36b19d528aa81a61afacf91058c18ee49738c35b50b81aa5",
+                        "_X_AMZN_TRACE_ID": {
+                            "Ref": "AWS::NoValue"
+                        }
+                    }
+                },
+                "Tags": [
+                    {
+                        "Key": "lambda:createdBy",
+                        "Value": "SAM"
+                    }
+                ],
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },
+        "EventsFunctionCreateEventPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "EventsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/POST/admin/events",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "EventsFunctionGetBandEventsPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "EventsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/admin/events/band/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "EventsFunctionUpdateEventPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "EventsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/PUT/admin/events/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "EventsFunctionDeleteEventPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "EventsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/DELETE/admin/events/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "EventsFunctionGetPublicEventsPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "EventsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/api/events",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "ArtistsFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Metadata": {
+                "SamResourceId": "ArtistsFunction"
+            },
+            "Properties": {
+                "Code": {
+                    "S3Bucket": "bndy-deployment-artifacts-1758805276",
+                    "S3Key": "313956c7f87da035e211502f663c02fd"
+                },
+                "Description": "BNDY Artists API - handles /api/artists endpoints",
+                "Handler": "handler.handler",
+                "MemorySize": 512,
+                "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+                "Runtime": "nodejs18.x",
+                "Timeout": 30,
+                "Environment": {
+                    "Variables": {
+                        "NODE_ENV": "production",
+                        "JWT_SECRET": "2c7fccb87d98f68d36b19d528aa81a61afacf91058c18ee49738c35b50b81aa5",
+                        "_X_AMZN_TRACE_ID": {
+                            "Ref": "AWS::NoValue"
+                        }
+                    }
+                },
+                "Tags": [
+                    {
+                        "Key": "lambda:createdBy",
+                        "Value": "SAM"
+                    }
+                ],
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },
+        "ArtistsFunctionGetAllArtistsPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "ArtistsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/api/artists",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "ArtistsFunctionCreateArtistPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "ArtistsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/POST/api/artists",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "ArtistsFunctionGetArtistByIdPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "ArtistsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/api/artists/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "ArtistsFunctionUpdateArtistPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "ArtistsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/PUT/api/artists/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "ArtistsFunctionDeleteArtistPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "ArtistsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/DELETE/api/artists/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "SongsFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Metadata": {
+                "SamResourceId": "SongsFunction"
+            },
+            "Properties": {
+                "Code": {
+                    "S3Bucket": "bndy-deployment-artifacts-1758805276",
+                    "S3Key": "9d0aee908582778036acea3b5f6e03df"
+                },
+                "Description": "BNDY Songs API - handles /api/songs endpoints",
+                "Handler": "handler.handler",
+                "MemorySize": 512,
+                "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+                "Runtime": "nodejs18.x",
+                "Timeout": 30,
+                "Environment": {
+                    "Variables": {
+                        "NODE_ENV": "production",
+                        "JWT_SECRET": "2c7fccb87d98f68d36b19d528aa81a61afacf91058c18ee49738c35b50b81aa5",
+                        "_X_AMZN_TRACE_ID": {
+                            "Ref": "AWS::NoValue"
+                        }
+                    }
+                },
+                "Tags": [
+                    {
+                        "Key": "lambda:createdBy",
+                        "Value": "SAM"
+                    }
+                ],
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },
+        "SongsFunctionGetAllSongsPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "SongsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/api/songs",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "SongsFunctionCreateSongPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "SongsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/POST/api/songs",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "SongsFunctionGetSongByIdPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "SongsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/api/songs/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "SongsFunctionUpdateSongPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "SongsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/PUT/api/songs/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "SongsFunctionDeleteSongPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "SongsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/DELETE/api/songs/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "MembershipsFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Metadata": {
+                "SamResourceId": "MembershipsFunction"
+            },
+            "Properties": {
+                "Code": {
+                    "S3Bucket": "bndy-deployment-artifacts-1758805276",
+                    "S3Key": "e167c5c478aed71732b5def7b96a34c9"
+                },
+                "Description": "BNDY Memberships API - handles artist membership management",
+                "Handler": "handler.handler",
+                "MemorySize": 512,
+                "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+                "Runtime": "nodejs18.x",
+                "Timeout": 30,
+                "Environment": {
+                    "Variables": {
+                        "NODE_ENV": "production",
+                        "JWT_SECRET": "2c7fccb87d98f68d36b19d528aa81a61afacf91058c18ee49738c35b50b81aa5",
+                        "_X_AMZN_TRACE_ID": {
+                            "Ref": "AWS::NoValue"
+                        }
+                    }
+                },
+                "Tags": [
+                    {
+                        "Key": "lambda:createdBy",
+                        "Value": "SAM"
+                    }
+                ],
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },
+        "MembershipsFunctionGetArtistMembersPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "MembershipsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/api/artists/*/members",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "MembershipsFunctionAddArtistMemberPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "MembershipsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/POST/api/artists/*/members",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "MembershipsFunctionGetMyMembershipsPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "MembershipsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/api/memberships/me",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "MembershipsFunctionUpdateMembershipPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "MembershipsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/PUT/api/memberships/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "MembershipsFunctionDeleteMembershipPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "MembershipsFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/DELETE/api/memberships/*",
+                        {
+                            "__ApiId__": {
+                                "Ref": "BndyHttpApi"
+                            },
+                            "__Stage__": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "BndyHttpApi": {
+            "Type": "AWS::ApiGatewayV2::Api",
+            "Metadata": {
+                "SamResourceId": "BndyHttpApi"
+            },
+            "Properties": {
+                "Body": {
+                    "info": {
+                        "version": "1.0",
+                        "title": {
+                            "Ref": "AWS::StackName"
+                        }
+                    },
+                    "paths": {
+                        "/admin/events/{id}": {
+                            "put": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EventsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "id",
+                                        "in": "path"
+                                    }
+                                ]
+                            },
+                            "delete": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EventsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "id",
+                                        "in": "path"
+                                    }
+                                ]
+                            }
+                        },
+                        "/auth/google": {
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        },
+                        "/api/artists/{id}": {
+                            "put": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ArtistsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "id",
+                                        "in": "path"
+                                    }
+                                ]
+                            },
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ArtistsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "id",
+                                        "in": "path"
+                                    }
+                                ]
+                            },
+                            "delete": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ArtistsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "id",
+                                        "in": "path"
+                                    }
+                                ]
+                            }
+                        },
+                        "/auth/logout": {
+                            "post": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        },
+                        "/api/artists/{artistId}/members": {
+                            "post": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${MembershipsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "artistId",
+                                        "in": "path"
+                                    }
+                                ]
+                            },
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${MembershipsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "artistId",
+                                        "in": "path"
+                                    }
+                                ]
+                            }
+                        },
+                        "/auth/landing": {
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        },
+                        "/api/venues/{id}": {
+                            "put": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenuesFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "id",
+                                        "in": "path"
+                                    }
+                                ]
+                            },
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenuesFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "id",
+                                        "in": "path"
+                                    }
+                                ]
+                            },
+                            "delete": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenuesFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "id",
+                                        "in": "path"
+                                    }
+                                ]
+                            }
+                        },
+                        "/api/artists": {
+                            "post": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ArtistsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            },
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ArtistsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        },
+                        "/users/profile": {
+                            "put": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UsersFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            },
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UsersFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        },
+                        "/auth/callback": {
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        },
+                        "/api/venues": {
+                            "post": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenuesFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            },
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenuesFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        },
+                        "/api/memberships/{membershipId}": {
+                            "put": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${MembershipsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "membershipId",
+                                        "in": "path"
+                                    }
+                                ]
+                            },
+                            "delete": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${MembershipsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "membershipId",
+                                        "in": "path"
+                                    }
+                                ]
+                            }
+                        },
+                        "/api/me": {
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        },
+                        "/api/events": {
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EventsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        },
+                        "/api/songs/{id}": {
+                            "put": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SongsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "id",
+                                        "in": "path"
+                                    }
+                                ]
+                            },
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SongsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "id",
+                                        "in": "path"
+                                    }
+                                ]
+                            },
+                            "delete": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SongsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "id",
+                                        "in": "path"
+                                    }
+                                ]
+                            }
+                        },
+                        "/api/memberships/me": {
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${MembershipsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        },
+                        "/api/songs": {
+                            "post": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SongsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            },
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SongsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        },
+                        "/admin/events/band/{bandId}": {
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EventsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {},
+                                "parameters": [
+                                    {
+                                        "required": true,
+                                        "name": "bandId",
+                                        "in": "path"
+                                    }
+                                ]
+                            }
+                        },
+                        "/admin/events": {
+                            "post": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EventsFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        },
+                        "/users": {
+                            "get": {
+                                "x-amazon-apigateway-integration": {
+                                    "httpMethod": "POST",
+                                    "type": "aws_proxy",
+                                    "uri": {
+                                        "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UsersFunction.Arn}/invocations"
+                                    },
+                                    "payloadFormatVersion": "2.0"
+                                },
+                                "responses": {}
+                            }
+                        }
+                    },
+                    "x-amazon-apigateway-cors": {
+                        "allowOrigins": [
+                            "https://backstage.bndy.co.uk",
+                            "https://d3cewujswmjafa.cloudfront.net"
+                        ],
+                        "allowHeaders": [
+                            "Content-Type",
+                            "Authorization",
+                            "Cookie",
+                            "X-Amz-Date",
+                            "X-Api-Key",
+                            "X-Amz-Security-Token"
+                        ],
+                        "allowMethods": [
+                            "GET",
+                            "POST",
+                            "PUT",
+                            "DELETE",
+                            "OPTIONS"
+                        ],
+                        "maxAge": 300,
+                        "allowCredentials": true
+                    },
+                    "openapi": "3.0.1",
+                    "tags": [
+                        {
+                            "name": "httpapi:createdBy",
+                            "x-amazon-apigateway-tag-value": "SAM"
+                        }
+                    ]
+                }
+            }
+        },
+        "BndyHttpApiApiGatewayDefaultStage": {
+            "Type": "AWS::ApiGatewayV2::Stage",
+            "Properties": {
+                "ApiId": {
+                    "Ref": "BndyHttpApi"
+                },
+                "StageName": "$default",
+                "Tags": {
+                    "httpapi:createdBy": "SAM"
+                },
+                "AutoDeploy": true
+            }
+        }
+    }
+}
