@@ -706,6 +706,7 @@ const handleGetCalendar = async (event, session) => {
         venueMap[venueIds[idx]] = {
           name: venue.name,
           address: venue.address,
+          city: venue.city,
           latitude: venue.latitude,
           longitude: venue.longitude,
           googlePlaceId: venue.google_place_id
@@ -722,6 +723,7 @@ const handleGetCalendar = async (event, session) => {
       eventType: e.type,
       venue: venueData?.name || null,
       venueAddress: venueData?.address || null,
+      venueCity: venueData?.city || null,
       venueLatitude: venueData?.latitude || null,
       venueLongitude: venueData?.longitude || null,
       venueGooglePlaceId: venueData?.googlePlaceId || null
@@ -800,6 +802,7 @@ const handleGetAllArtistEvents = async (event, session) => {
         venueMap[venueIds[idx]] = {
           name: venue.name,
           address: venue.address,
+          city: venue.city,
           latitude: venue.latitude,
           longitude: venue.longitude,
           googlePlaceId: venue.google_place_id
@@ -816,6 +819,7 @@ const handleGetAllArtistEvents = async (event, session) => {
       eventType: e.type,
       venue: venueData?.name || null,
       venueAddress: venueData?.address || null,
+      venueCity: venueData?.city || null,
       venueLatitude: venueData?.latitude || null,
       venueLongitude: venueData?.longitude || null,
       venueGooglePlaceId: venueData?.googlePlaceId || null
@@ -1687,6 +1691,7 @@ const handleBatchEventsWithJoins = async (event) => {
       id: venueMap[e.venueId].id,
       name: venueMap[e.venueId].name,
       address: venueMap[e.venueId].address,
+      city: venueMap[e.venueId].city,
       latitude: venueMap[e.venueId].latitude,
       longitude: venueMap[e.venueId].longitude
     } : null
@@ -1917,7 +1922,8 @@ const handleGetArtistPublicEvents = async (event) => {
       const venue = venueMap[e.venueId];
       return {
         ...e,
-        venueName: venue?.name || e.venueName || 'Unknown Venue'
+        venueName: venue?.name || e.venueName || 'Unknown Venue',
+        venueCity: venue?.city || null
       };
     });
 
