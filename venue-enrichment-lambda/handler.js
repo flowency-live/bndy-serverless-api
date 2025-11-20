@@ -6,12 +6,43 @@ const Anthropic = require('@anthropic-ai/sdk');
 const https = require('https');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY
-});
+const ssm = new AWS.SSM({ region: 'eu-west-2' });
 
-const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
-const GOOGLE_SEARCH_ENGINE_ID = process.env.GOOGLE_SEARCH_ENGINE_ID;
+// Cache secrets after first cold start
+let ANTHROPIC_API_KEY;
+let GOOGLE_API_KEY;
+let GOOGLE_SEARCH_ENGINE_ID;
+
+/**
+ * Get secret from SSM Parameter Store (with caching)
+ */
+async function getSecret(paramName) {
+  try {
+    const result = await ssm.getParameter({
+      Name: paramName,
+      WithDecryption: true
+    }).promise();
+    return result.Parameter.Value;
+  } catch (error) {
+    console.error(`[ERROR] Failed to get SSM parameter ${paramName}:`, error);
+    throw new Error(`Failed to retrieve secret: ${paramName}`);
+  }
+}
+
+/**
+ * Initialize secrets from SSM on cold start
+ */
+async function initializeSecrets() {
+  if (!ANTHROPIC_API_KEY) {
+    ANTHROPIC_API_KEY = await getSecret('/bndy/anthropic/api-key');
+  }
+  if (!GOOGLE_API_KEY) {
+    GOOGLE_API_KEY = await getSecret('/bndy/google/maps-api-key');
+  }
+  if (!GOOGLE_SEARCH_ENGINE_ID) {
+    GOOGLE_SEARCH_ENGINE_ID = await getSecret('/bndy/google/search-engine-id');
+  }
+}
 
 /**
  * Perform Google Custom Search
@@ -46,6 +77,14 @@ function googleSearch(query) {
 
 exports.handler = async (event) => {
   console.log('[Venue Enrichment] Lambda invoked:', JSON.stringify(event));
+
+  // Initialize secrets from SSM on cold start
+  await initializeSecrets();
+
+  // Initialize Anthropic client with cached API key
+  const anthropic = new Anthropic({
+    apiKey: ANTHROPIC_API_KEY
+  });
 
   try {
     // Parse input

@@ -202,11 +202,39 @@ async function handleGetAllVenues(event) {
       console.log(`[Venues] Venues Lambda: Search for "${searchTerm}" returned ${validVenues.length} results`);
     }
 
+    // Get event counts for all venues in parallel
+    const eventCountPromises = validVenues.map(async (venue) => {
+      try {
+        // Query events table using venue_id-index to count events
+        const eventCountResult = await dynamodb.query({
+          TableName: 'bndy-events',
+          IndexName: 'venue_id-index',
+          KeyConditionExpression: 'venue_id = :venueId',
+          ExpressionAttributeValues: {
+            ':venueId': venue.id
+          },
+          Select: 'COUNT'
+        }).promise();
+
+        return { venueId: venue.id, count: eventCountResult.Count || 0 };
+      } catch (error) {
+        console.error(`Error counting events for venue ${venue.id}:`, error);
+        return { venueId: venue.id, count: 0 };
+      }
+    });
+
+    const eventCounts = await Promise.all(eventCountPromises);
+    const eventCountMap = eventCounts.reduce((map, { venueId, count }) => {
+      map[venueId] = count;
+      return map;
+    }, {});
+
     // Transform to match expected API format
     const formattedVenues = validVenues.map(venue => ({
       id: venue.id,
       name: venue.name,
       address: venue.address,
+      city: venue.city || null,
       latitude: venue.latitude,
       longitude: venue.longitude,
       location: venue.location_object || { lat: venue.latitude, lng: venue.longitude },
@@ -227,7 +255,8 @@ async function handleGetAllVenues(event) {
       enrichment_date: venue.enrichment_date,
       ai_created: venue.ai_created,
       needs_review: venue.needs_review,
-      created_source: venue.created_source
+      created_source: venue.created_source,
+      eventCount: eventCountMap[venue.id] || 0
     }));
 
     console.log(`[Venues] Venues Lambda: Served ${formattedVenues.length} venues (${result.Items.length} total in DB)`);
@@ -267,6 +296,7 @@ async function handleGetVenueById(venueId, event) {
       id: result.Item.id,
       name: result.Item.name,
       address: result.Item.address,
+      city: result.Item.city || null,
       latitude: result.Item.latitude,
       longitude: result.Item.longitude,
       location: result.Item.location_object || { lat: result.Item.latitude, lng: result.Item.longitude },
@@ -311,6 +341,7 @@ async function handleCreateVenue(venueData, event) {
     id: require('crypto').randomUUID(),
     name: venueData.name,
     address: venueData.address,
+    city: venueData.city || null,
     latitude: venueData.latitude || 0,
     longitude: venueData.longitude || 0,
     location_object: venueData.location || { lat: venueData.latitude, lng: venueData.longitude },
@@ -373,6 +404,7 @@ async function handleUpdateVenue(venueId, venueData, event) {
   const fieldMappings = {
     name: 'name',
     address: 'address',
+    city: 'city',
     latitude: 'latitude',
     longitude: 'longitude',
     location: 'location_object',
@@ -446,6 +478,7 @@ async function handleUpdateVenue(venueId, venueData, event) {
       id: result.Attributes.id,
       name: result.Attributes.name,
       address: result.Attributes.address,
+      city: result.Attributes.city || null,
       latitude: result.Attributes.latitude,
       longitude: result.Attributes.longitude,
       location: result.Attributes.location_object || { lat: result.Attributes.latitude, lng: result.Attributes.longitude },
@@ -635,6 +668,7 @@ async function handleFindOrCreateVenue(venueData, event) {
       id: require('crypto').randomUUID(),
       name: venueData.name,
       address: venueData.address,
+      city: venueData.city || null,
       latitude: venueData.latitude || 0,
       longitude: venueData.longitude || 0,
       location_object: venueData.location || { lat: venueData.latitude, lng: venueData.longitude },

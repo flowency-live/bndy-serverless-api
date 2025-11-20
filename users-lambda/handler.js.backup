@@ -7,45 +7,12 @@ const jwt = require('jsonwebtoken');
 
 // AWS Services
 const dynamodb = new AWS.DynamoDB.DocumentClient();
-const ssm = new AWS.SSM({ region: 'eu-west-2' });
 
 // Configuration
 const USERS_TABLE = 'bndy-users';
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
-
-// JWT Secret - cached after first retrieval
-let JWT_SECRET = null;
-
-/**
- * Get JWT secret from SSM Parameter Store with fallback to env var
- */
-async function getJWTSecret() {
-  if (JWT_SECRET) {
-    return JWT_SECRET; // Return cached value
-  }
-
-  // Try SSM first
-  try {
-    const result = await ssm.getParameter({
-      Name: '/bndy/auth/jwt-secret',
-      WithDecryption: true
-    }).promise();
-    JWT_SECRET = result.Parameter.Value;
-    console.log('[USERS] JWT_SECRET loaded from SSM');
-    return JWT_SECRET;
-  } catch (error) {
-    console.error('[USERS] Failed to get JWT_SECRET from SSM:', error.message);
-    // Fallback to environment variable
-    if (process.env.JWT_SECRET) {
-      JWT_SECRET = process.env.JWT_SECRET;
-      console.log('[USERS] JWT_SECRET loaded from environment variable (fallback)');
-      return JWT_SECRET;
-    }
-    throw new Error('JWT_SECRET not available from SSM or environment');
-  }
-}
-
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://bndy.co.uk';
+const FRONTEND_URL = 'https://backstage.bndy.co.uk';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': FRONTEND_URL,
@@ -75,7 +42,7 @@ const parseCookies = (cookieHeader) => {
 };
 
 // Authentication validation
-const requireAuth = async (event) => {
+const requireAuth = (event) => {
   // HTTP API v2 passes cookies in event.cookies array
   let sessionToken = null;
 
@@ -103,8 +70,7 @@ const requireAuth = async (event) => {
   }
 
   try {
-    const jwtSecret = await getJWTSecret();
-    const session = jwt.verify(sessionToken, jwtSecret);
+    const session = jwt.verify(sessionToken, JWT_SECRET);
     console.log('USERS: User authenticated via session', {
       userId: session.userId.substring(0, 8) + '...'
     });
@@ -117,7 +83,7 @@ const requireAuth = async (event) => {
 
 // Get user profile
 const handleGetProfile = async (event) => {
-  const authResult = await requireAuth(event);
+  const authResult = requireAuth(event);
 
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });
@@ -167,7 +133,7 @@ const handleGetProfile = async (event) => {
 
 // Update user profile
 const handleUpdateProfile = async (event) => {
-  const authResult = await requireAuth(event);
+  const authResult = requireAuth(event);
 
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });
@@ -268,7 +234,7 @@ const getAuthType = (cognitoId, username) => {
 
 // List all users (admin function - godmode)
 const handleListUsers = async (event) => {
-  const authResult = await requireAuth(event);
+  const authResult = requireAuth(event);
 
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });
@@ -324,7 +290,7 @@ const handleListUsers = async (event) => {
 
 // Delete user (admin function - godmode)
 const handleDeleteUser = async (event) => {
-  const authResult = await requireAuth(event);
+  const authResult = requireAuth(event);
 
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });

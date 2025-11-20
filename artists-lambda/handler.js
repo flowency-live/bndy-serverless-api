@@ -4,6 +4,7 @@
 const AWS = require('aws-sdk');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const https = require('https');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 const ssm = new AWS.SSM({ region: 'eu-west-2' });
@@ -42,6 +43,84 @@ async function getJWTSecret() {
     }
     throw new Error('JWT_SECRET not available from SSM or environment');
   }
+}
+
+/**
+ * Extract Facebook username from URL
+ * Handles various Facebook URL formats
+ */
+function extractFacebookUsername(url) {
+  if (!url) return null;
+
+  try {
+    // Handle profile.php?id= format
+    if (url.includes('profile.php?id=')) {
+      const match = url.match(/id=(\d+)/);
+      return match ? match[1] : null;
+    }
+
+    // Handle standard facebook.com/username format
+    const match = url.match(/facebook\.com\/([a-zA-Z0-9.]{2,}[^/?]*)/);
+    if (!match) return null;
+
+    const username = match[1];
+
+    // Filter out non-username paths
+    const excludedPaths = ['profile.php', 'people', 'pages', 'groups', 'events', 'photos', 'videos', 'p'];
+    if (excludedPaths.includes(username)) return null;
+
+    return username;
+  } catch (error) {
+    console.error('Error extracting Facebook username:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if a URL returns a valid image
+ * Uses HTTPS GET request with redirect following
+ */
+function checkImageExists(url) {
+  return new Promise((resolve) => {
+    https.get(url, (res) => {
+      // Follow redirects
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        const redirectUrl = res.headers.location;
+        https.get(redirectUrl, (redirectRes) => {
+          resolve(redirectRes.statusCode === 200 && redirectRes.headers['content-type']?.startsWith('image/'));
+        }).on('error', () => resolve(false));
+      } else {
+        resolve(res.statusCode === 200 && res.headers['content-type']?.startsWith('image/'));
+      }
+    }).on('error', () => resolve(false));
+  });
+}
+
+/**
+ * Fetch Facebook profile picture URL
+ * Returns direct CDN URL if valid, null otherwise
+ */
+async function fetchFacebookProfilePicture(facebookUrl) {
+  if (!facebookUrl) return null;
+
+  const username = extractFacebookUsername(facebookUrl);
+  if (!username) {
+    console.log('[FETCH_FB_IMAGE] Could not extract username from:', facebookUrl);
+    return null;
+  }
+
+  // Construct Graph API URL
+  const profilePicUrl = `https://graph.facebook.com/${username}/picture?type=large`;
+
+  // Validate image exists
+  const exists = await checkImageExists(profilePicUrl);
+  if (exists) {
+    console.log('[FETCH_FB_IMAGE] Successfully fetched image for username:', username);
+    return profilePicUrl;
+  }
+
+  console.log('[FETCH_FB_IMAGE] Image validation failed for username:', username);
+  return null;
 }
 
 // Parse cookies from event
@@ -111,6 +190,12 @@ exports.handler = async (event, context) => {
       return await handleCheckName(event);
     }
 
+    // Refresh Facebook profile image endpoint
+    if (method === 'POST' && path.includes('/refresh-facebook-image')) {
+      const artistId = event.pathParameters?.id || path.split('/')[3];
+      return await handleRefreshFacebookImage(artistId);
+    }
+
     if (method === 'GET' && event.pathParameters?.id) {
       return await handleGetArtistById(event.pathParameters.id);
     }
@@ -153,7 +238,7 @@ async function handleGetAllArtists() {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, #source, needs_review, owner_user_id, createdAt',
+    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
@@ -164,16 +249,46 @@ async function handleGetAllArtists() {
   try {
     const result = await dynamodb.scan(params).promise();
 
+    // Get event counts for all artists in parallel
+    const eventCountPromises = result.Items.map(async (artist) => {
+      try {
+        // Query events table using artist_id-index to count events
+        const eventCountResult = await dynamodb.query({
+          TableName: 'bndy-events',
+          IndexName: 'artist_id-index',
+          KeyConditionExpression: 'artist_id = :artistId',
+          ExpressionAttributeValues: {
+            ':artistId': artist.id
+          },
+          Select: 'COUNT'
+        }).promise();
+
+        return { artistId: artist.id, count: eventCountResult.Count || 0 };
+      } catch (error) {
+        console.error(`Error counting events for artist ${artist.id}:`, error);
+        return { artistId: artist.id, count: 0 };
+      }
+    });
+
+    const eventCounts = await Promise.all(eventCountPromises);
+    const eventCountMap = eventCounts.reduce((map, { artistId, count }) => {
+      map[artistId] = count;
+      return map;
+    }, {});
+
     // Transform to match expected API format
     const formattedArtists = result.Items.map(artist => ({
       id: artist.id,
       name: artist.name,
       artist_type: artist.artist_type || null,
+      artistType: artist.artist_type || null, // Provide both formats for compatibility
       bio: artist.bio || '',
       location: artist.location || '',
       locationLat: artist.locationLat || null,
       locationLng: artist.locationLng || null,
       genres: artist.genres || [],
+      actType: artist.actType || null,
+      acoustic: artist.acoustic || false,
       facebookUrl: artist.facebookUrl || '',
       instagramUrl: artist.instagramUrl || '',
       websiteUrl: artist.websiteUrl || '',
@@ -186,7 +301,10 @@ async function handleGetAllArtists() {
       allowedEventTypes: artist.allowedEventTypes || ['practice', 'public_gig'],
       displayColour: artist.displayColour || '#f97316',
       source: artist.source || null,
+      ai_created: artist.ai_created || false,
       needs_review: artist.needs_review !== undefined ? artist.needs_review : null,
+      validated: artist.validated !== undefined ? artist.validated : true,
+      eventCount: eventCountMap[artist.id] || 0,
       createdAt: artist.createdAt
     }));
 
@@ -227,11 +345,14 @@ async function handleGetArtistById(artistId) {
       id: result.Item.id,
       name: result.Item.name,
       artist_type: result.Item.artist_type || null,
+      artistType: result.Item.artist_type || null, // Provide both formats for compatibility
       bio: result.Item.bio || '',
       location: result.Item.location || '',
       locationLat: result.Item.locationLat || null,
       locationLng: result.Item.locationLng || null,
       genres: result.Item.genres || [],
+      actType: result.Item.actType || null,
+      acoustic: result.Item.acoustic || false,
       facebookUrl: result.Item.facebookUrl || '',
       instagramUrl: result.Item.instagramUrl || '',
       websiteUrl: result.Item.websiteUrl || '',
@@ -247,6 +368,7 @@ async function handleGetArtistById(artistId) {
       allowedEventTypes: result.Item.allowedEventTypes || ['practice', 'public_gig'],
       displayColour: result.Item.displayColour || '#f97316',
       source: result.Item.source || null,
+      ai_created: result.Item.ai_created || false,
       needs_review: result.Item.needs_review !== undefined ? result.Item.needs_review : null,
       createdAt: result.Item.createdAt,
       updatedAt: result.Item.updatedAt
@@ -282,6 +404,17 @@ async function handleCreateArtist(event) {
   const now = new Date().toISOString();
   const artistId = crypto.randomUUID();
 
+  // Fetch Facebook profile picture if no custom image provided
+  let profileImageUrl = artistData.profileImageUrl || artistData.avatarUrl || '';
+  if (!profileImageUrl && artistData.facebookUrl) {
+    console.log('[CREATE_ARTIST] Attempting to fetch Facebook profile image...');
+    const fbImage = await fetchFacebookProfilePicture(artistData.facebookUrl);
+    if (fbImage) {
+      profileImageUrl = fbImage;
+      console.log('[CREATE_ARTIST] Facebook image fetched successfully');
+    }
+  }
+
   const artist = {
     id: artistId,
     name: artistData.name,
@@ -291,8 +424,10 @@ async function handleCreateArtist(event) {
     locationLng: artistData.locationLng || null,
     genres: artistData.genres || [],
 
-    // NEW: Artist type field (band, solo, duo, group, dj, collective)
+    // Artist classification
     artist_type: artistData.artistType || artistData.artist_type || 'band',
+    actType: artistData.actType || null,
+    acoustic: artistData.acoustic || false,
 
     // NEW: Owner tracking
     owner_user_id: user.userId,
@@ -303,7 +438,7 @@ async function handleCreateArtist(event) {
     instagramUrl: artistData.instagramUrl || '',
     websiteUrl: artistData.websiteUrl || '',
     socialMediaUrls: artistData.socialMediaUrls || [],
-    profileImageUrl: artistData.profileImageUrl || artistData.avatarUrl || '',
+    profileImageUrl,
 
     // Display customization
     displayColour: artistData.displayColour || '#f97316',
@@ -429,6 +564,18 @@ async function handleUpdateArtist(artistId, artistData) {
     updateParts.push('genres = :genres');
     expressionAttributeValues[':genres'] = artistData.genres || [];
   }
+  if (artistData.artistType !== undefined) {
+    updateParts.push('artist_type = :artist_type');
+    expressionAttributeValues[':artist_type'] = artistData.artistType;
+  }
+  if (artistData.actType !== undefined) {
+    updateParts.push('actType = :actType');
+    expressionAttributeValues[':actType'] = artistData.actType || null;
+  }
+  if (artistData.acoustic !== undefined) {
+    updateParts.push('acoustic = :acoustic');
+    expressionAttributeValues[':acoustic'] = artistData.acoustic || false;
+  }
   if (artistData.isVerified !== undefined) {
     updateParts.push('isVerified = :isVerified');
     expressionAttributeValues[':isVerified'] = artistData.isVerified;
@@ -474,6 +621,12 @@ async function handleUpdateArtist(artistId, artistData) {
   if (artistData.needs_review !== undefined) {
     updateParts.push('needs_review = :needs_review');
     expressionAttributeValues[':needs_review'] = artistData.needs_review;
+  }
+
+  // Allow updating validated (for admin validation workflow)
+  if (artistData.validated !== undefined) {
+    updateParts.push('validated = :validated');
+    expressionAttributeValues[':validated'] = artistData.validated;
   }
 
   const params = {
@@ -554,6 +707,82 @@ async function handleCheckName(event) {
   } catch (error) {
     console.error(' DynamoDB scan failed:', error);
     throw error;
+  }
+}
+
+async function handleRefreshFacebookImage(artistId) {
+  console.log(`[REFRESH_FB_IMAGE] Refreshing Facebook image for artist: ${artistId}`);
+
+  try {
+    // Get artist
+    const getParams = {
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
+    };
+
+    const result = await dynamodb.get(getParams).promise();
+    if (!result.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Artist not found' })
+      };
+    }
+
+    const artist = result.Item;
+
+    // Check if artist has Facebook URL
+    if (!artist.facebookUrl) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Artist has no Facebook URL' })
+      };
+    }
+
+    // Fetch Facebook profile picture
+    console.log(`[REFRESH_FB_IMAGE] Fetching image from: ${artist.facebookUrl}`);
+    const fbImage = await fetchFacebookProfilePicture(artist.facebookUrl);
+
+    if (!fbImage) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Could not fetch Facebook profile image' })
+      };
+    }
+
+    // Update artist with new image
+    const updateParams = {
+      TableName: 'bndy-artists',
+      Key: { id: artistId },
+      UpdateExpression: 'SET profileImageUrl = :profileImageUrl, updated_at = :updated_at',
+      ExpressionAttributeValues: {
+        ':profileImageUrl': fbImage,
+        ':updated_at': new Date().toISOString()
+      },
+      ReturnValues: 'ALL_NEW'
+    };
+
+    const updateResult = await dynamodb.update(updateParams).promise();
+    console.log(`[REFRESH_FB_IMAGE] Successfully updated profile image for artist: ${artistId}`);
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        message: 'Profile image refreshed successfully',
+        profileImageUrl: fbImage,
+        artist: updateResult.Attributes
+      })
+    };
+  } catch (error) {
+    console.error('[REFRESH_FB_IMAGE] Error refreshing Facebook image:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
   }
 }
 
@@ -734,7 +963,7 @@ async function handleCreateCommunityArtist(event) {
 
   try {
     const body = JSON.parse(event.body);
-    const { name, location, facebookUrl, instagramUrl, websiteUrl, bio } = body;
+    const { name, location, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic } = body;
 
     // Validation
     if (!name || name.trim().length === 0) {
@@ -756,6 +985,17 @@ async function handleCreateCommunityArtist(event) {
     const now = new Date().toISOString();
     const artistId = crypto.randomUUID();
 
+    // Fetch Facebook profile picture if Facebook URL provided
+    let profileImageUrl = '';
+    if (facebookUrl) {
+      console.log('[CREATE_COMMUNITY_ARTIST] Attempting to fetch Facebook profile image...');
+      const fbImage = await fetchFacebookProfilePicture(facebookUrl);
+      if (fbImage) {
+        profileImageUrl = fbImage;
+        console.log('[CREATE_COMMUNITY_ARTIST] Facebook image fetched successfully');
+      }
+    }
+
     const newArtist = {
       id: artistId,
       name: name.trim(),
@@ -765,23 +1005,27 @@ async function handleCreateCommunityArtist(event) {
       facebookUrl: facebookUrl || '',
       instagramUrl: instagramUrl || '',
       websiteUrl: websiteUrl || '',
+      spotifyUrl: body.spotifyUrl || '',
       bio: bio || '',
-      profileImageUrl: '',
+      profileImageUrl,
       isVerified: false,
       claimedByUserId: null,  // Available for claiming
       socialMediaUrls: [],
       followerCount: 0,
-      genres: [],
+      genres: Array.isArray(genres) ? genres : [],
 
       // Backstage-compatible fields
       owner_user_id: null,  // Community-created = no owner
-      artist_type: 'band',
+      artist_type: artistType || artist_type || 'band',
+      actType: actType || null,
+      acoustic: acoustic || false,
       displayColour: randomColor(),
       member_count: 0,
       allowedEventTypes: ['public_gig'],
 
-      // Data quality tracking (NEW)
-      source: 'frontstage',  // frontstage = public, unauthenticated (dirtiest data)
+      // Data quality tracking
+      source: body.source || 'frontstage',  // frontstage = public, mcp_ai_import = AI-created
+      ai_created: body.ai_created || false,
       needs_review: true,    // Requires admin review before considered clean
 
       created_at: now,

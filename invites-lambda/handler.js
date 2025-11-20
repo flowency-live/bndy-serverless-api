@@ -13,16 +13,48 @@ const crypto = require('crypto');
 // AWS Services
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const pinpointSMS = new AWS.PinpointSMSVoiceV2({ region: 'eu-west-2' });
+const ssm = new AWS.SSM({ region: 'eu-west-2' });
 
 // Configuration
 const INVITES_TABLE = 'bndy-invites';
 const ARTISTS_TABLE = 'bndy-artists';
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
 const USERS_TABLE = 'bndy-users';
-const JWT_SECRET = process.env.JWT_SECRET;
 const FRONTEND_URL = 'https://backstage.bndy.co.uk';
 
 const INVITE_EXPIRY_DAYS = 7;
+
+// JWT Secret - cached after first retrieval
+let JWT_SECRET = null;
+
+/**
+ * Get JWT secret from SSM Parameter Store with fallback to env var
+ */
+async function getJWTSecret() {
+  if (JWT_SECRET) {
+    return JWT_SECRET; // Return cached value
+  }
+
+  // Try SSM first
+  try {
+    const result = await ssm.getParameter({
+      Name: '/bndy/auth/jwt-secret',
+      WithDecryption: true
+    }).promise();
+    JWT_SECRET = result.Parameter.Value;
+    console.log('[INVITES] JWT_SECRET loaded from SSM');
+    return JWT_SECRET;
+  } catch (error) {
+    console.error('[INVITES] Failed to get JWT_SECRET from SSM:', error.message);
+    // Fallback to environment variable
+    if (process.env.JWT_SECRET) {
+      JWT_SECRET = process.env.JWT_SECRET;
+      console.log('[INVITES] JWT_SECRET loaded from environment variable (fallback)');
+      return JWT_SECRET;
+    }
+    throw new Error('JWT_SECRET not available from SSM or environment');
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': FRONTEND_URL,
@@ -60,7 +92,7 @@ const createResponse = (statusCode, body, cookies = null) => {
 };
 
 // Authentication middleware
-const requireAuth = (event) => {
+const requireAuth = async (event) => {
   let cookieHeader = event.headers?.Cookie || event.headers?.cookie;
 
   if (!cookieHeader && event.cookies && event.cookies.length > 0) {
@@ -81,7 +113,8 @@ const requireAuth = (event) => {
   }
 
   try {
-    const session = jwt.verify(sessionToken, JWT_SECRET);
+    const jwtSecret = await getJWTSecret();
+    const session = jwt.verify(sessionToken, jwtSecret);
     console.log('[INVITES] User authenticated via session', {
       userId: session.userId.substring(0, 8) + '...'
     });
@@ -116,7 +149,7 @@ const sendInviteSMS = async (phone, artistName, inviterName, inviteLink) => {
 
 // Handler: POST /api/artists/{artistId}/invites/general
 const handleCreateGeneralInvite = async (event, artistId) => {
-  const authResult = requireAuth(event);
+  const authResult = await requireAuth(event);
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });
   }
@@ -214,7 +247,7 @@ const handleCreateGeneralInvite = async (event, artistId) => {
 
 // Handler: POST /api/artists/{artistId}/invites/phone
 const handleCreatePhoneInvite = async (event, artistId) => {
-  const authResult = requireAuth(event);
+  const authResult = await requireAuth(event);
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });
   }
@@ -337,7 +370,7 @@ const handleCreatePhoneInvite = async (event, artistId) => {
 
 // Handler: GET /api/artists/{artistId}/invites
 const handleListInvites = async (event, artistId) => {
-  const authResult = requireAuth(event);
+  const authResult = await requireAuth(event);
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });
   }
@@ -390,7 +423,7 @@ const handleListInvites = async (event, artistId) => {
 
 // Handler: DELETE /api/invites/{token}
 const handleDisableInvite = async (event, token) => {
-  const authResult = requireAuth(event);
+  const authResult = await requireAuth(event);
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });
   }
@@ -524,7 +557,7 @@ const handleAcceptInvite = async (event, token) => {
       tokenValue: token ? token.substring(0, 20) : 'undefined'
     });
 
-    const authResult = requireAuth(event);
+    const authResult = await requireAuth(event);
     if (authResult.error) {
       return createResponse(401, { error: authResult.error });
     }

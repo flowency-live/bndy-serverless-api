@@ -8,11 +8,43 @@ const jwt = require('jsonwebtoken');
 
 // AWS Services
 const dynamodb = new AWS.DynamoDB.DocumentClient();
+const ssm = new AWS.SSM({ region: 'eu-west-2' });
 
 // Configuration
 const ISSUES_TABLE = 'bndy-issues';
 const FRONTEND_URL = 'https://backstage.bndy.co.uk';
-const JWT_SECRET = process.env.JWT_SECRET;
+
+// JWT Secret - cached after first retrieval
+let JWT_SECRET = null;
+
+/**
+ * Get JWT secret from SSM Parameter Store with fallback to env var
+ */
+async function getJWTSecret() {
+  if (JWT_SECRET) {
+    return JWT_SECRET; // Return cached value
+  }
+
+  // Try SSM first
+  try {
+    const result = await ssm.getParameter({
+      Name: '/bndy/auth/jwt-secret',
+      WithDecryption: true
+    }).promise();
+    JWT_SECRET = result.Parameter.Value;
+    console.log('[ISSUES] JWT_SECRET loaded from SSM');
+    return JWT_SECRET;
+  } catch (error) {
+    console.error('[ISSUES] Failed to get JWT_SECRET from SSM:', error.message);
+    // Fallback to environment variable
+    if (process.env.JWT_SECRET) {
+      JWT_SECRET = process.env.JWT_SECRET;
+      console.log('[ISSUES] JWT_SECRET loaded from environment variable (fallback)');
+      return JWT_SECRET;
+    }
+    throw new Error('JWT_SECRET not available from SSM or environment');
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': FRONTEND_URL,
@@ -42,7 +74,7 @@ const parseCookies = (cookieHeader) => {
 };
 
 // Authentication validation
-const requireAuth = (event) => {
+const requireAuth = async (event) => {
   // HTTP API v2 passes cookies in event.cookies array
   let sessionToken = null;
 
@@ -58,32 +90,33 @@ const requireAuth = (event) => {
     sessionToken = cookies.bndy_session;
   }
 
-  console.log(' ISSUES: Checking authentication', {
+  console.log('[ISSUES] Checking authentication', {
     hasCookie: !!(event.cookies || event.headers?.Cookie),
     hasSessionToken: !!sessionToken,
     eventCookies: event.cookies?.length || 0
   });
 
   if (!sessionToken) {
-    console.log(' ISSUES: No session token found');
+    console.log('[ISSUES] No session token found');
     return { error: 'Not authenticated' };
   }
 
   try {
-    const session = jwt.verify(sessionToken, JWT_SECRET);
-    console.log(' ISSUES: User authenticated via session', {
+    const jwtSecret = await getJWTSecret();
+    const session = jwt.verify(sessionToken, jwtSecret);
+    console.log('[ISSUES] User authenticated via session', {
       userId: session.userId.substring(0, 8) + '...'
     });
     return { user: session };
   } catch (error) {
-    console.error(' ISSUES: Invalid session token:', error.message);
+    console.error('[ISSUES] Invalid session token:', error.message);
     return { error: 'Invalid session' };
   }
 };
 
 // Create new issue
 const handleCreateIssue = async (event) => {
-  const authResult = requireAuth(event);
+  const authResult = await requireAuth(event);
 
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });
@@ -171,7 +204,7 @@ const handleCreateIssue = async (event) => {
 
 // Get all issues
 const handleListIssues = async (event) => {
-  const authResult = requireAuth(event);
+  const authResult = await requireAuth(event);
 
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });
@@ -248,7 +281,7 @@ const handleListIssues = async (event) => {
 
 // Update issue
 const handleUpdateIssue = async (event) => {
-  const authResult = requireAuth(event);
+  const authResult = await requireAuth(event);
 
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });
@@ -373,7 +406,7 @@ const handleUpdateIssue = async (event) => {
 
 // Delete issue
 const handleDeleteIssue = async (event) => {
-  const authResult = requireAuth(event);
+  const authResult = await requireAuth(event);
 
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });
@@ -420,7 +453,7 @@ const handleDeleteIssue = async (event) => {
 
 // Batch update issues
 const handleBatchUpdateIssues = async (event) => {
-  const authResult = requireAuth(event);
+  const authResult = await requireAuth(event);
 
   if (authResult.error) {
     return createResponse(401, { error: authResult.error });
