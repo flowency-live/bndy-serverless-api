@@ -501,18 +501,20 @@ async function handleAddSuggestion(body, artistId, userId) {
   }
 
   const now = new Date().toISOString();
+  const status = body.status || 'voting';
+
   const artistSong = {
     id: crypto.randomUUID(),
     artist_id: artistId,
     song_id: body.song_id,
-    status: 'voting',
+    status: status,
 
-    votes: {
+    votes: status === 'voting' ? {
       [userId]: {
         value: body.initial_vote,
         updated_at: now
       }
-    },
+    } : {},
 
     rag_status: {},
 
@@ -537,7 +539,7 @@ async function handleAddSuggestion(body, artistId, userId) {
     last_status_change_at: now
   };
 
-  console.log('[ADD_SUGGESTION] Created artistSong with vote for userId:', userId.substring(0, 8) + '...');
+  console.log('[ADD_SUGGESTION] Created artistSong with status:', status);
 
   await dynamodb.put({
     TableName: 'bndy-artist-songs',
@@ -557,32 +559,34 @@ async function handleAddSuggestion(body, artistId, userId) {
     }
   );
 
-  // Trigger vote_reminder for all members who haven't voted on this song (everyone except suggester)
-  // Query all artist members
-  const membershipsResult = await dynamodb.query({
-    TableName: 'bndy-artist-memberships',
-    IndexName: 'artist_id-index',
-    KeyConditionExpression: 'artist_id = :artistId',
-    ExpressionAttributeValues: {
-      ':artistId': artistId
-    }
-  }).promise();
-
-  // Filter out the suggester (they already voted)
-  const otherMembers = (membershipsResult.Items || [])
-    .filter(member => member.user_id !== userId)
-    .map(member => member.user_id);
-
-  // Send vote_reminder to each member (they have 1 new song to vote on)
-  for (const memberId of otherMembers) {
-    await triggerNotification(
-      'vote_reminder',
-      artistId,
-      memberId,
-      {
-        count: 1  // They have at least this new song to vote on
+  // Only trigger vote_reminder if status is 'voting'
+  if (status === 'voting') {
+    // Query all artist members
+    const membershipsResult = await dynamodb.query({
+      TableName: 'bndy-artist-memberships',
+      IndexName: 'artist_id-index',
+      KeyConditionExpression: 'artist_id = :artistId',
+      ExpressionAttributeValues: {
+        ':artistId': artistId
       }
-    );
+    }).promise();
+
+    // Filter out the suggester (they already voted)
+    const otherMembers = (membershipsResult.Items || [])
+      .filter(member => member.user_id !== userId)
+      .map(member => member.user_id);
+
+    // Send vote_reminder to each member (they have 1 new song to vote on)
+    for (const memberId of otherMembers) {
+      await triggerNotification(
+        'vote_reminder',
+        artistId,
+        memberId,
+        {
+          count: 1  // They have at least this new song to vote on
+        }
+      );
+    }
   }
 
   return {
@@ -682,43 +686,72 @@ async function handleVote(artistSongId, artistId, userId, body) {
 
     console.log('[VOTE] Votes after adding new vote:', Object.keys(votes));
 
-    const memberCountResult = await dynamodb.query({
-      TableName: 'bndy-artist-memberships',
-      IndexName: 'artist_id-index',
-      KeyConditionExpression: 'artist_id = :artistId',
-      ExpressionAttributeValues: { ':artistId': artistId }
-    }).promise();
+    // Check if this is a poo vote (value = 0) - auto-discard
+    const isPooVote = body.vote_value === 0;
+    let newStatus = song.status;
+    let statusChanged = false;
+    let updateExpression = '';
+    let voteCount = Object.keys(votes).length;
+    let memberCount = 0;
+    let scorePercentage = null;
 
-    const memberCount = memberCountResult.Items.length;
-    const voteCount = Object.keys(votes).length;
+    const expressionAttributeValues = {
+      ':votes': votes,
+      ':now': now
+    };
 
-    console.log('[VOTE] Member count:', memberCount, 'Vote count:', voteCount);
+    if (isPooVote) {
+      console.log('[VOTE] POO VOTE DETECTED - Auto-discarding song');
+      newStatus = 'discarded';
+      statusChanged = true;
 
-    const totalVotes = Object.values(votes).reduce((sum, v) => sum + v.value, 0);
-    const scorePercentage = Math.round((totalVotes / (memberCount * 5)) * 100);
+      // Append note about poo vote
+      const existingNotes = song.notes || '';
+      const pooNote = 'Song discarded - received a poo vote';
+      const updatedNotes = existingNotes ? `${existingNotes}\n\n${pooNote}` : pooNote;
 
-    const newStatus = (voteCount >= memberCount && song.status === 'voting') ? 'review' : song.status;
-    const statusChanged = newStatus !== song.status;
+      updateExpression = 'SET votes = :votes, #status = :status, notes = :notes, updated_at = :now, last_status_change_at = :now';
+      expressionAttributeValues[':status'] = newStatus;
+      expressionAttributeValues[':notes'] = updatedNotes;
 
-    console.log('[VOTE] Status transition:', {
-      oldStatus: song.status,
-      newStatus,
-      willPromote: statusChanged,
-      scorePercentage
-    });
+    } else {
+      // Normal voting flow
+      const memberCountResult = await dynamodb.query({
+        TableName: 'bndy-artist-memberships',
+        IndexName: 'artist_id-index',
+        KeyConditionExpression: 'artist_id = :artistId',
+        ExpressionAttributeValues: { ':artistId': artistId }
+      }).promise();
+
+      memberCount = memberCountResult.Items.length;
+
+      console.log('[VOTE] Member count:', memberCount, 'Vote count:', voteCount);
+
+      const totalVotes = Object.values(votes).reduce((sum, v) => sum + v.value, 0);
+      scorePercentage = Math.round((totalVotes / (memberCount * 5)) * 100);
+
+      newStatus = (voteCount >= memberCount && song.status === 'voting') ? 'review' : song.status;
+      statusChanged = newStatus !== song.status;
+
+      console.log('[VOTE] Status transition:', {
+        oldStatus: song.status,
+        newStatus,
+        willPromote: statusChanged,
+        scorePercentage
+      });
+
+      updateExpression = 'SET votes = :votes, vote_score_percentage = :score, #status = :status, updated_at = :now' +
+        (statusChanged ? ', last_status_change_at = :now' : '');
+      expressionAttributeValues[':score'] = scorePercentage;
+      expressionAttributeValues[':status'] = newStatus;
+    }
 
     await dynamodb.update({
       TableName: 'bndy-artist-songs',
       Key: { id: artistSongId },
-      UpdateExpression: 'SET votes = :votes, vote_score_percentage = :score, #status = :status, updated_at = :now' +
-        (statusChanged ? ', last_status_change_at = :now' : ''),
+      UpdateExpression: updateExpression,
       ExpressionAttributeNames: { '#status': 'status' },
-      ExpressionAttributeValues: {
-        ':votes': votes,
-        ':score': scorePercentage,
-        ':status': newStatus,
-        ':now': now
-      }
+      ExpressionAttributeValues: expressionAttributeValues
     }).promise();
 
     const globalSong = await getGlobalSong(song.song_id);
