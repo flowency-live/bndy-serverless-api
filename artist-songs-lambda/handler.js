@@ -133,13 +133,19 @@ exports.handler = async (event, context) => {
       return await handleDeleteSuggestion(artistSongId, userId);
     }
 
-    // POST /api/artists/{artistId}/pipeline/{artistSongId}/rag - Update RAG status
-    if (method === 'POST' && artistSongId && path.includes('/rag')) {
+    // POST /api/artists/{artistId}/pipeline/{artistSongId}/rag - Update RAG status (legacy)
+    if (method === 'POST' && artistSongId && path.includes('/rag') && !path.includes('/rag-status')) {
       return await handleUpdateRagStatus(artistSongId, userId, JSON.parse(event.body));
     }
 
+    // PUT /api/artists/{artistId}/pipeline/{artistSongId}/rag-status - Update RAG status
+    if (method === 'PUT' && artistSongId && path.includes('/rag-status')) {
+      const body = JSON.parse(event.body);
+      return await handleUpdateRagStatus(artistSongId, userId, { status: body.rag_status });
+    }
+
     // PUT /api/artists/{artistId}/pipeline/{artistSongId}/status - Change status
-    if (method === 'PUT' && artistSongId && path.includes('/status')) {
+    if (method === 'PUT' && artistSongId && path.includes('/status') && !path.includes('/rag-status')) {
       return await handleChangeStatus(artistSongId, JSON.parse(event.body));
     }
 
@@ -502,6 +508,33 @@ async function handleAddSuggestion(body, artistId, userId) {
 
   const now = new Date().toISOString();
   const status = body.status || 'voting';
+
+  // SAFEGUARD: Check if this song already exists in the artist's pipeline
+  console.log('[ADD_SUGGESTION] Checking for duplicate song_id:', body.song_id);
+  const existingSongsResult = await dynamodb.query({
+    TableName: 'bndy-artist-songs',
+    IndexName: 'artist_id-status-index',
+    KeyConditionExpression: 'artist_id = :artistId',
+    FilterExpression: 'song_id = :songId',
+    ExpressionAttributeValues: {
+      ':artistId': artistId,
+      ':songId': body.song_id
+    }
+  }).promise();
+
+  if (existingSongsResult.Items && existingSongsResult.Items.length > 0) {
+    const existingSong = existingSongsResult.Items[0];
+    console.log('[ADD_SUGGESTION] Duplicate detected - song already exists with status:', existingSong.status);
+    return {
+      statusCode: 409,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        error: 'Song already exists',
+        message: `This song is already in your pipeline with status: ${existingSong.status}`,
+        existingSong: existingSong
+      })
+    };
+  }
 
   const artistSong = {
     id: crypto.randomUUID(),
@@ -1015,10 +1048,46 @@ async function handleDeleteSuggestion(artistSongId, userId) {
 
   const song = songResult.Item;
 
-  if (song.suggested_by_user_id !== userId) {
+  // SAFEGUARD: Prevent deletion of playbook/active songs
+  if (song.status === 'playbook' || song.status === 'active') {
+    console.error('[DELETE_SUGGESTION] ERROR: Cannot delete playbook/active song', {
+      songId: artistSongId?.substring(0, 8) + '...',
+      status: song.status
+    });
+    return {
+      statusCode: 403,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        error: 'Cannot delete active playbook songs',
+        message: 'This song is in your active playbook. Remove it from the playbook first.'
+      })
+    };
+  }
+
+  // SAFEGUARD: Only allow deletion of parked, discarded, or voting songs
+  const deletableStatuses = ['parked', 'discarded', 'voting', 'practice', 'review'];
+  if (!deletableStatuses.includes(song.status)) {
+    console.error('[DELETE_SUGGESTION] ERROR: Song status not deletable', {
+      songId: artistSongId?.substring(0, 8) + '...',
+      status: song.status
+    });
+    return {
+      statusCode: 403,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        error: 'Cannot delete song with this status',
+        message: `Songs with status "${song.status}" cannot be deleted.`
+      })
+    };
+  }
+
+  // Only the suggester can delete voting/review/practice songs
+  // Parked/discarded songs can be deleted by anyone (they're archived)
+  if (['voting', 'review', 'practice'].includes(song.status) && song.suggested_by_user_id !== userId) {
     console.error('[DELETE_SUGGESTION] ERROR: User is not the suggester', {
       requestingUserId: userId.substring(0, 8) + '...',
-      suggestedByUserId: song.suggested_by_user_id?.substring(0, 8) + '...'
+      suggestedByUserId: song.suggested_by_user_id?.substring(0, 8) + '...',
+      status: song.status
     });
     return {
       statusCode: 403,
@@ -1032,7 +1101,10 @@ async function handleDeleteSuggestion(artistSongId, userId) {
     Key: { id: artistSongId }
   }).promise();
 
-  console.log('[DELETE_SUGGESTION] SUCCESS: Song deleted by suggester');
+  console.log('[DELETE_SUGGESTION] SUCCESS: Song permanently deleted', {
+    songId: artistSongId?.substring(0, 8) + '...',
+    status: song.status
+  });
 
   return {
     statusCode: 204,
