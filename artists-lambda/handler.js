@@ -238,7 +238,7 @@ async function handleGetAllArtists() {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
+    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
@@ -286,6 +286,7 @@ async function handleGetAllArtists() {
       location: artist.location || '',
       locationLat: artist.locationLat || null,
       locationLng: artist.locationLng || null,
+      locationType: artist.locationType || null,
       genres: artist.genres || [],
       actType: artist.actType || null,
       acoustic: artist.acoustic || false,
@@ -350,6 +351,7 @@ async function handleGetArtistById(artistId) {
       location: result.Item.location || '',
       locationLat: result.Item.locationLat || null,
       locationLng: result.Item.locationLng || null,
+      locationType: result.Item.locationType || null,
       genres: result.Item.genres || [],
       actType: result.Item.actType || null,
       acoustic: result.Item.acoustic || false,
@@ -418,10 +420,12 @@ async function handleCreateArtist(event) {
   const artist = {
     id: artistId,
     name: artistData.name,
+    ...generateNameSearchFields(artistData.name),  // Add GSI fields for fast search
     bio: artistData.bio || '',
     location: artistData.location || '',
     locationLat: artistData.locationLat || null,
     locationLng: artistData.locationLng || null,
+    locationType: artistData.locationType || null,
     genres: artistData.genres || [],
 
     // Artist classification
@@ -541,8 +545,11 @@ async function handleUpdateArtist(artistId, artistData) {
 
   // Update only fields that are provided in artistData
   if (artistData.name !== undefined) {
-    updateParts.push('#name = :name');
+    const searchFields = generateNameSearchFields(artistData.name);
+    updateParts.push('#name = :name', 'name_lower = :name_lower', 'name_prefix = :name_prefix');
     expressionAttributeValues[':name'] = artistData.name;
+    expressionAttributeValues[':name_lower'] = searchFields.name_lower;
+    expressionAttributeValues[':name_prefix'] = searchFields.name_prefix;
   }
   if (artistData.bio !== undefined) {
     updateParts.push('bio = :bio');
@@ -559,6 +566,10 @@ async function handleUpdateArtist(artistId, artistData) {
   if (artistData.locationLng !== undefined) {
     updateParts.push('locationLng = :locationLng');
     expressionAttributeValues[':locationLng'] = artistData.locationLng;
+  }
+  if (artistData.locationType !== undefined) {
+    updateParts.push('locationType = :locationType');
+    expressionAttributeValues[':locationType'] = artistData.locationType;
   }
   if (artistData.genres !== undefined) {
     updateParts.push('genres = :genres');
@@ -640,10 +651,17 @@ async function handleUpdateArtist(artistId, artistData) {
 
   try {
     const result = await dynamodb.update(params).promise();
+
+    // Transform response to match frontend expectations (snake_case -> camelCase)
+    const transformedArtist = {
+      ...result.Attributes,
+      artistType: result.Attributes.artist_type || null, // Provide camelCase for compatibility
+    };
+
     return {
       statusCode: 200,
       headers: getCorsHeaders(),
-      body: JSON.stringify(result.Attributes)
+      body: JSON.stringify(transformedArtist)
     };
   } catch (error) {
     console.error(' DynamoDB update failed:', error);
@@ -900,9 +918,16 @@ function calculateMatchScore(artistName, artistLocation, queryName, queryLocatio
   return 0;
 }
 
+// Generate GSI fields for fast name search
+function generateNameSearchFields(name) {
+  const nameLower = name.toLowerCase().trim();
+  const namePrefix = nameLower.substring(0, 2);
+  return { name_lower: nameLower, name_prefix: namePrefix };
+}
+
 // Search artists (fuzzy matching for duplicate prevention)
 async function handleSearchArtists(event) {
-  console.log(' Artists Lambda: Searching artists with fuzzy matching');
+  console.log(' Artists Lambda: Searching artists using GSI Query');
 
   const { name, location } = event.queryStringParameters || {};
 
@@ -915,22 +940,35 @@ async function handleSearchArtists(event) {
   }
 
   try {
-    // Scan all artists (TODO: Optimize with GSI when scale increases)
-    const result = await dynamodb.scan({
+    const searchTerm = name.toLowerCase().trim();
+    const prefix = searchTerm.substring(0, 2); // Use first 2 letters as partition key
+
+    // Query GSI for artists with matching prefix
+    const result = await dynamodb.query({
       TableName: 'bndy-artists',
-      ProjectionExpression: 'id, #name, #location, profileImageUrl',
+      IndexName: 'name-search-index',
+      KeyConditionExpression: 'name_prefix = :prefix AND begins_with(name_lower, :searchTerm)',
+      ExpressionAttributeValues: {
+        ':prefix': prefix,
+        ':searchTerm': searchTerm
+      },
+      ProjectionExpression: 'id, #name, #location, locationLat, locationLng, locationType, profileImageUrl',
       ExpressionAttributeNames: {
         '#name': 'name',
         '#location': 'location'
-      }
+      },
+      Limit: 20  // Get up to 20 results
     }).promise();
 
-    // Calculate match scores
+    // Calculate match scores for ranking
     const matches = result.Items
       .map(artist => ({
         id: artist.id,
         name: artist.name,
         location: artist.location || '',
+        locationLat: artist.locationLat || null,
+        locationLng: artist.locationLng || null,
+        locationType: artist.locationType || null,
         profileImageUrl: artist.profileImageUrl || null,
         matchScore: calculateMatchScore(artist.name, artist.location, name, location || '')
       }))
@@ -938,7 +976,7 @@ async function handleSearchArtists(event) {
       .sort((a, b) => b.matchScore - a.matchScore)  // Highest score first
       .slice(0, 10);  // Top 10 matches
 
-    console.log(` Found ${matches.length} matches for "${name}"`);
+    console.log(` Found ${matches.length} matches for "${name}" using GSI Query`);
 
     return {
       statusCode: 200,
@@ -963,7 +1001,7 @@ async function handleCreateCommunityArtist(event) {
 
   try {
     const body = JSON.parse(event.body);
-    const { name, location, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic } = body;
+    const { name, location, locationType, locationLat, locationLng, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic } = body;
 
     // Validation
     if (!name || name.trim().length === 0) {
@@ -996,12 +1034,28 @@ async function handleCreateCommunityArtist(event) {
       }
     }
 
+    // Handle location coordinates based on type
+    let finalLocationLat = null;
+    let finalLocationLng = null;
+
+    if (locationType === 'city' && locationLat && locationLng) {
+      // City-specific location with coordinates from Google Places
+      finalLocationLat = locationLat;
+      finalLocationLng = locationLng;
+      console.log(`[CREATE_COMMUNITY_ARTIST] City location with coordinates: ${locationLat}, ${locationLng}`);
+    } else {
+      // Regional or national location - no specific coordinates
+      console.log(`[CREATE_COMMUNITY_ARTIST] Regional/national location: ${location}`);
+    }
+
     const newArtist = {
       id: artistId,
       name: name.trim(),
+      ...generateNameSearchFields(name.trim()),  // Add GSI fields for fast search
       location: location.trim(),
-      locationLat: null,  // Future: geocode location string
-      locationLng: null,
+      locationLat: finalLocationLat,
+      locationLng: finalLocationLng,
+      locationType: locationType || null,
       facebookUrl: facebookUrl || '',
       instagramUrl: instagramUrl || '',
       websiteUrl: websiteUrl || '',
@@ -1037,7 +1091,7 @@ async function handleCreateCommunityArtist(event) {
       Item: newArtist
     }).promise();
 
-    console.log(` Community artist created: ${artistId} (${name})`);
+    console.log(` Community artist created: ${artistId} (${name}) with ${locationType || 'unknown'} location`);
 
     return {
       statusCode: 201,
@@ -1047,7 +1101,10 @@ async function handleCreateCommunityArtist(event) {
         artist: {
           id: artistId,
           name: newArtist.name,
-          location: newArtist.location
+          location: newArtist.location,
+          locationLat: newArtist.locationLat,
+          locationLng: newArtist.locationLng,
+          locationType: newArtist.locationType
         }
       })
     };
