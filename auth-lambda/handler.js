@@ -16,7 +16,7 @@ const CLIENT_ID = process.env.COGNITO_USER_POOL_CLIENT_ID;
 const CLIENT_SECRET = process.env.COGNITO_USER_POOL_CLIENT_SECRET;
 const JWT_SECRET = process.env.JWT_SECRET;
 
-const FRONTEND_URL = 'https://backstage.bndy.co.uk';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://backstage.bndy.co.uk';
 const API_URL = 'https://api.bndy.co.uk';
 const REDIRECT_URI = `${API_URL}/auth/callback`;
 

@@ -11,7 +11,7 @@ const ssm = new AWS.SSM({ region: 'eu-west-2' });
 
 // Configuration
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
-const FRONTEND_URL = 'https://backstage.bndy.co.uk';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://backstage.bndy.co.uk';
 
 // JWT Secret - cached after first retrieval
 let JWT_SECRET = null;
