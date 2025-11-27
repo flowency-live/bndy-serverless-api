@@ -50,10 +50,27 @@ async function getJWTSecret() {
   }
 }
 
-// CORS headers
+// Allowed CORS origins for frontend access
+const ALLOWED_ORIGINS = [
+  'https://www.bndy.co.uk',       // Primary domain
+  'https://backstage.bndy.co.uk', // Legacy domain
+  'https://bndy.co.uk',            // Apex domain
+  'https://live.bndy.co.uk',      // Frontstage
+  'http://localhost:3000'          // Local development
+];
+
+// Module-level variable to store current request event for CORS
+let currentEvent = null;
+
+// Get appropriate origin for CORS based on request origin
+const getAllowedOrigin = () => {
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
+
+// Generate CORS headers with dynamic origin
 const getCorsHeaders = () => ({
-  'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': 'https://backstage.bndy.co.uk, https://live.bndy.co.uk',
+  'Access-Control-Allow-Origin': getAllowedOrigin(),
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Credentials': 'true'
@@ -94,7 +111,21 @@ const requireAuth = async (event) => {
   try {
     const jwtSecret = await getJWTSecret();
     const session = jwt.verify(sessionToken, jwtSecret);
-    return { session };
+
+    // Fetch user to check platformAdmin flag
+    const userResult = await dynamodb.get({
+      TableName: USERS_TABLE,
+      Key: { cognito_id: session.userId }
+    }).promise();
+
+    const platformAdmin = userResult.Item?.platformAdmin || false;
+
+    return {
+      user: {
+        ...session,
+        platformAdmin
+      }
+    };
   } catch (error) {
     console.error('AUTH: Invalid session token:', error.message);
     return {
@@ -261,6 +292,46 @@ const computeGeohashFields = (venue) => {
   };
 };
 
+// Helper: Clear availability events for date range (auto-clear when events created)
+const clearAvailabilityForDates = async (artistId, startDate, endDate) => {
+  try {
+    console.log('AUTO_CLEAR: Checking for availability to clear', { artistId, startDate, endDate });
+
+    const result = await dynamodb.query({
+      TableName: EVENTS_TABLE,
+      IndexName: 'artistId-date-index',
+      KeyConditionExpression: 'artistId = :artistId AND #date BETWEEN :start AND :end',
+      FilterExpression: '#type = :available',
+      ExpressionAttributeNames: { '#date': 'date', '#type': 'type' },
+      ExpressionAttributeValues: {
+        ':artistId': artistId,
+        ':start': startDate,
+        ':end': endDate,
+        ':available': 'available'
+      }
+    }).promise();
+
+    const availabilityEvents = result.Items || [];
+
+    if (availabilityEvents.length > 0) {
+      console.log('AUTO_CLEAR: Deleting availability events', { count: availabilityEvents.length });
+
+      for (const event of availabilityEvents) {
+        await dynamodb.delete({
+          TableName: EVENTS_TABLE,
+          Key: { id: event.id }
+        }).promise();
+        console.log('AUTO_CLEAR: Deleted availability', { eventId: event.id, date: event.date });
+      }
+    } else {
+      console.log('AUTO_CLEAR: No availability events found to clear');
+    }
+  } catch (error) {
+    // Non-blocking - log error but don't fail the event creation
+    console.error('AUTO_CLEAR: Failed to clear availability (non-blocking)', { error: error.message });
+  }
+};
+
 // Helper: Ensure artist-venue relationship exists (auto-create for Venue CRM)
 const ensureVenueRelationship = async (artistId, venueId, gigDate) => {
   try {
@@ -375,8 +446,8 @@ const generateOccurrences = (event, rangeStart, rangeEnd) => {
 };
 
 // GET /api/artists/:artistId/calendar - Unified calendar (3 sources)
-const handleGetCalendar = async (event, session) => {
-  console.log('CALENDAR DEBUG: Start', { session, pathParameters: event.pathParameters, queryStringParameters: event.queryStringParameters });
+const handleGetCalendar = async (event, user) => {
+  console.log('CALENDAR DEBUG: Start', { user, pathParameters: event.pathParameters, queryStringParameters: event.queryStringParameters });
 
   const { artistId } = event.pathParameters;
   const { startDate, endDate } = event.queryStringParameters || {};
@@ -389,23 +460,30 @@ const handleGetCalendar = async (event, session) => {
     };
   }
 
-  console.log('CALENDAR DEBUG: Verifying membership', { userId: session.userId, artistId });
+  console.log('CALENDAR DEBUG: Verifying membership', { userId: user.userId, artistId });
 
-  // Verify membership
-  const membership = await verifyMembership(session.userId, artistId);
-  if (!membership) {
-    return {
-      statusCode: 403,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Not a member of this artist' })
-    };
+  // Check access - platform admin OR member
+  let membership = null;
+  if (!user.platformAdmin) {
+    membership = await verifyMembership(user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  } else {
+    console.log('[EVENTS] Platform admin access granted for calendar view');
+    // Create a minimal membership object for compatibility
+    membership = { user_id: user.userId, artist_id: artistId };
   }
 
   // Pad date range by 7 days to catch multi-day events
   const paddedStart = subtractDays(startDate, 7);
   const paddedEnd = addDays(endDate, 7);
 
-  console.log('CALENDAR: Querying events', { artistId, userId: session.userId, startDate, endDate });
+  console.log('CALENDAR: Querying events', { artistId, userId: user.userId, startDate, endDate });
 
   // Fetch current artist data for displayColour
   const currentArtistResult = await dynamodb.get({
@@ -494,7 +572,7 @@ const handleGetCalendar = async (event, session) => {
     TableName: MEMBERSHIPS_TABLE,
     IndexName: 'user_id-index',
     KeyConditionExpression: 'user_id = :userId',
-    ExpressionAttributeValues: { ':userId': session.userId }
+    ExpressionAttributeValues: { ':userId': user.userId }
   }).promise();
 
   const otherArtistIds = (otherMembershipsResult.Items || [])
@@ -756,17 +834,21 @@ const handleGetCalendar = async (event, session) => {
 };
 
 // GET /api/artists/:artistId/events - Get all artist events (no date filter)
-const handleGetAllArtistEvents = async (event, session) => {
+const handleGetAllArtistEvents = async (event, user) => {
   const { artistId } = event.pathParameters;
 
-  // Verify membership
-  const membership = await verifyMembership(session.userId, artistId);
-  if (!membership) {
-    return {
-      statusCode: 403,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Not a member of this artist' })
-    };
+  // Check access - platform admin OR member
+  if (!user.platformAdmin) {
+    const membership = await verifyMembership(user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  } else {
+    console.log('[EVENTS] Platform admin access granted for all events view');
   }
 
   console.log('EVENTS: Fetching all events for artist', { artistId });
@@ -836,18 +918,37 @@ const handleGetAllArtistEvents = async (event, session) => {
 };
 
 // POST /api/artists/:artistId/events - Create artist event
-const handleCreateArtistEvent = async (event, session) => {
+const handleCreateArtistEvent = async (event, user) => {
   const { artistId } = event.pathParameters;
   const eventData = JSON.parse(event.body);
 
-  // Verify membership
-  const membership = await verifyMembership(session.userId, artistId);
-  if (!membership) {
-    return {
-      statusCode: 403,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Not a member of this artist' })
-    };
+  // Check access - platform admin OR member
+  let membership = null;
+  if (!user.platformAdmin) {
+    membership = await verifyMembership(user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  } else {
+    // Platform admins can only create gig events (public or private)
+    const allowedTypes = ['gig', 'public_gig', 'gig-public', 'gig-private'];
+    if (!allowedTypes.includes(eventData.type)) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'Platform admins can only create gig events',
+          allowedTypes
+        })
+      };
+    }
+    console.log('[EVENTS] Platform admin access granted for gig creation');
+    // Create a minimal membership object for compatibility
+    membership = { user_id: user.userId, artist_id: artistId, membership_id: 'platform-admin' };
   }
 
   // Validate required fields
@@ -930,29 +1031,41 @@ const handleCreateArtistEvent = async (event, session) => {
 
   console.log('EVENT: Created artist event', { eventId, artistId, type: eventData.type });
 
-  // Trigger notifications for gigs and rehearsals
-  if (eventData.type === 'gig' || eventData.type === 'public_gig') {
-    await triggerNotification(
-      'gig_added',
-      artistId,
-      session.userId,
-      {
-        eventId: eventId,
-        venueName: eventData.title || eventData.location || 'TBA',
-        eventDate: eventData.date
-      }
-    );
-  } else if (eventData.type === 'practice') {
-    await triggerNotification(
-      'rehearsal_added',
-      artistId,
-      session.userId,
-      {
-        eventId: eventId,
-        eventDate: eventData.date,
-        startTime: eventData.startTime
-      }
-    );
+  // Auto-clear availability for the date range (silent operation)
+  if (eventData.type !== 'available') {
+    await clearAvailabilityForDates(artistId, newEvent.date, newEvent.endDate || newEvent.date);
+  }
+
+  // Skip notifications for platform admin events
+  const skipNotifications = user.platformAdmin;
+
+  if (!skipNotifications) {
+    // Trigger notifications for gigs and rehearsals
+    if (eventData.type === 'gig' || eventData.type === 'public_gig') {
+      await triggerNotification(
+        'gig_added',
+        artistId,
+        user.userId,
+        {
+          eventId: eventId,
+          venueName: eventData.title || eventData.location || 'TBA',
+          eventDate: eventData.date
+        }
+      );
+    } else if (eventData.type === 'practice') {
+      await triggerNotification(
+        'rehearsal_added',
+        artistId,
+        user.userId,
+        {
+          eventId: eventId,
+          eventDate: eventData.date,
+          startTime: eventData.startTime
+        }
+      );
+    }
+  } else {
+    console.log('[EVENTS] Skipping notifications for platform admin event creation');
   }
 
   return {
@@ -963,7 +1076,7 @@ const handleCreateArtistEvent = async (event, session) => {
 };
 
 // POST /api/users/me/unavailability - Create user unavailability event (artist-agnostic)
-const handleCreateUserUnavailability = async (event, session) => {
+const handleCreateUserUnavailability = async (event, user) => {
   const eventData = JSON.parse(event.body);
 
   // Validate required fields
@@ -994,7 +1107,7 @@ const handleCreateUserUnavailability = async (event, session) => {
   const unavailableEvent = {
     id: eventId,
     // artistId omitted (not null) for sparse GSI - XOR: user event
-    ownerUserId: session.userId,
+    ownerUserId: user.userId,
     type: 'unavailable',
     title: eventData.title || 'Unavailable',
     date: eventData.date,
@@ -1016,7 +1129,7 @@ const handleCreateUserUnavailability = async (event, session) => {
     Item: unavailableEvent
   }).promise();
 
-  console.log('EVENT: Created user unavailability', { eventId, userId: session.userId });
+  console.log('EVENT: Created user unavailability', { eventId, userId: user.userId });
 
   return {
     statusCode: 201,
@@ -1026,17 +1139,21 @@ const handleCreateUserUnavailability = async (event, session) => {
 };
 
 // GET /api/artists/:artistId/events/:id - Get single event
-const handleGetEvent = async (event, session) => {
+const handleGetEvent = async (event, user) => {
   const { artistId, id } = event.pathParameters;
 
-  // Verify membership
-  const membership = await verifyMembership(session.userId, artistId);
-  if (!membership) {
-    return {
-      statusCode: 403,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Not a member of this artist' })
-    };
+  // Check access - platform admin OR member
+  if (!user.platformAdmin) {
+    const membership = await verifyMembership(user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  } else {
+    console.log('[EVENTS] Platform admin access granted for event view');
   }
 
   const result = await dynamodb.get({
@@ -1060,18 +1177,22 @@ const handleGetEvent = async (event, session) => {
 };
 
 // PUT /api/artists/:artistId/events/:id - Update event
-const handleUpdateEvent = async (event, session) => {
+const handleUpdateEvent = async (event, user) => {
   const { artistId, id } = event.pathParameters;
   const updates = JSON.parse(event.body);
 
-  // Verify membership
-  const membership = await verifyMembership(session.userId, artistId);
-  if (!membership) {
-    return {
-      statusCode: 403,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Not a member of this artist' })
-    };
+  // Check access - platform admin OR member
+  if (!user.platformAdmin) {
+    const membership = await verifyMembership(user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  } else {
+    console.log('[EVENTS] Platform admin access granted for event update');
   }
 
   // Get existing event
@@ -1091,7 +1212,7 @@ const handleUpdateEvent = async (event, session) => {
   const existingEvent = existing.Item;
 
   // Permission check: user events only editable by owner
-  if (existingEvent.type === 'unavailable' && existingEvent.ownerUserId !== session.userId) {
+  if (existingEvent.type === 'unavailable' && existingEvent.ownerUserId !== user.userId) {
     return {
       statusCode: 403,
       headers: getCorsHeaders(),
@@ -1156,17 +1277,21 @@ const handleUpdateEvent = async (event, session) => {
 };
 
 // DELETE /api/artists/:artistId/events/:id - Delete event
-const handleDeleteEvent = async (event, session) => {
+const handleDeleteEvent = async (event, user) => {
   const { artistId, id } = event.pathParameters;
 
-  // Verify membership
-  const membership = await verifyMembership(session.userId, artistId);
-  if (!membership) {
-    return {
-      statusCode: 403,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Not a member of this artist' })
-    };
+  // Check access - platform admin OR member
+  if (!user.platformAdmin) {
+    const membership = await verifyMembership(user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  } else {
+    console.log('[EVENTS] Platform admin access granted for event deletion');
   }
 
   // Get existing event for permission check
@@ -1187,7 +1312,7 @@ const handleDeleteEvent = async (event, session) => {
 
   // Permission check: user events only deletable by owner
   if (existingEvent.type === 'unavailable') {
-    if (existingEvent.ownerUserId !== session.userId) {
+    if (existingEvent.ownerUserId !== user.userId) {
       return {
         statusCode: 403,
         headers: getCorsHeaders(),
@@ -1217,26 +1342,33 @@ const handleDeleteEvent = async (event, session) => {
 
   console.log('EVENT: Deleted event', { eventId: id });
 
-  // Trigger notifications for deleted gigs and rehearsals
-  if (existingEvent.type === 'gig' || existingEvent.type === 'public_gig') {
-    await triggerNotification(
-      'gig_removed',
-      artistId,
-      session.userId,
-      {
-        venueName: existingEvent.title || existingEvent.location || 'TBA',
-        eventDate: existingEvent.date
-      }
-    );
-  } else if (existingEvent.type === 'practice') {
-    await triggerNotification(
-      'rehearsal_removed',
-      artistId,
-      session.userId,
-      {
-        eventDate: existingEvent.date
-      }
-    );
+  // Skip notifications for platform admin events
+  const skipNotifications = user.platformAdmin;
+
+  if (!skipNotifications) {
+    // Trigger notifications for deleted gigs and rehearsals
+    if (existingEvent.type === 'gig' || existingEvent.type === 'public_gig') {
+      await triggerNotification(
+        'gig_removed',
+        artistId,
+        user.userId,
+        {
+          venueName: existingEvent.title || existingEvent.location || 'TBA',
+          eventDate: existingEvent.date
+        }
+      );
+    } else if (existingEvent.type === 'practice') {
+      await triggerNotification(
+        'rehearsal_removed',
+        artistId,
+        user.userId,
+        {
+          eventDate: existingEvent.date
+        }
+      );
+    }
+  } else {
+    console.log('[EVENTS] Skipping notifications for platform admin event deletion');
   }
 
   return {
@@ -1251,15 +1383,8 @@ const handleCheckConflicts = async (event, session) => {
   const { artistId } = event.pathParameters;
   const eventData = JSON.parse(event.body);
 
-  // Verify membership
-  const membership = await verifyMembership(session.userId, artistId);
-  if (!membership) {
-    return {
-      statusCode: 403,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Not a member of this artist' })
-    };
-  }
+  // No auth required - public endpoint for conflict checking (read-only operation)
+  // Community users need to check conflicts when creating events
 
   if (!eventData.date) {
     return {
@@ -1389,20 +1514,27 @@ const handleCheckConflicts = async (event, session) => {
 };
 
 // POST /api/public-gigs/create - Create public gig with venue resolution
-const handleCreatePublicGig = async (event, session) => {
+const handleCreatePublicGig = async (event, user) => {
   const { artistId } = event.pathParameters;
   const gigData = JSON.parse(event.body);
 
   console.log('PUBLIC_GIG: Create request', { artistId, gigData });
 
-  // Verify membership
-  const membership = await verifyMembership(session.userId, artistId);
-  if (!membership) {
-    return {
-      statusCode: 403,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Not a member of this artist' })
-    };
+  // Check access - platform admin OR member
+  let membership = null;
+  if (!user.platformAdmin) {
+    membership = await verifyMembership(user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  } else {
+    console.log('[EVENTS] Platform admin access granted for public gig creation');
+    // Create a minimal membership object for compatibility
+    membership = { user_id: user.userId, artist_id: artistId, membership_id: 'platform-admin' };
   }
 
   // Validate required fields for public gig
@@ -1525,17 +1657,24 @@ const handleCreatePublicGig = async (event, session) => {
     coordinates: { lat: geohashFields.geoLat, lng: geohashFields.geoLng }
   });
 
-  // Trigger gig_added notification
-  await triggerNotification(
-    'gig_added',
-    artistId,
-    session.userId,
-    {
-      eventId: eventId,
-      venueName: gigData.title || venue.name || 'TBA',
-      eventDate: gigData.date
-    }
-  );
+  // Skip notifications for platform admin events
+  const skipNotifications = user.platformAdmin;
+
+  if (!skipNotifications) {
+    // Trigger gig_added notification
+    await triggerNotification(
+      'gig_added',
+      artistId,
+      user.userId,
+      {
+        eventId: eventId,
+        venueName: gigData.title || venue.name || 'TBA',
+        eventDate: gigData.date
+      }
+    );
+  } else {
+    console.log('[EVENTS] Skipping notifications for platform admin public gig creation');
+  }
 
   return {
     statusCode: 201,
@@ -1942,6 +2081,348 @@ const handleGetArtistPublicEvents = async (event) => {
   }
 };
 
+// GET /api/artists/:artistId/public-availability - Get artist availability (NO AUTH)
+const handleGetArtistAvailability = async (event) => {
+  console.log('ARTIST_AVAILABILITY: Handler invoked', { pathParameters: event.pathParameters, queryStringParameters: event.queryStringParameters });
+
+  if (!event.pathParameters || !event.pathParameters.artistId) {
+    console.error('ARTIST_AVAILABILITY: Missing artistId in pathParameters');
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'artistId is required' })
+    };
+  }
+
+  const { artistId } = event.pathParameters;
+  const { startDate, endDate } = event.queryStringParameters || {};
+
+  // Default to today if no startDate provided
+  const today = new Date().toISOString().split('T')[0];
+  const start = startDate || today;
+  const end = endDate || '2099-12-31';
+
+  console.log('ARTIST_AVAILABILITY: Query received', { artistId, startDate: start, endDate: end });
+
+  try {
+    // Query availability events for this artist
+    const result = await dynamodb.query({
+      TableName: EVENTS_TABLE,
+      IndexName: 'artistId-date-index',
+      KeyConditionExpression: 'artistId = :artistId AND #date BETWEEN :start AND :end',
+      FilterExpression: '#type = :available',
+      ExpressionAttributeNames: { '#date': 'date', '#type': 'type' },
+      ExpressionAttributeValues: {
+        ':artistId': artistId,
+        ':start': start,
+        ':end': end,
+        ':available': 'available'
+      }
+    }).promise();
+
+    const availability = result.Items || [];
+
+    console.log('ARTIST_AVAILABILITY: Found availability', { artistId, count: availability.length });
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ availability })
+    };
+  } catch (error) {
+    console.error('ARTIST_AVAILABILITY: Error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Failed to fetch artist availability' })
+    };
+  }
+};
+
+// POST /api/artists/:artistId/events/toggle-availability - Toggle availability for a date
+const handleToggleAvailability = async (event, user) => {
+  const { artistId } = event.pathParameters;
+  const { date, notes } = JSON.parse(event.body);
+
+  console.log('TOGGLE_AVAILABILITY: Request received', { artistId, date, userId: user.userId });
+
+  // Check access - platform admin OR member
+  if (!user.platformAdmin) {
+    const membership = await verifyMembership(user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  } else {
+    console.log('[AVAILABILITY] Platform admin access granted');
+  }
+
+  // Validate date is provided
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Valid date in YYYY-MM-DD format is required' })
+    };
+  }
+
+  // Validate date is in the future or today
+  const today = new Date().toISOString().split('T')[0];
+  if (date < today) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Cannot mark past dates as available' })
+    };
+  }
+
+  try {
+    // Check if availability event already exists for this artist + date
+    const existingResult = await dynamodb.query({
+      TableName: EVENTS_TABLE,
+      IndexName: 'artistId-date-index',
+      KeyConditionExpression: 'artistId = :artistId AND #date = :date',
+      FilterExpression: '#type = :available',
+      ExpressionAttributeNames: { '#date': 'date', '#type': 'type' },
+      ExpressionAttributeValues: {
+        ':artistId': artistId,
+        ':date': date,
+        ':available': 'available'
+      }
+    }).promise();
+
+    const existing = (existingResult.Items || [])[0];
+
+    if (existing) {
+      // Delete existing availability (toggle off)
+      await dynamodb.delete({
+        TableName: EVENTS_TABLE,
+        Key: { id: existing.id }
+      }).promise();
+
+      console.log('TOGGLE_AVAILABILITY: Deleted availability', { eventId: existing.id, artistId, date });
+
+      return {
+        statusCode: 200,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          action: 'deleted',
+          id: existing.id
+        })
+      };
+    } else {
+      // Create new availability event (toggle on)
+      const eventId = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      const newEvent = {
+        id: eventId,
+        artistId: artistId,
+        type: 'available',
+        date: date,
+        endDate: date,
+        isPublic: false,
+        isAllDay: true,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      if (notes) newEvent.notes = notes;
+
+      await dynamodb.put({
+        TableName: EVENTS_TABLE,
+        Item: newEvent
+      }).promise();
+
+      console.log('TOGGLE_AVAILABILITY: Created availability', { eventId, artistId, date });
+
+      return {
+        statusCode: 201,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          action: 'created',
+          event: newEvent
+        })
+      };
+    }
+  } catch (error) {
+    console.error('TOGGLE_AVAILABILITY: Error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Failed to toggle availability' })
+    };
+  }
+};
+
+// POST /api/artists/:artistId/events/bulk-availability - Bulk set availability
+const handleBulkAvailability = async (event, user) => {
+  const { artistId } = event.pathParameters;
+  const { startDate, endDate, rules, notes } = JSON.parse(event.body);
+
+  console.log('BULK_AVAILABILITY: Request received', { artistId, startDate, endDate, rules, userId: user.userId });
+
+  // Check access - platform admin OR member
+  if (!user.platformAdmin) {
+    const membership = await verifyMembership(user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  } else {
+    console.log('[AVAILABILITY] Platform admin access granted for bulk set');
+  }
+
+  // Validate required fields
+  if (!startDate || !endDate || !rules || !Array.isArray(rules) || rules.length === 0) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'startDate, endDate, and rules array are required' })
+    };
+  }
+
+  // Validate date range
+  const today = new Date().toISOString().split('T')[0];
+  if (startDate < today) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Cannot mark past dates as available' })
+    };
+  }
+
+  if (endDate < startDate) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'endDate must be after startDate' })
+    };
+  }
+
+  // Validate date range is not more than 1 year
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const daysDiff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+  if (daysDiff > 365) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Date range cannot exceed 1 year' })
+    };
+  }
+
+  try {
+    // Generate list of dates matching rules
+    const datesToMark = [];
+    let currentDate = new Date(startDate);
+    const endDateObj = new Date(endDate);
+
+    while (currentDate <= endDateObj) {
+      const dayOfWeek = currentDate.getDay();
+      const dateStr = currentDate.toISOString().split('T')[0];
+
+      let shouldMark = false;
+
+      // Check against rules
+      for (const rule of rules) {
+        if (rule === 'monday' && dayOfWeek === 1) shouldMark = true;
+        if (rule === 'tuesday' && dayOfWeek === 2) shouldMark = true;
+        if (rule === 'wednesday' && dayOfWeek === 3) shouldMark = true;
+        if (rule === 'thursday' && dayOfWeek === 4) shouldMark = true;
+        if (rule === 'friday' && dayOfWeek === 5) shouldMark = true;
+        if (rule === 'saturday' && dayOfWeek === 6) shouldMark = true;
+        if (rule === 'sunday' && dayOfWeek === 0) shouldMark = true;
+        if (rule === 'weekdays' && dayOfWeek >= 1 && dayOfWeek <= 5) shouldMark = true;
+        if (rule === 'weekends' && (dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6)) shouldMark = true;
+      }
+
+      if (shouldMark) {
+        datesToMark.push(dateStr);
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    console.log('BULK_AVAILABILITY: Generated dates to mark', { count: datesToMark.length });
+
+    // For each date, check if any event already exists
+    const created = [];
+    const skipped = [];
+
+    for (const date of datesToMark) {
+      // Check if ANY event exists on this date
+      const existingEventsResult = await dynamodb.query({
+        TableName: EVENTS_TABLE,
+        IndexName: 'artistId-date-index',
+        KeyConditionExpression: 'artistId = :artistId AND #date = :date',
+        ExpressionAttributeNames: { '#date': 'date' },
+        ExpressionAttributeValues: {
+          ':artistId': artistId,
+          ':date': date
+        }
+      }).promise();
+
+      if (existingEventsResult.Items && existingEventsResult.Items.length > 0) {
+        skipped.push(date);
+        console.log('BULK_AVAILABILITY: Skipping date with existing events', { date });
+        continue;
+      }
+
+      // Create availability event
+      const eventId = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      const newEvent = {
+        id: eventId,
+        artistId: artistId,
+        type: 'available',
+        date: date,
+        endDate: date,
+        isPublic: false,
+        isAllDay: true,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      if (notes) newEvent.notes = notes;
+
+      await dynamodb.put({
+        TableName: EVENTS_TABLE,
+        Item: newEvent
+      }).promise();
+
+      created.push(newEvent);
+      console.log('BULK_AVAILABILITY: Created availability', { eventId, date });
+    }
+
+    console.log('BULK_AVAILABILITY: Completed', { created: created.length, skipped: skipped.length });
+
+    return {
+      statusCode: 201,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        created: created.length,
+        skipped: skipped.length,
+        events: created
+      })
+    };
+  } catch (error) {
+    console.error('BULK_AVAILABILITY: Error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Failed to bulk set availability' })
+    };
+  }
+};
+
 // ============================================================================
 // COMMUNITY WIZARD ENDPOINT (Public, No Auth Required)
 // ============================================================================
@@ -1952,14 +2433,25 @@ const handleCreateCommunityEvent = async (event) => {
 
   try {
     const body = JSON.parse(event.body);
-    const { artistId, venueId, date, startTime, endTime, title, isPublic, source } = body;
+    const { artistId, artistIds, venueId, date, startTime, endTime, title, isPublic, source, isOpenMic } = body;
+
+    // Support both single artistId and multiple artistIds
+    const artistIdsList = artistIds || (artistId ? [artistId] : []);
 
     // Validation
-    if (!artistId || !venueId || !date || !startTime) {
+    if ((!artistIdsList || artistIdsList.length === 0) && !isOpenMic) {
       return {
         statusCode: 400,
         headers: getCorsHeaders(),
-        body: JSON.stringify({ error: 'artistId, venueId, date, and startTime are required' })
+        body: JSON.stringify({ error: 'artistId, artistIds, or isOpenMic flag is required' })
+      };
+    }
+
+    if (!venueId || !date || !startTime) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'venueId, date, and startTime are required' })
       };
     }
 
@@ -1973,21 +2465,24 @@ const handleCreateCommunityEvent = async (event) => {
       };
     }
 
-    // Get artist details for title
-    const artistResult = await dynamodb.get({
-      TableName: ARTISTS_TABLE,
-      Key: { id: artistId }
-    }).promise();
+    // Get first artist details for title generation (or use provided title)
+    let artist = null;
+    if (artistIdsList.length > 0) {
+      const artistResult = await dynamodb.get({
+        TableName: ARTISTS_TABLE,
+        Key: { id: artistIdsList[0] }
+      }).promise();
 
-    if (!artistResult.Item) {
-      return {
-        statusCode: 404,
-        headers: getCorsHeaders(),
-        body: JSON.stringify({ error: 'Artist not found' })
-      };
+      if (!artistResult.Item) {
+        return {
+          statusCode: 404,
+          headers: getCorsHeaders(),
+          body: JSON.stringify({ error: 'Artist not found' })
+        };
+      }
+
+      artist = artistResult.Item;
     }
-
-    const artist = artistResult.Item;
 
     // Compute geohash fields from venue location
     const geohashFields = computeGeohashFields(venue);
@@ -1995,15 +2490,29 @@ const handleCreateCommunityEvent = async (event) => {
     const now = new Date().toISOString();
     const eventId = crypto.randomUUID();
 
+    // Generate title
+    let eventTitle = title;
+    if (!eventTitle) {
+      if (isOpenMic) {
+        eventTitle = `Open Mic @ ${venue.name}`;
+      } else if (artist) {
+        const artistNames = artistIdsList.length > 1 ? `${artist.name} + ${artistIdsList.length - 1} more` : artist.name;
+        eventTitle = `${artistNames} @ ${venue.name}`;
+      } else {
+        eventTitle = `Event @ ${venue.name}`;
+      }
+    }
+
+    // Create main event with primary artist
     const newEvent = {
       id: eventId,
-      artistId: artistId,
+      artistId: artistIdsList[0] || null,
       venueId: venueId,
-      title: title || `${artist.name} @ ${venue.name}`,
+      title: eventTitle,
       date: date,
       startTime: startTime,
       endTime: endTime || '00:00',
-      type: 'gig',
+      type: isOpenMic ? 'open-mic' : 'gig',
       isPublic: isPublic !== undefined ? isPublic : true,
       isAllDay: false,
 
@@ -2026,13 +2535,14 @@ const handleCreateCommunityEvent = async (event) => {
       Item: newEvent
     }).promise();
 
-    console.log(` Community event created: ${eventId} (${artist.name} @ ${venue.name})`);
+    console.log(` Community event created: ${eventId} (${eventTitle})`);
 
     return {
       statusCode: 201,
       headers: getCorsHeaders(),
       body: JSON.stringify({
         message: 'Event created successfully',
+        id: eventId,
         event: {
           id: eventId,
           title: newEvent.title,
@@ -2056,6 +2566,9 @@ const handleCreateCommunityEvent = async (event) => {
 // Main handler
 exports.handler = async (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;
+
+  // Store event for CORS headers
+  currentEvent = event;
 
   // HTTP API v2 compatibility
   const method = event.requestContext?.http?.method || event.httpMethod;
@@ -2089,6 +2602,10 @@ exports.handler = async (event, context) => {
       return await handleGetArtistPublicEvents(event);
     }
 
+    if (routeKey.match(/GET \/api\/artists\/[^/]+\/public-availability/)) {
+      return await handleGetArtistAvailability(event);
+    }
+
     if (routeKey.match(/POST \/api\/events\/batch/)) {
       return await handleBatchEventsWithJoins(event);
     }
@@ -2102,56 +2619,66 @@ exports.handler = async (event, context) => {
       return await handleCreateCommunityEvent(event);
     }
 
+    // Check conflicts (public, no auth required - read-only operation)
+    if (routeKey.match(/POST \/api\/artists\/[^/]+\/events\/check-conflicts/)) {
+      return await handleCheckConflicts(event, null);
+    }
+
     // AUTHENTICATED ROUTES - Require auth for everything else
     const authResult = await requireAuth(event);
     if (authResult.statusCode === 401) {
       return authResult;
     }
-    const { session } = authResult;
+    const { user } = authResult;
 
     // Unified calendar
     if (routeKey.match(/GET \/api\/artists\/[^/]+\/calendar/)) {
-      return await handleGetCalendar(event, session);
+      return await handleGetCalendar(event, user);
     }
 
     // Get all artist events (no date filter)
     if (routeKey.match(/GET \/api\/artists\/[^/]+\/events$/) && !path.includes('/check-conflicts')) {
-      return await handleGetAllArtistEvents(event, session);
+      return await handleGetAllArtistEvents(event, user);
+    }
+
+    // Toggle availability
+    if (routeKey.match(/POST \/api\/artists\/[^/]+\/events\/toggle-availability/)) {
+      return await handleToggleAvailability(event, user);
+    }
+
+    // Bulk set availability
+    if (routeKey.match(/POST \/api\/artists\/[^/]+\/events\/bulk-availability/)) {
+      return await handleBulkAvailability(event, user);
     }
 
     // Create artist event
-    if (routeKey.match(/POST \/api\/artists\/[^/]+\/events$/) && !path.includes('/user')) {
-      return await handleCreateArtistEvent(event, session);
+    if (routeKey.match(/POST \/api\/artists\/[^/]+\/events$/) && !path.includes('/user') && !path.includes('/toggle-availability') && !path.includes('/bulk-availability')) {
+      return await handleCreateArtistEvent(event, user);
     }
 
     // Create user unavailability (artist-agnostic)
     if (routeKey.match(/POST \/api\/users\/me\/unavailability/)) {
-      return await handleCreateUserUnavailability(event, session);
+      return await handleCreateUserUnavailability(event, user);
     }
 
     // Get single event
     if (routeKey.match(/GET \/api\/artists\/[^/]+\/events\/[^/]+$/) && !path.includes('/check-conflicts')) {
-      return await handleGetEvent(event, session);
+      return await handleGetEvent(event, user);
     }
 
     // Update event
     if (routeKey.match(/PUT \/api\/artists\/[^/]+\/events\/[^/]+/)) {
-      return await handleUpdateEvent(event, session);
+      return await handleUpdateEvent(event, user);
     }
 
     // Delete event
     if (routeKey.match(/DELETE \/api\/artists\/[^/]+\/events\/[^/]+/)) {
-      return await handleDeleteEvent(event, session);
-    }
-
-    // Check conflicts
-    if (routeKey.match(/POST \/api\/artists\/[^/]+\/events\/check-conflicts/)) {
-      return await handleCheckConflicts(event, session);
+      return await handleDeleteEvent(event, user);
     }
 
     // Create public gig (new dedicated endpoint)
     if (routeKey.match(/POST \/api\/artists\/[^/]+\/public-gigs/)) {
-      return await handleCreatePublicGig(event, session);
+      return await handleCreatePublicGig(event, user);
     }
 
     return {

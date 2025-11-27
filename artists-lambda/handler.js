@@ -11,7 +11,24 @@ const ssm = new AWS.SSM({ region: 'eu-west-2' });
 
 // Configuration
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://backstage.bndy.co.uk';
+
+// Allowed CORS origins for frontend access
+const ALLOWED_ORIGINS = [
+  'https://www.bndy.co.uk',       // Primary domain
+  'https://backstage.bndy.co.uk', // Legacy domain
+  'https://bndy.co.uk',            // Apex domain
+  'https://live.bndy.co.uk',      // Frontstage
+  'http://localhost:3000'          // Local development
+];
+
+// Module-level variable to store current request event for CORS
+let currentEvent = null;
+
+// Get appropriate origin for CORS based on request origin
+const getAllowedOrigin = () => {
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
 
 // JWT Secret - cached after first retrieval
 let JWT_SECRET = null;
@@ -154,7 +171,21 @@ const requireAuth = async (event) => {
   try {
     const jwtSecret = await getJWTSecret();
     const session = jwt.verify(sessionToken, jwtSecret);
-    return { user: session };
+
+    // Fetch user to check platformAdmin flag
+    const userResult = await dynamodb.get({
+      TableName: 'bndy-users',
+      Key: { cognito_id: session.userId }
+    }).promise();
+
+    const platformAdmin = userResult.Item?.platformAdmin || false;
+
+    return {
+      user: {
+        ...session,
+        platformAdmin
+      }
+    };
   } catch (error) {
     console.error(' Invalid session token:', error.message);
     return { error: 'Invalid session' };
@@ -162,6 +193,9 @@ const requireAuth = async (event) => {
 };
 
 exports.handler = async (event, context) => {
+  // Store event for CORS headers
+  currentEvent = event;
+
   // HTTP API v2 payload format compatibility
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
@@ -210,7 +244,7 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'PUT' && event.pathParameters?.id) {
-      return await handleUpdateArtist(event.pathParameters.id, JSON.parse(event.body));
+      return await handleUpdateArtist(event);
     }
 
     if (method === 'DELETE' && event.pathParameters?.id) {
@@ -525,8 +559,49 @@ async function handleCreateArtist(event) {
   }
 }
 
-async function handleUpdateArtist(artistId, artistData) {
+async function handleUpdateArtist(event) {
+  const artistId = event.pathParameters.id;
+  const artistData = JSON.parse(event.body);
+
   console.log(` Artists Lambda: Updating artist: ${artistId}`);
+
+  // Require authentication
+  const authResult = await requireAuth(event);
+  if (authResult.error) {
+    return {
+      statusCode: 401,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: authResult.error })
+    };
+  }
+
+  const { user } = authResult;
+
+  // Check access - platform admin OR member
+  if (!user.platformAdmin) {
+    const membershipResult = await dynamodb.query({
+      TableName: MEMBERSHIPS_TABLE,
+      IndexName: 'user_id-index',
+      KeyConditionExpression: 'user_id = :userId',
+      FilterExpression: 'artist_id = :artistId',
+      ExpressionAttributeValues: {
+        ':userId': user.userId,
+        ':artistId': artistId
+      }
+    }).promise();
+
+    const hasMembership = membershipResult.Items && membershipResult.Items.length > 0;
+    if (!hasMembership) {
+      console.log('[ARTISTS] Access denied - no membership and not platform admin');
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Access denied' })
+      };
+    }
+  } else {
+    console.log('[ARTISTS] Platform admin access granted for artist update');
+  }
 
   const now = new Date().toISOString();
 
@@ -638,6 +713,13 @@ async function handleUpdateArtist(artistId, artistData) {
   if (artistData.validated !== undefined) {
     updateParts.push('validated = :validated');
     expressionAttributeValues[':validated'] = artistData.validated;
+  }
+
+  // Allow updating source (for enabling artists in backstage - platform admin only)
+  if (artistData.source !== undefined) {
+    expressionAttributeNames['#source'] = 'source';
+    updateParts.push('#source = :source');
+    expressionAttributeValues[':source'] = artistData.source;
   }
 
   const params = {
@@ -1132,7 +1214,7 @@ function getCommunityHeaders() {
 function getCorsHeaders() {
   return {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': FRONTEND_URL,
+    'Access-Control-Allow-Origin': getAllowedOrigin(),
     'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
     'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
     'Access-Control-Allow-Credentials': 'true'
