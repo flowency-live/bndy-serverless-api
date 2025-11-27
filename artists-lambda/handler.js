@@ -272,7 +272,7 @@ async function handleGetAllArtists() {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
+    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
@@ -324,6 +324,7 @@ async function handleGetAllArtists() {
       genres: artist.genres || [],
       actType: artist.actType || null,
       acoustic: artist.acoustic || false,
+      publishAvailability: artist.publishAvailability || false,
       facebookUrl: artist.facebookUrl || '',
       instagramUrl: artist.instagramUrl || '',
       websiteUrl: artist.websiteUrl || '',
@@ -389,6 +390,7 @@ async function handleGetArtistById(artistId) {
       genres: result.Item.genres || [],
       actType: result.Item.actType || null,
       acoustic: result.Item.acoustic || false,
+      publishAvailability: result.Item.publishAvailability || false,
       facebookUrl: result.Item.facebookUrl || '',
       instagramUrl: result.Item.instagramUrl || '',
       websiteUrl: result.Item.websiteUrl || '',
