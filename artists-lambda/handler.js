@@ -662,6 +662,10 @@ async function handleUpdateArtist(event) {
     updateParts.push('acoustic = :acoustic');
     expressionAttributeValues[':acoustic'] = artistData.acoustic || false;
   }
+  if (artistData.publishAvailability !== undefined) {
+    updateParts.push('publishAvailability = :publishAvailability');
+    expressionAttributeValues[':publishAvailability'] = artistData.publishAvailability || false;
+  }
   if (artistData.isVerified !== undefined) {
     updateParts.push('isVerified = :isVerified');
     expressionAttributeValues[':isVerified'] = artistData.isVerified;
