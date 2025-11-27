@@ -45,21 +45,38 @@ async function getJWTSecret() {
   }
 }
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://bndy.co.uk';
+// Allowed CORS origins for frontend access
+const ALLOWED_ORIGINS = [
+  'https://www.bndy.co.uk',       // Primary domain
+  'https://backstage.bndy.co.uk', // Legacy domain
+  'https://bndy.co.uk',            // Apex domain
+  'https://live.bndy.co.uk',      // Frontstage
+  'http://localhost:3000'          // Local development
+];
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': FRONTEND_URL,
+// Module-level variable to store current request event for CORS
+let currentEvent = null;
+
+// Get appropriate origin for CORS based on request origin
+const getAllowedOrigin = () => {
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
+
+// Generate CORS headers with dynamic origin
+const getCorsHeaders = () => ({
+  'Access-Control-Allow-Origin': getAllowedOrigin(),
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Credentials': 'true'
-};
+});
 
 // Create response
 const createResponse = (statusCode, body) => ({
   statusCode,
   headers: {
     'Content-Type': 'application/json',
-    ...corsHeaders
+    ...getCorsHeaders()
   },
   body: JSON.stringify(body)
 });
@@ -153,6 +170,7 @@ const handleGetProfile = async (event) => {
       avatarUrl: dbUser.avatar_url,
       instrument: dbUser.instrument,
       profileCompleted: dbUser.profile_complete,
+      platformAdmin: dbUser.platformAdmin || false,
       createdAt: dbUser.created_at,
       updatedAt: dbUser.updated_at
     };
@@ -403,6 +421,9 @@ const handleDeleteUser = async (event) => {
 
 // Main handler
 exports.handler = async (event, context) => {
+  // Store event for CORS headers
+  currentEvent = event;
+
   // HTTP API v2 payload format compatibility
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
@@ -419,7 +440,7 @@ exports.handler = async (event, context) => {
   if (method === 'OPTIONS') {
     return {
       statusCode: 200,
-      headers: corsHeaders,
+      headers: getCorsHeaders(),
       body: ''
     };
   }
