@@ -566,11 +566,14 @@ const handleDeleteMembership = async (event, membershipId) => {
     const eventsResult = await dynamodb.query({
       TableName: 'bndy-events',
       IndexName: 'artistId-date-index',
-      KeyConditionExpression: 'artist_id = :artistId',
-      FilterExpression: 'event_type = :eventType AND owner_user_id = :userId',
+      KeyConditionExpression: 'artistId = :artistId',
+      FilterExpression: '#type = :eventType AND ownerUserId = :userId',
+      ExpressionAttributeNames: {
+        '#type': 'type' // 'type' is a reserved word in DynamoDB
+      },
       ExpressionAttributeValues: {
         ':artistId': artistId,
-        ':eventType': 'member-unavailable',
+        ':eventType': 'unavailable',
         ':userId': userId
       }
     }).promise();
