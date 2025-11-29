@@ -561,7 +561,7 @@ const handleDeleteMembership = async (event, membershipId) => {
     console.log('[MEMBERSHIPS] Removed votes from', updatePromises.length, 'songs');
 
     // Delete member's unavailability events
-    console.log('[MEMBERSHIPS] Deleting member unavailability events', { artistId: membership.artist_id, userId: membership.user_id });
+    console.log('[MEMBERSHIPS] Deleting member unavailability events', { artistId, userId });
 
     const eventsResult = await dynamodb.query({
       TableName: 'bndy-events',
@@ -569,9 +569,9 @@ const handleDeleteMembership = async (event, membershipId) => {
       KeyConditionExpression: 'artist_id = :artistId',
       FilterExpression: 'event_type = :eventType AND owner_user_id = :userId',
       ExpressionAttributeValues: {
-        ':artistId': membership.artist_id,
+        ':artistId': artistId,
         ':eventType': 'member-unavailable',
-        ':userId': membership.user_id
+        ':userId': userId
       }
     }).promise();
 
