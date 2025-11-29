@@ -46,14 +46,31 @@ async function getJWTSecret() {
   }
 }
 
-const FRONTEND_URL = 'https://backstage.bndy.co.uk';
+// Allowed CORS origins for frontend access
+const ALLOWED_ORIGINS = [
+  'https://www.bndy.co.uk',       // Primary domain
+  'https://backstage.bndy.co.uk', // Legacy domain
+  'https://bndy.co.uk',            // Apex domain
+  'https://live.bndy.co.uk',      // Frontstage
+  'http://localhost:3000'          // Local development
+];
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': FRONTEND_URL,
+// Module-level variable to store current request event for CORS
+let currentEvent = null;
+
+// Get appropriate origin for CORS based on request origin
+const getAllowedOrigin = () => {
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
+
+// Generate CORS headers with dynamic origin
+const getCorsHeaders = () => ({
+  'Access-Control-Allow-Origin': getAllowedOrigin(),
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Credentials': 'true'
-};
+});
 
 // Parse cookies from event
 const parseCookies = (cookieHeader) => {
@@ -70,7 +87,7 @@ const createResponse = (statusCode, body) => ({
   statusCode,
   headers: {
     'Content-Type': 'application/json',
-    ...corsHeaders
+    ...getCorsHeaders()
   },
   body: JSON.stringify(body)
 });
@@ -102,10 +119,20 @@ const requireAuth = async (event) => {
   try {
     const jwtSecret = await getJWTSecret();
     const session = jwt.verify(sessionToken, jwtSecret);
+
+    // Fetch platformAdmin flag from users table
+    const userResult = await dynamodb.get({
+      TableName: USERS_TABLE,
+      Key: { cognito_id: session.userId }
+    }).promise();
+
+    const platformAdmin = userResult.Item?.platformAdmin || false;
+
     console.log('[MEMBERSHIPS] User authenticated via session', {
-      userId: session.userId.substring(0, 8) + '...'
+      userId: session.userId.substring(0, 8) + '...',
+      platformAdmin
     });
-    return { user: session };
+    return { user: { ...session, platformAdmin } };
   } catch (error) {
     console.error('[MEMBERSHIPS] Invalid session token:', error.message);
     return { error: 'Invalid session' };
@@ -203,8 +230,12 @@ const handleGetArtistMembers = async (event, artistId) => {
     return createResponse(401, { error: authResult.error });
   }
 
+  const { user } = authResult;
+
   try {
-    console.log(`[MEMBERSHIPS] Getting members for artist: ${artistId}`);
+    console.log(`[MEMBERSHIPS] Getting members for artist: ${artistId}`, {
+      platformAdmin: user.platformAdmin
+    });
 
     // Query memberships by artist_id
     const result = await dynamodb.query({
@@ -529,6 +560,31 @@ const handleDeleteMembership = async (event, membershipId) => {
 
     console.log('[MEMBERSHIPS] Removed votes from', updatePromises.length, 'songs');
 
+    // Delete member's unavailability events
+    console.log('[MEMBERSHIPS] Deleting member unavailability events', { artistId: membership.artist_id, userId: membership.user_id });
+
+    const eventsResult = await dynamodb.query({
+      TableName: 'bndy-events',
+      IndexName: 'artistId-date-index',
+      KeyConditionExpression: 'artist_id = :artistId',
+      FilterExpression: 'event_type = :eventType AND owner_user_id = :userId',
+      ExpressionAttributeValues: {
+        ':artistId': membership.artist_id,
+        ':eventType': 'member-unavailable',
+        ':userId': membership.user_id
+      }
+    }).promise();
+
+    const deleteEventPromises = eventsResult.Items.map(event =>
+      dynamodb.delete({
+        TableName: 'bndy-events',
+        Key: { id: event.id }
+      }).promise()
+    );
+
+    await Promise.all(deleteEventPromises);
+    console.log('[MEMBERSHIPS] Deleted', deleteEventPromises.length, 'unavailability events');
+
     // Delete membership
     await dynamodb.delete({
       TableName: MEMBERSHIPS_TABLE,
@@ -654,6 +710,9 @@ const handleGetArtistMemberships = async (artistId) => {
 
 // Main handler
 exports.handler = async (event, context) => {
+  // Store event for CORS headers
+  currentEvent = event;
+
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
   const routeKey = `${method} ${path}`;
@@ -669,7 +728,7 @@ exports.handler = async (event, context) => {
   if (method === 'OPTIONS') {
     return {
       statusCode: 200,
-      headers: corsHeaders,
+      headers: getCorsHeaders(),
       body: ''
     };
   }
