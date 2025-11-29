@@ -675,6 +675,11 @@ const handleGetCalendar = async (event, user) => {
       crossArtistEventsResults.forEach((result, idx) => {
         const otherArtistId = allOtherArtistIds[idx];
         (result.Items || []).forEach(event => {
+          // SKIP availability events - these should only show in their base artist
+          if (event.type === 'available') {
+            return;
+          }
+
           // Find which of our band members are involved in this event
           // by checking if they belong to this other artist
           memberUserIds.forEach(userId => {
