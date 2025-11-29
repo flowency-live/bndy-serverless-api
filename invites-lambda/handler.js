@@ -20,9 +20,31 @@ const INVITES_TABLE = 'bndy-invites';
 const ARTISTS_TABLE = 'bndy-artists';
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
 const USERS_TABLE = 'bndy-users';
-const FRONTEND_URL = 'https://backstage.bndy.co.uk';
+
+// Generate short URL-safe invite token (10 characters, base62: a-z, A-Z, 0-9)
+const generateShortToken = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const bytes = crypto.randomBytes(10);
+  let token = '';
+  for (let i = 0; i < 10; i++) {
+    token += chars[bytes[i] % chars.length];
+  }
+  return token;
+};
+
+// Allowed CORS origins for frontend access
+const ALLOWED_ORIGINS = [
+  'https://www.bndy.co.uk',       // Primary domain
+  'https://backstage.bndy.co.uk', // Legacy domain
+  'https://bndy.co.uk',            // Apex domain
+  'https://live.bndy.co.uk',      // Frontstage
+  'http://localhost:3000'          // Local development
+];
 
 const INVITE_EXPIRY_DAYS = 7;
+
+// Module-level variable to store current request event for CORS
+let currentEvent = null;
 
 // JWT Secret - cached after first retrieval
 let JWT_SECRET = null;
@@ -56,11 +78,37 @@ async function getJWTSecret() {
   }
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': FRONTEND_URL,
+// Get appropriate origin for CORS based on request origin
+const getAllowedOrigin = () => {
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
+
+// Generate CORS headers with dynamic origin
+const getCorsHeaders = () => ({
+  'Access-Control-Allow-Origin': getAllowedOrigin(),
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Credentials': 'true'
+});
+
+// Get frontend URL based on request origin or referer
+const getFrontendUrl = () => {
+  const referer = currentEvent?.headers?.referer || currentEvent?.headers?.Referer;
+  if (referer) {
+    try {
+      const refererUrl = new URL(referer);
+      const refererOrigin = refererUrl.origin;
+      if (ALLOWED_ORIGINS.includes(refererOrigin)) {
+        return refererOrigin;
+      }
+    } catch (e) {}
+  }
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  if (ALLOWED_ORIGINS.includes(requestOrigin)) {
+    return requestOrigin;
+  }
+  return ALLOWED_ORIGINS[0];
 };
 
 // Parse cookies from event
@@ -79,7 +127,7 @@ const createResponse = (statusCode, body, cookies = null) => {
     statusCode,
     headers: {
       'Content-Type': 'application/json',
-      ...corsHeaders
+      ...getCorsHeaders()
     },
     body: JSON.stringify(body)
   };
@@ -200,8 +248,8 @@ const handleCreateGeneralInvite = async (event, artistId) => {
 
     const inviterName = userResult.Item?.display_name || userResult.Item?.username || 'Someone';
 
-    // Generate invite token
-    const token = crypto.randomUUID();
+    // Generate short invite token (10 characters)
+    const token = generateShortToken();
     const now = new Date().toISOString();
     const expiresAt = Math.floor(Date.now() / 1000) + (INVITE_EXPIRY_DAYS * 24 * 60 * 60); // 7 days
 
@@ -228,7 +276,7 @@ const handleCreateGeneralInvite = async (event, artistId) => {
       Item: invite
     }).promise();
 
-    const inviteLink = `${FRONTEND_URL}/invite/${token}`;
+    const inviteLink = `${getFrontendUrl()}/invite/${token}`;
 
     console.log('[INVITES] General invite created successfully', { token: token.substring(0, 8) + '...' });
 
@@ -314,8 +362,8 @@ const handleCreatePhoneInvite = async (event, artistId) => {
 
     const inviterName = userResult.Item?.display_name || userResult.Item?.username || 'Someone';
 
-    // Generate invite token
-    const token = crypto.randomUUID();
+    // Generate short invite token (10 characters)
+    const token = generateShortToken();
     const now = new Date().toISOString();
     const expiresAt = Math.floor(Date.now() / 1000) + (INVITE_EXPIRY_DAYS * 24 * 60 * 60);
 
@@ -342,7 +390,7 @@ const handleCreatePhoneInvite = async (event, artistId) => {
       Item: invite
     }).promise();
 
-    const inviteLink = `${FRONTEND_URL}/invite/${token}`;
+    const inviteLink = `${getFrontendUrl()}/invite/${token}`;
 
     // Send SMS via Pinpoint
     try {
@@ -750,6 +798,9 @@ const handleAcceptInvite = async (event, token) => {
 
 // Main handler
 exports.handler = async (event, context) => {
+  // Store event for CORS headers
+  currentEvent = event;
+
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
   const routeKey = `${method} ${path}`;
@@ -765,7 +816,7 @@ exports.handler = async (event, context) => {
   if (method === 'OPTIONS') {
     return {
       statusCode: 200,
-      headers: corsHeaders,
+      headers: getCorsHeaders(),
       body: ''
     };
   }
