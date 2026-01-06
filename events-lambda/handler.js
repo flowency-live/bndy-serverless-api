@@ -927,19 +927,14 @@ const handleCreateArtistEvent = async (event, user) => {
   const { artistId } = event.pathParameters;
   const eventData = JSON.parse(event.body);
 
-  // Check access - platform admin OR member
-  let membership = null;
-  if (!user.platformAdmin) {
-    membership = await verifyMembership(user.userId, artistId);
-    if (!membership) {
-      return {
-        statusCode: 403,
-        headers: getCorsHeaders(),
-        body: JSON.stringify({ error: 'Not a member of this artist' })
-      };
-    }
-  } else {
-    // Platform admins can only create gig events (public or private)
+  // Check access - member first, then platform admin fallback
+  let membership = await verifyMembership(user.userId, artistId);
+
+  if (membership) {
+    // User is a member - allow any event type
+    console.log('[EVENTS] Member access granted for event creation');
+  } else if (user.platformAdmin) {
+    // Not a member, but platform admin - restrict to gig events only
     const allowedTypes = ['gig', 'public_gig', 'gig-public', 'gig-private'];
     if (!allowedTypes.includes(eventData.type)) {
       return {
@@ -954,6 +949,13 @@ const handleCreateArtistEvent = async (event, user) => {
     console.log('[EVENTS] Platform admin access granted for gig creation');
     // Create a minimal membership object for compatibility
     membership = { user_id: user.userId, artist_id: artistId, membership_id: 'platform-admin' };
+  } else {
+    // Not a member and not platform admin - deny access
+    return {
+      statusCode: 403,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Not a member of this artist' })
+    };
   }
 
   // Validate required fields
