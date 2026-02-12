@@ -6,6 +6,21 @@ const ssm = new AWS.SSM({ region: 'eu-west-2' });
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
+const ALLOWED_ORIGINS = [
+  'https://www.bndy.co.uk',       // Primary domain
+  'https://backstage.bndy.co.uk', // Legacy domain
+  'https://bndy.co.uk',            // Apex domain
+  'https://live.bndy.co.uk',      // Frontstage
+  'http://localhost:3000'          // Local development
+];
+
+let currentEvent = null;
+
+const getAllowedOrigin = () => {
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
+
 // JWT Secret - cached after first retrieval
 let JWT_SECRET = null;
 
@@ -82,6 +97,7 @@ const extractUserId = async (event) => {
 };
 
 exports.handler = async (event, context) => {
+  currentEvent = event;
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
 
@@ -561,6 +577,7 @@ async function handleAddSuggestion(body, artistId, userId) {
     suggested_by_user_id: userId,
     suggested_comment: body.suggested_comment || '',
     vote_score_percentage: null,
+    voting_scale: 3,  // New songs use 0-3 scale (existing songs without this field use 5)
 
     last_performed_at: '1970-01-01T00:00:00.000Z',
     performance_count: 0,
@@ -685,15 +702,7 @@ async function handleVote(artistSongId, artistId, userId, body) {
       };
     }
 
-    if (body.vote_value === undefined || body.vote_value === null || body.vote_value < 0 || body.vote_value > 5) {
-      console.error('[VOTE] Invalid vote value:', body.vote_value);
-      return {
-        statusCode: 400,
-        headers: getCorsHeaders(),
-        body: JSON.stringify({ error: 'Invalid vote value. Must be between 0 and 5.' })
-      };
-    }
-
+    // Fetch song first to get voting_scale for validation
     const songResult = await dynamodb.get({
       TableName: 'bndy-artist-songs',
       Key: { id: artistSongId }
@@ -708,6 +717,16 @@ async function handleVote(artistSongId, artistId, userId, body) {
     }
 
     const song = songResult.Item;
+    const votingScale = song.voting_scale || 5;  // Backwards compatible: existing songs use 5
+
+    if (body.vote_value === undefined || body.vote_value === null || body.vote_value < 0 || body.vote_value > votingScale) {
+      console.error('[VOTE] Invalid vote value:', body.vote_value, 'for scale:', votingScale);
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: `Invalid vote value. Must be between 0 and ${votingScale}.` })
+      };
+    }
     const votes = song.votes || {};
 
     console.log('[VOTE] Current votes before update:', Object.keys(votes));
@@ -758,24 +777,70 @@ async function handleVote(artistSongId, artistId, userId, body) {
 
       memberCount = memberCountResult.Items.length;
 
-      console.log('[VOTE] Member count:', memberCount, 'Vote count:', voteCount);
+      console.log('[VOTE] Member count:', memberCount, 'Vote count:', voteCount, 'Voting scale:', votingScale);
 
       const totalVotes = Object.values(votes).reduce((sum, v) => sum + v.value, 0);
-      scorePercentage = Math.round((totalVotes / (memberCount * 5)) * 100);
+      const maxScore = memberCount * votingScale;  // Use song's voting_scale (3 or 5)
+      scorePercentage = Math.round((totalVotes / maxScore) * 100);
+
+      // Calculate disagreement flag (only when all votes are in)
+      let hasDisagreement = false;
+      if (voteCount >= memberCount) {
+        const voteValues = Object.values(votes).map(v => v.value);
+        const average = voteValues.reduce((a, b) => a + b, 0) / voteValues.length;
+
+        // Calculate standard deviation
+        const variance = voteValues.reduce((sum, v) => sum + Math.pow(v - average, 2), 0) / voteValues.length;
+        const stdDev = Math.sqrt(variance);
+
+        const min = Math.min(...voteValues);
+        const max = Math.max(...voteValues);
+        const range = max - min;
+
+        // Flag if high disagreement - adjust thresholds based on scale
+        // For 5-star: stdDev >= 1.5, range >= 4, or (5 and <=2)
+        // For 3-star: stdDev >= 0.9, range >= 2, or (3 and 1)
+        if (votingScale === 3) {
+          if (stdDev >= 0.9 || range >= 2 || (voteValues.some(v => v === 3) && voteValues.some(v => v === 1))) {
+            hasDisagreement = true;
+          }
+        } else {
+          if (stdDev >= 1.5 || range >= 4 || (voteValues.some(v => v === 5) && voteValues.some(v => v <= 2))) {
+            hasDisagreement = true;
+          }
+        }
+      }
 
       newStatus = (voteCount >= memberCount && song.status === 'voting') ? 'review' : song.status;
+
+      // Check auto-discard threshold if all votes are in and would go to review
+      if (newStatus === 'review') {
+        const artistResult = await dynamodb.get({
+          TableName: 'bndy-artists',
+          Key: { id: artistId }
+        }).promise();
+
+        const autoDiscardThreshold = artistResult.Item?.autoDiscardThreshold;
+        if (autoDiscardThreshold !== null && autoDiscardThreshold !== undefined && scorePercentage < autoDiscardThreshold) {
+          console.log('[VOTE] Auto-discarding song: score', scorePercentage, '% below threshold', autoDiscardThreshold, '%');
+          newStatus = 'discarded';
+        }
+      }
+
       statusChanged = newStatus !== song.status;
 
       console.log('[VOTE] Status transition:', {
         oldStatus: song.status,
         newStatus,
         willPromote: statusChanged,
-        scorePercentage
+        scorePercentage,
+        hasDisagreement
       });
 
-      updateExpression = 'SET votes = :votes, vote_score_percentage = :score, #status = :status, updated_at = :now' +
+      updateExpression = 'SET votes = :votes, vote_score_percentage = :score, has_disagreement = :disagreement, #status = :status, updated_at = :now' +
         (statusChanged ? ', last_status_change_at = :now' : '');
       expressionAttributeValues[':score'] = scorePercentage;
+      expressionAttributeValues[':disagreement'] = hasDisagreement;
       expressionAttributeValues[':status'] = newStatus;
     }
 
@@ -1269,7 +1334,7 @@ async function handleCheckVoteReminders(artistId, userId) {
 function getCorsHeaders() {
   return {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': getAllowedOrigin(),
     'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
     'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
     'Access-Control-Allow-Credentials': 'true'

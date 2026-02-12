@@ -8,6 +8,7 @@ const https = require('https');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 const ssm = new AWS.SSM({ region: 'eu-west-2' });
+const s3 = new AWS.S3({ region: 'eu-west-2' });
 
 // Configuration
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
@@ -140,6 +141,116 @@ async function fetchFacebookProfilePicture(facebookUrl) {
   return null;
 }
 
+/**
+ * Download external image and upload to S3
+ * Returns S3 public URL if successful, null otherwise
+ * @param {string} imageUrl - External image URL to download
+ * @param {string} artistId - Artist ID for S3 key path
+ * @param {string} artistName - Artist name for logging
+ * @returns {Promise<string|null>} S3 public URL or null
+ */
+async function downloadAndUploadImageToS3(imageUrl, artistId, artistName) {
+  if (!imageUrl || !imageUrl.trim()) return null;
+
+  // Skip if already an S3 URL (don't re-download)
+  if (imageUrl.includes('s3.') || imageUrl.includes('bndy-images')) {
+    console.log(`[DOWNLOAD_IMAGE] Already S3 URL, using as-is: ${imageUrl.substring(0, 80)}`);
+    return imageUrl;
+  }
+
+  // Skip Facebook Graph API URLs (these are dynamic redirects)
+  if (imageUrl.includes('graph.facebook.com')) {
+    console.log(`[DOWNLOAD_IMAGE] Facebook Graph URL, using as-is: ${imageUrl.substring(0, 80)}`);
+    return imageUrl;
+  }
+
+  console.log(`[DOWNLOAD_IMAGE] Downloading external image for artist "${artistName}"`);
+  console.log(`[DOWNLOAD_IMAGE] Source URL: ${imageUrl.substring(0, 100)}`);
+
+  return new Promise((resolve) => {
+    https.get(imageUrl, (response) => {
+      // Handle redirects
+      if (response.statusCode === 301 || response.statusCode === 302) {
+        const redirectUrl = response.headers.location;
+        console.log(`[DOWNLOAD_IMAGE] Following redirect to: ${redirectUrl?.substring(0, 80)}`);
+        return resolve(downloadAndUploadImageToS3(redirectUrl, artistId, artistName));
+      }
+
+      if (response.statusCode !== 200) {
+        console.error(`[DOWNLOAD_IMAGE] Failed to download: HTTP ${response.statusCode}`);
+        return resolve(null);
+      }
+
+      const contentType = response.headers['content-type'];
+      if (!contentType || !contentType.startsWith('image/')) {
+        console.error(`[DOWNLOAD_IMAGE] Invalid content type: ${contentType}`);
+        return resolve(null);
+      }
+
+      // Determine file extension from content type
+      const ext = contentType.split('/')[1]?.split(';')[0] || 'jpg';
+      const allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+      const fileExt = allowedExts.includes(ext) ? ext : 'jpg';
+
+      // Download image data
+      const chunks = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', async () => {
+        try {
+          const buffer = Buffer.concat(chunks);
+          const fileSizeKB = (buffer.length / 1024).toFixed(2);
+          console.log(`[DOWNLOAD_IMAGE] Downloaded ${fileSizeKB}KB`);
+
+          // Validate size (5MB limit)
+          const maxSize = 5 * 1024 * 1024;
+          if (buffer.length > maxSize) {
+            console.error(`[DOWNLOAD_IMAGE] File too large: ${fileSizeKB}KB (max 5MB)`);
+            return resolve(null);
+          }
+
+          // Generate S3 key
+          const timestamp = Date.now();
+          const sanitizedName = artistName.replace(/[^a-zA-Z0-9-]/g, '_').substring(0, 50);
+          const key = `community-imports/${artistId}/${timestamp}-${sanitizedName}.${fileExt}`;
+
+          console.log(`[DOWNLOAD_IMAGE] Uploading to S3: ${key}`);
+
+          // Upload to S3
+          await s3.putObject({
+            Bucket: 'bndy-images',
+            Key: key,
+            Body: buffer,
+            ContentType: contentType,
+            Metadata: {
+              'artist-id': artistId,
+              'artist-name': artistName,
+              'source': 'mcp_community_import',
+              'original-url': imageUrl.substring(0, 500)
+            }
+          }).promise();
+
+          const s3Url = `https://bndy-images.s3.eu-west-2.amazonaws.com/${key}`;
+          console.log(`[DOWNLOAD_IMAGE] Upload successful: ${s3Url.substring(0, 80)}`);
+          return resolve(s3Url);
+
+        } catch (uploadError) {
+          console.error('[DOWNLOAD_IMAGE] S3 upload failed:', uploadError.message);
+          return resolve(null);
+        }
+      });
+
+      response.on('error', (error) => {
+        console.error('[DOWNLOAD_IMAGE] Download error:', error.message);
+        return resolve(null);
+      });
+
+    }).on('error', (error) => {
+      console.error('[DOWNLOAD_IMAGE] HTTP request error:', error.message);
+      return resolve(null);
+    });
+  });
+}
+
 // Parse cookies from event
 const parseCookies = (cookieHeader) => {
   if (!cookieHeader) return {};
@@ -244,6 +355,10 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'PUT' && event.pathParameters?.id) {
+      // Check if this is an MCP update request (public, no auth)
+      if (path.includes('/mcp')) {
+        return await handleMCPUpdateArtist(event);
+      }
       return await handleUpdateArtist(event);
     }
 
@@ -272,7 +387,7 @@ async function handleGetAllArtists() {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
+    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
@@ -325,6 +440,8 @@ async function handleGetAllArtists() {
       actType: artist.actType || null,
       acoustic: artist.acoustic || false,
       publishAvailability: artist.publishAvailability || false,
+      showMemberVotes: artist.showMemberVotes || false,
+      autoDiscardThreshold: artist.autoDiscardThreshold ?? null,
       facebookUrl: artist.facebookUrl || '',
       instagramUrl: artist.instagramUrl || '',
       websiteUrl: artist.websiteUrl || '',
@@ -391,6 +508,8 @@ async function handleGetArtistById(artistId) {
       actType: result.Item.actType || null,
       acoustic: result.Item.acoustic || false,
       publishAvailability: result.Item.publishAvailability || false,
+      showMemberVotes: result.Item.showMemberVotes || false,
+      autoDiscardThreshold: result.Item.autoDiscardThreshold ?? null,
       facebookUrl: result.Item.facebookUrl || '',
       instagramUrl: result.Item.instagramUrl || '',
       websiteUrl: result.Item.websiteUrl || '',
@@ -667,6 +786,14 @@ async function handleUpdateArtist(event) {
   if (artistData.publishAvailability !== undefined) {
     updateParts.push('publishAvailability = :publishAvailability');
     expressionAttributeValues[':publishAvailability'] = artistData.publishAvailability || false;
+  }
+  if (artistData.showMemberVotes !== undefined) {
+    updateParts.push('showMemberVotes = :showMemberVotes');
+    expressionAttributeValues[':showMemberVotes'] = artistData.showMemberVotes || false;
+  }
+  if (artistData.autoDiscardThreshold !== undefined) {
+    updateParts.push('autoDiscardThreshold = :autoDiscardThreshold');
+    expressionAttributeValues[':autoDiscardThreshold'] = artistData.autoDiscardThreshold;  // Can be null to disable
   }
   if (artistData.isVerified !== undefined) {
     updateParts.push('isVerified = :isVerified');
@@ -1089,7 +1216,7 @@ async function handleCreateCommunityArtist(event) {
 
   try {
     const body = JSON.parse(event.body);
-    const { name, location, locationType, locationLat, locationLng, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic } = body;
+    const { name, location, locationType, locationLat, locationLng, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic, profileImageUrl } = body;
 
     // Validation
     if (!name || name.trim().length === 0) {
@@ -1111,13 +1238,32 @@ async function handleCreateCommunityArtist(event) {
     const now = new Date().toISOString();
     const artistId = crypto.randomUUID();
 
-    // Fetch Facebook profile picture if Facebook URL provided
-    let profileImageUrl = '';
-    if (facebookUrl) {
+    // Handle profile image from multiple sources (priority order)
+    let finalProfileImageUrl = '';
+
+    // Priority 1: Provided external URL (MCP imports)
+    if (profileImageUrl) {
+      console.log('[CREATE_COMMUNITY_ARTIST] External profileImageUrl provided, attempting download & S3 upload...');
+      try {
+        const s3Url = await downloadAndUploadImageToS3(profileImageUrl, artistId, name.trim());
+        if (s3Url) {
+          finalProfileImageUrl = s3Url;
+          console.log('[CREATE_COMMUNITY_ARTIST] Image uploaded to S3 successfully');
+        } else {
+          console.warn('[CREATE_COMMUNITY_ARTIST] Image download/upload failed, will try Facebook fallback');
+        }
+      } catch (error) {
+        console.error('[CREATE_COMMUNITY_ARTIST] Error downloading/uploading image:', error.message);
+        // Continue to Facebook fallback
+      }
+    }
+
+    // Priority 2: Facebook URL fallback (existing Frontstage behavior)
+    if (!finalProfileImageUrl && facebookUrl) {
       console.log('[CREATE_COMMUNITY_ARTIST] Attempting to fetch Facebook profile image...');
       const fbImage = await fetchFacebookProfilePicture(facebookUrl);
       if (fbImage) {
-        profileImageUrl = fbImage;
+        finalProfileImageUrl = fbImage;
         console.log('[CREATE_COMMUNITY_ARTIST] Facebook image fetched successfully');
       }
     }
@@ -1149,7 +1295,7 @@ async function handleCreateCommunityArtist(event) {
       websiteUrl: websiteUrl || '',
       spotifyUrl: body.spotifyUrl || '',
       bio: bio || '',
-      profileImageUrl,
+      profileImageUrl: finalProfileImageUrl,
       isVerified: false,
       claimedByUserId: null,  // Available for claiming
       socialMediaUrls: [],
@@ -1198,6 +1344,153 @@ async function handleCreateCommunityArtist(event) {
     };
   } catch (error) {
     console.error(' Community artist creation failed:', error);
+    return {
+      statusCode: 500,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+}
+
+// ============================================================================
+// MCP UPDATE ENDPOINT (Public, No Auth Required - AI-created artists only)
+// ============================================================================
+
+async function handleMCPUpdateArtist(event) {
+  const artistId = event.pathParameters.id;
+  const artistData = JSON.parse(event.body);
+
+  console.log(`[MCP_UPDATE_ARTIST] Updating artist: ${artistId}`);
+
+  try {
+    // First, verify the artist exists and is AI-created
+    const existingArtist = await dynamodb.get({
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
+    }).promise();
+
+    if (!existingArtist.Item) {
+      return {
+        statusCode: 404,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({ error: 'Artist not found' })
+      };
+    }
+
+    // Security check: Only allow updates to AI-created or community artists
+    const source = existingArtist.Item.source || '';
+    const aiCreated = existingArtist.Item.ai_created || false;
+    const allowedSources = ['mcp', 'mcp_ai_import', 'community_wizard', 'frontstage'];
+    const isAllowed = aiCreated || allowedSources.some(s => source.includes(s));
+
+    if (!isAllowed) {
+      console.log(`[MCP_UPDATE_ARTIST] Rejected - artist source "${source}" not allowed for MCP updates`);
+      return {
+        statusCode: 403,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          error: 'Cannot update this artist via MCP',
+          message: 'Only AI-created or community artists can be updated via MCP endpoint'
+        })
+      };
+    }
+
+    const now = new Date().toISOString();
+
+    // Build update expression dynamically
+    const updateParts = ['updated_at = :updated_at'];
+    const expressionAttributeNames = {
+      '#name': 'name',
+      '#location': 'location'
+    };
+    const expressionAttributeValues = {
+      ':updated_at': now
+    };
+
+    // Update only fields that are provided
+    if (artistData.name !== undefined) {
+      const searchFields = generateNameSearchFields(artistData.name);
+      updateParts.push('#name = :name', 'name_lower = :name_lower', 'name_prefix = :name_prefix');
+      expressionAttributeValues[':name'] = artistData.name;
+      expressionAttributeValues[':name_lower'] = searchFields.name_lower;
+      expressionAttributeValues[':name_prefix'] = searchFields.name_prefix;
+    }
+    if (artistData.bio !== undefined) {
+      updateParts.push('bio = :bio');
+      expressionAttributeValues[':bio'] = artistData.bio || '';
+    }
+    if (artistData.location !== undefined) {
+      updateParts.push('#location = :location');
+      expressionAttributeValues[':location'] = artistData.location || '';
+    }
+    if (artistData.genres !== undefined) {
+      updateParts.push('genres = :genres');
+      expressionAttributeValues[':genres'] = artistData.genres || [];
+    }
+    if (artistData.artistType !== undefined) {
+      updateParts.push('artist_type = :artist_type');
+      expressionAttributeValues[':artist_type'] = artistData.artistType;
+    }
+    if (artistData.actType !== undefined) {
+      updateParts.push('actType = :actType');
+      expressionAttributeValues[':actType'] = artistData.actType || null;
+    }
+    if (artistData.acoustic !== undefined) {
+      updateParts.push('acoustic = :acoustic');
+      expressionAttributeValues[':acoustic'] = artistData.acoustic || false;
+    }
+    if (artistData.facebookUrl !== undefined) {
+      updateParts.push('facebookUrl = :facebookUrl');
+      expressionAttributeValues[':facebookUrl'] = artistData.facebookUrl || null;
+    }
+    if (artistData.instagramUrl !== undefined) {
+      updateParts.push('instagramUrl = :instagramUrl');
+      expressionAttributeValues[':instagramUrl'] = artistData.instagramUrl || null;
+    }
+    if (artistData.websiteUrl !== undefined) {
+      updateParts.push('websiteUrl = :websiteUrl');
+      expressionAttributeValues[':websiteUrl'] = artistData.websiteUrl || null;
+    }
+    if (artistData.youtubeUrl !== undefined) {
+      updateParts.push('youtubeUrl = :youtubeUrl');
+      expressionAttributeValues[':youtubeUrl'] = artistData.youtubeUrl || null;
+    }
+    if (artistData.spotifyUrl !== undefined) {
+      updateParts.push('spotifyUrl = :spotifyUrl');
+      expressionAttributeValues[':spotifyUrl'] = artistData.spotifyUrl || null;
+    }
+    if (artistData.twitterUrl !== undefined) {
+      updateParts.push('twitterUrl = :twitterUrl');
+      expressionAttributeValues[':twitterUrl'] = artistData.twitterUrl || null;
+    }
+    if (artistData.profileImageUrl !== undefined) {
+      updateParts.push('profileImageUrl = :profileImageUrl');
+      expressionAttributeValues[':profileImageUrl'] = artistData.profileImageUrl || '';
+    }
+
+    const params = {
+      TableName: 'bndy-artists',
+      Key: { id: artistId },
+      UpdateExpression: `SET ${updateParts.join(', ')}`,
+      ExpressionAttributeNames: expressionAttributeNames,
+      ExpressionAttributeValues: expressionAttributeValues,
+      ReturnValues: 'ALL_NEW'
+    };
+
+    const result = await dynamodb.update(params).promise();
+
+    console.log(`[MCP_UPDATE_ARTIST] Successfully updated artist: ${artistId}`);
+
+    return {
+      statusCode: 200,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({
+        ...result.Attributes,
+        artistType: result.Attributes.artist_type || null
+      })
+    };
+  } catch (error) {
+    console.error('[MCP_UPDATE_ARTIST] Error:', error);
     return {
       statusCode: 500,
       headers: getCommunityHeaders(),
