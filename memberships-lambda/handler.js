@@ -704,8 +704,13 @@ const handleGetArtistMemberships = async (artistId) => {
 
     console.log('[MEMBERSHIPS] Found', result.Items.length, 'memberships for artist');
 
+    // Resolve profiles with inheritance (to get display names from user profiles)
+    const resolvedMemberships = await Promise.all(
+      result.Items.map(membership => resolveMembershipProfile(membership, membership.user_id))
+    );
+
     return createResponse(200, {
-      memberships: result.Items || []
+      memberships: resolvedMemberships
     });
 
   } catch (error) {
