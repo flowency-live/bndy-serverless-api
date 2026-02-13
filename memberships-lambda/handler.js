@@ -668,6 +668,9 @@ const handleGetMyMemberships = async (event) => {
             isVerified: artist.isVerified || false,
             memberCount: artist.member_count || 0,
             allowedEventTypes: artist.allowedEventTypes || ['practice', 'public_gig'],
+            displayColour: artist.displayColour || '#f97316',
+            showMemberVotes: artist.showMemberVotes || false,
+            autoDiscardThreshold: artist.autoDiscardThreshold ?? null,
             createdAt: artist.created_at
           } : null
         };
