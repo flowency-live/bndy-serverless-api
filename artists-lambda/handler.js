@@ -341,6 +341,11 @@ exports.handler = async (event, context) => {
       return await handleRefreshFacebookImage(artistId);
     }
 
+    // Get artist events (public endpoint for MCP)
+    if (method === 'GET' && event.pathParameters?.id && path.includes('/events')) {
+      return await handleGetArtistEvents(event.pathParameters.id, event);
+    }
+
     if (method === 'GET' && event.pathParameters?.id) {
       return await handleGetArtistById(event.pathParameters.id);
     }
@@ -539,6 +544,119 @@ async function handleGetArtistById(artistId) {
   } catch (error) {
     console.error(' DynamoDB get failed:', error);
     throw error;
+  }
+}
+
+/**
+ * Get events for an artist (public endpoint for MCP)
+ * Uses artist_id-index GSI on bndy-events table
+ */
+async function handleGetArtistEvents(artistId, event) {
+  console.log(`[ARTIST_EVENTS] Getting events for artist: ${artistId}`);
+
+  const { dateFrom, dateTo } = event.queryStringParameters || {};
+
+  try {
+    // Build query - use artist_id-index GSI
+    const queryParams = {
+      TableName: 'bndy-events',
+      IndexName: 'artist_id-index',
+      KeyConditionExpression: 'artist_id = :artistId',
+      ExpressionAttributeValues: {
+        ':artistId': artistId
+      }
+    };
+
+    // Add date filter if provided
+    if (dateFrom && dateTo) {
+      queryParams.FilterExpression = '#date BETWEEN :dateFrom AND :dateTo';
+      queryParams.ExpressionAttributeNames = { '#date': 'date' };
+      queryParams.ExpressionAttributeValues[':dateFrom'] = dateFrom;
+      queryParams.ExpressionAttributeValues[':dateTo'] = dateTo;
+    } else if (dateFrom) {
+      queryParams.FilterExpression = '#date >= :dateFrom';
+      queryParams.ExpressionAttributeNames = { '#date': 'date' };
+      queryParams.ExpressionAttributeValues[':dateFrom'] = dateFrom;
+    } else if (dateTo) {
+      queryParams.FilterExpression = '#date <= :dateTo';
+      queryParams.ExpressionAttributeNames = { '#date': 'date' };
+      queryParams.ExpressionAttributeValues[':dateTo'] = dateTo;
+    }
+
+    const result = await dynamodb.query(queryParams).promise();
+    const events = result.Items || [];
+
+    console.log(`[ARTIST_EVENTS] Found ${events.length} events for artist ${artistId}`);
+
+    if (events.length === 0) {
+      return {
+        statusCode: 200,
+        headers: getCorsHeaders(),
+        body: JSON.stringify([])
+      };
+    }
+
+    // Collect unique venueIds for batch lookup
+    const venueIds = [...new Set(events.map(e => e.venueId).filter(Boolean))];
+
+    // Batch get venues
+    const venueMap = {};
+    if (venueIds.length > 0) {
+      const venuePromises = venueIds.map(id =>
+        dynamodb.get({
+          TableName: 'bndy-venues',
+          Key: { id }
+        }).promise()
+      );
+
+      const venueResults = await Promise.all(venuePromises);
+      venueResults.forEach((result, idx) => {
+        if (result.Item) {
+          venueMap[venueIds[idx]] = result.Item;
+        }
+      });
+    }
+
+    // Get artist name for response
+    const artistResult = await dynamodb.get({
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
+    }).promise();
+    const artistName = artistResult.Item?.name || null;
+
+    // Format events with venue details
+    const formattedEvents = events.map(e => {
+      const venue = e.venueId ? venueMap[e.venueId] : null;
+      return {
+        id: e.id,
+        title: e.title,
+        date: e.date,
+        startTime: e.startTime || null,
+        endTime: e.endTime || null,
+        artistId: e.artist_id || e.artistId,
+        artistName: artistName,
+        venueId: e.venueId || null,
+        venueName: venue?.name || null,
+        venueCity: venue?.city || null
+      };
+    });
+
+    // Sort by date
+    formattedEvents.sort((a, b) => a.date.localeCompare(b.date));
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify(formattedEvents)
+    };
+
+  } catch (error) {
+    console.error('[ARTIST_EVENTS] Error fetching events:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Failed to fetch artist events' })
+    };
   }
 }
 
