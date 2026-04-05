@@ -3086,8 +3086,27 @@ exports.handler = async (event, context) => {
     }
     const { user } = authResult;
 
-    // Unified calendar
-    if (routeKey.match(/GET \/api\/artists\/[^/]+\/calendar/)) {
+    // ============================================
+    // CALENDAR SYNC ROUTES (must be before /calendar route)
+    // ============================================
+
+    // Create calendar subscription
+    if (routeKey.match(/POST \/api\/artists\/[^/]+\/calendar\/subscribe$/)) {
+      return await handleCreateCalendarSubscription(event, user);
+    }
+
+    // List calendar subscriptions
+    if (routeKey.match(/GET \/api\/artists\/[^/]+\/calendar\/subscriptions$/)) {
+      return await handleGetCalendarSubscriptions(event, user);
+    }
+
+    // Revoke calendar subscription
+    if (routeKey.match(/DELETE \/api\/artists\/[^/]+\/calendar\/subscriptions\/[^/]+$/)) {
+      return await handleRevokeCalendarSubscription(event, user);
+    }
+
+    // Unified calendar (must be AFTER calendar sync routes)
+    if (routeKey.match(/GET \/api\/artists\/[^/]+\/calendar$/) || routeKey.match(/GET \/api\/artists\/[^/]+\/calendar\?/)) {
       return await handleGetCalendar(event, user);
     }
 
@@ -3134,25 +3153,6 @@ exports.handler = async (event, context) => {
     // Create public gig (new dedicated endpoint)
     if (routeKey.match(/POST \/api\/artists\/[^/]+\/public-gigs/)) {
       return await handleCreatePublicGig(event, user);
-    }
-
-    // ============================================
-    // CALENDAR SYNC ROUTES
-    // ============================================
-
-    // Create calendar subscription
-    if (routeKey.match(/POST \/api\/artists\/[^/]+\/calendar\/subscribe$/)) {
-      return await handleCreateCalendarSubscription(event, user);
-    }
-
-    // List calendar subscriptions
-    if (routeKey.match(/GET \/api\/artists\/[^/]+\/calendar\/subscriptions$/)) {
-      return await handleGetCalendarSubscriptions(event, user);
-    }
-
-    // Revoke calendar subscription
-    if (routeKey.match(/DELETE \/api\/artists\/[^/]+\/calendar\/subscriptions\/[^/]+$/)) {
-      return await handleRevokeCalendarSubscription(event, user);
     }
 
     // Download single event as iCal
