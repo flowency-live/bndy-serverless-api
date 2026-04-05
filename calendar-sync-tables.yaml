@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: DynamoDB tables for BNDY Calendar Sync feature (iCal subscription feeds)
+
+Resources:
+  # Table for calendar subscription tokens
+  # Allows users to generate subscription URLs for calendar apps
+  CalendarTokensTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: bndy-calendar-tokens
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: token
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: artistId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: token
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: userId-index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: artistId-index
+          KeySchema:
+            - AttributeName: artistId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Project
+          Value: bndy
+        - Key: Feature
+          Value: calendar-sync
+
+  # Table for tracking deleted events (for METHOD:CANCEL in iCal)
+  # Records auto-expire after 7 days via TTL
+  CalendarCancellationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: bndy-calendar-cancellations
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: eventUid
+          AttributeType: S
+        - AttributeName: artistId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: eventUid
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: artistId-index
+          KeySchema:
+            - AttributeName: artistId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: bndy
+        - Key: Feature
+          Value: calendar-sync
+
+Outputs:
+  CalendarTokensTableArn:
+    Description: ARN of the calendar tokens table
+    Value: !GetAtt CalendarTokensTable.Arn
+  CalendarCancellationsTableArn:
+    Description: ARN of the calendar cancellations table
+    Value: !GetAtt CalendarCancellationsTable.Arn
