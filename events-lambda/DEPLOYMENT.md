@@ -4,17 +4,17 @@
 
 This Lambda uses AWS Lambda Layers for shared dependencies:
 - **bndy-jwt layer** (14MB): Contains `jsonwebtoken`, `aws-sdk`, and other common dependencies
-- **Lambda code** (~22KB): Contains only `handler.js` + `ngeohash` module
+- **Lambda code** (~30KB): Contains handler.js + module files + `ngeohash` + `ics` modules
 
-**NEVER include all node_modules** - Only include `ngeohash` which is not in the layer.
+**NEVER include all node_modules** - Only include specific modules not in the layer.
 
 ## Correct Deployment Command
 
 ```bash
 cd C:/VSProjects/bndy-serverless-api/events-lambda
 
-# Create zip with handler.js AND ngeohash module ONLY
-powershell "Compress-Archive -Path handler.js,node_modules/ngeohash -DestinationPath events-lambda-deploy.zip -Force"
+# Create zip with ALL JS files and required modules
+powershell "Compress-Archive -Path *.js,node_modules/ngeohash,node_modules/ics -DestinationPath events-lambda-deploy.zip -Force"
 
 # Deploy to AWS
 aws lambda update-function-code \
@@ -29,13 +29,19 @@ aws lambda update-function-code \
 - **Region**: `eu-west-2`
 - **Runtime**: Node.js 20.x
 - **Layer**: `bndy-jwt:2` (contains jsonwebtoken, aws-sdk)
-- **Included in package**: `ngeohash` module only
+- **Included in package**:
+  - `handler.js` (main handler)
+  - `calendar-tokens.js` (subscription token service)
+  - `calendar-cancellations.js` (event deletion tracking)
+  - `ical-generator.js` (iCal/ICS generation)
+  - `ngeohash` module (geolocation)
+  - `ics` module (iCal generation library)
 
 ## Common Mistakes
 
-❌ **WRONG**: `Compress-Archive -Path handler.js` (missing ngeohash)
+❌ **WRONG**: `Compress-Archive -Path handler.js` (missing modules)
 ❌ **WRONG**: `Compress-Archive -Path handler.js,node_modules` (too large, 14MB)
-✅ **CORRECT**: `Compress-Archive -Path handler.js,node_modules/ngeohash` (~22KB)
+✅ **CORRECT**: `Compress-Archive -Path *.js,node_modules/ngeohash,node_modules/ics` (~30KB)
 
 ## Verification
 

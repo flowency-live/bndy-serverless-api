@@ -5,12 +5,12 @@ const AWS = require('aws-sdk');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const ngeohash = require('ngeohash');
+const ics = require('ics');
 
 // Calendar sync modules
 const { createCancellationRecord, getCancellationsForArtist } = require('./calendar-cancellations');
 const { createCalendarToken, validateToken, getCalendarTokens, revokeCalendarToken, updateTokenLastUsed } = require('./calendar-tokens');
 const { generateIcalFeed, eventToVEvent } = require('./ical-generator');
-const ics = require('ics');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 const ssm = new AWS.SSM({ region: 'eu-west-2' });
@@ -1360,12 +1360,8 @@ const handleDeleteEvent = async (event, user) => {
   try {
     await createCancellationRecord(existingEvent, user.userId);
     console.log('EVENT: Created cancellation record for calendar sync', { eventId: id });
-  } catch (cancelError) {
-    // Log but don't fail the delete - cancellation tracking is non-blocking
-    console.error('EVENT: Failed to create cancellation record (non-blocking)', {
-      eventId: id,
-      error: cancelError.message
-    });
+  } catch (cancelErr) {
+    console.error('EVENT: Failed to create cancellation record (non-fatal)', cancelErr);
   }
 
   // Skip notifications for platform admin events
@@ -2589,133 +2585,6 @@ const handleCreateCommunityEvent = async (event) => {
   }
 };
 
-// PUT /api/events/:id/mcp - MCP event update (public, no auth required)
-// Only allows updates to AI-created events (source contains 'mcp')
-const handleMCPUpdateEvent = async (event) => {
-  const path = event.requestContext?.http?.path || event.rawPath || event.path;
-  // Extract event ID from path: /api/events/{id}/mcp
-  const eventIdMatch = path.match(/\/api\/events\/([^/]+)\/mcp/);
-  const eventId = eventIdMatch ? eventIdMatch[1] : null;
-
-  if (!eventId) {
-    return {
-      statusCode: 400,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Event ID required' })
-    };
-  }
-
-  console.log('MCP_EVENT_UPDATE: Updating event', { eventId });
-
-  try {
-    // Get existing event
-    const existing = await dynamodb.get({
-      TableName: EVENTS_TABLE,
-      Key: { id: eventId }
-    }).promise();
-
-    if (!existing.Item) {
-      return {
-        statusCode: 404,
-        headers: getCorsHeaders(),
-        body: JSON.stringify({ error: 'Event not found' })
-      };
-    }
-
-    const existingEvent = existing.Item;
-
-    // Security check: Only allow MCP updates on AI-created events
-    const isMCPCreated = existingEvent.source && (
-      existingEvent.source.includes('mcp') ||
-      existingEvent.source === 'community_wizard' ||
-      existingEvent.source === 'frontstage'
-    );
-
-    if (!isMCPCreated) {
-      console.log('MCP_EVENT_UPDATE: Denied - not an AI/community created event', {
-        eventId,
-        source: existingEvent.source
-      });
-      return {
-        statusCode: 403,
-        headers: getCorsHeaders(),
-        body: JSON.stringify({
-          error: 'MCP can only update AI-created or community events',
-          eventSource: existingEvent.source
-        })
-      };
-    }
-
-    const updates = JSON.parse(event.body || '{}');
-
-    // Build update expression
-    const updateExpressions = [];
-    const attributeNames = {};
-    const attributeValues = {};
-
-    // Allowed fields for MCP updates
-    const allowedFields = [
-      'title', 'date', 'startTime', 'endTime', 'description',
-      'ticketed', 'ticketUrl', 'ticketinformation', 'price',
-      'imageUrl', 'eventUrl', 'notes'
-    ];
-
-    allowedFields.forEach(field => {
-      if (updates[field] !== undefined) {
-        const placeholder = `#${field}`;
-        const valuePlaceholder = `:${field}`;
-        attributeNames[placeholder] = field;
-        attributeValues[valuePlaceholder] = updates[field];
-        updateExpressions.push(`${placeholder} = ${valuePlaceholder}`);
-      }
-    });
-
-    // Always update updatedAt
-    attributeNames['#updatedAt'] = 'updatedAt';
-    attributeValues[':updatedAt'] = new Date().toISOString();
-    updateExpressions.push('#updatedAt = :updatedAt');
-
-    if (updateExpressions.length === 1) { // Only updatedAt
-      return {
-        statusCode: 400,
-        headers: getCorsHeaders(),
-        body: JSON.stringify({ error: 'No valid fields to update' })
-      };
-    }
-
-    await dynamodb.update({
-      TableName: EVENTS_TABLE,
-      Key: { id: eventId },
-      UpdateExpression: `SET ${updateExpressions.join(', ')}`,
-      ExpressionAttributeNames: attributeNames,
-      ExpressionAttributeValues: attributeValues
-    }).promise();
-
-    // Fetch updated event
-    const updated = await dynamodb.get({
-      TableName: EVENTS_TABLE,
-      Key: { id: eventId }
-    }).promise();
-
-    console.log('MCP_EVENT_UPDATE: Successfully updated event', { eventId });
-
-    return {
-      statusCode: 200,
-      headers: getCorsHeaders(),
-      body: JSON.stringify(updated.Item)
-    };
-
-  } catch (error) {
-    console.error('MCP_EVENT_UPDATE: Error:', error);
-    return {
-      statusCode: 500,
-      headers: getCorsHeaders(),
-      body: JSON.stringify({ error: 'Internal server error' })
-    };
-  }
-};
-
-// ============================================
 // CALENDAR SYNC HANDLERS
 // ============================================
 
@@ -2941,7 +2810,7 @@ const handleGetIcalFeed = async (event) => {
 };
 
 /**
- * GET /api/artists/{artistId}/events/{eventId}/ical
+ * GET /api/artists/{artistId}/events/{id}/ical
  * Download single event as iCal file
  */
 const handleGetEventIcal = async (event, user) => {
@@ -3054,12 +2923,6 @@ exports.handler = async (event, context) => {
       return await handleBatchEventsWithJoins(event);
     }
 
-    // iCal feed (token-based auth, no session required)
-    // Calendar apps like Google Calendar, Apple Calendar, Outlook use this
-    if (routeKey.match(/GET \/api\/calendar\/ical\/[^/]+$/)) {
-      return await handleGetIcalFeed(event);
-    }
-
     if (routeKey.match(/GET \/api\/venues\/[^/]+\/events/)) {
       return await handleGetVenueEvents(event);
     }
@@ -3074,9 +2937,10 @@ exports.handler = async (event, context) => {
       return await handleCheckConflicts(event, null);
     }
 
-    // MCP event update (public, no auth required - for AI-created events only)
-    if (routeKey.match(/PUT \/api\/events\/[^/]+\/mcp/)) {
-      return await handleMCPUpdateEvent(event);
+    // iCal feed (token-based auth, no session required)
+    // Calendar apps like Google Calendar, Apple Calendar, Outlook use this
+    if (routeKey.match(/GET \/api\/calendar\/ical\/[^/]+$/)) {
+      return await handleGetIcalFeed(event);
     }
 
     // AUTHENTICATED ROUTES - Require auth for everything else
@@ -3087,7 +2951,7 @@ exports.handler = async (event, context) => {
     const { user } = authResult;
 
     // ============================================
-    // CALENDAR SYNC ROUTES (must be before /calendar route)
+    // CALENDAR SYNC ROUTES (must come BEFORE generic /calendar route)
     // ============================================
 
     // Create calendar subscription
@@ -3105,8 +2969,13 @@ exports.handler = async (event, context) => {
       return await handleRevokeCalendarSubscription(event, user);
     }
 
-    // Unified calendar (must be AFTER calendar sync routes)
-    if (routeKey.match(/GET \/api\/artists\/[^/]+\/calendar$/) || routeKey.match(/GET \/api\/artists\/[^/]+\/calendar\?/)) {
+    // Download single event as iCal
+    if (routeKey.match(/GET \/api\/artists\/[^/]+\/events\/[^/]+\/ical$/)) {
+      return await handleGetEventIcal(event, user);
+    }
+
+    // Unified calendar (GENERIC - must come AFTER specific calendar routes)
+    if (routeKey.match(/GET \/api\/artists\/[^/]+\/calendar$/)) {
       return await handleGetCalendar(event, user);
     }
 
@@ -3153,11 +3022,6 @@ exports.handler = async (event, context) => {
     // Create public gig (new dedicated endpoint)
     if (routeKey.match(/POST \/api\/artists\/[^/]+\/public-gigs/)) {
       return await handleCreatePublicGig(event, user);
-    }
-
-    // Download single event as iCal
-    if (routeKey.match(/GET \/api\/artists\/[^/]+\/events\/[^/]+\/ical$/)) {
-      return await handleGetEventIcal(event, user);
     }
 
     return {
