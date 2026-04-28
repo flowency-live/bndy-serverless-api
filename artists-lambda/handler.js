@@ -403,39 +403,12 @@ async function handleGetAllArtists() {
   try {
     const result = await dynamodb.scan(params).promise();
 
-    // Get event counts for all artists in parallel
-    const eventCountPromises = result.Items.map(async (artist) => {
-      try {
-        // Query events table using artist_id-index to count events
-        const eventCountResult = await dynamodb.query({
-          TableName: 'bndy-events',
-          IndexName: 'artist_id-index',
-          KeyConditionExpression: 'artist_id = :artistId',
-          ExpressionAttributeValues: {
-            ':artistId': artist.id
-          },
-          Select: 'COUNT'
-        }).promise();
-
-        return { artistId: artist.id, count: eventCountResult.Count || 0 };
-      } catch (error) {
-        console.error(`Error counting events for artist ${artist.id}:`, error);
-        return { artistId: artist.id, count: 0 };
-      }
-    });
-
-    const eventCounts = await Promise.all(eventCountPromises);
-    const eventCountMap = eventCounts.reduce((map, { artistId, count }) => {
-      map[artistId] = count;
-      return map;
-    }, {});
-
     // Transform to match expected API format
     const formattedArtists = result.Items.map(artist => ({
       id: artist.id,
       name: artist.name,
       artist_type: artist.artist_type || null,
-      artistType: artist.artist_type || null, // Provide both formats for compatibility
+      artistType: artist.artist_type || null,
       bio: artist.bio || '',
       location: artist.location || '',
       locationLat: artist.locationLat || null,
@@ -452,6 +425,7 @@ async function handleGetAllArtists() {
       websiteUrl: artist.websiteUrl || '',
       socialMediaUrls: artist.socialMediaUrls || [],
       profileImageUrl: artist.profileImageUrl || '',
+      externalIds: artist.external_ids || [],
       isVerified: artist.isVerified || false,
       followerCount: artist.followerCount || 0,
       claimedByUserId: artist.claimedByUserId || null,
@@ -462,7 +436,6 @@ async function handleGetAllArtists() {
       ai_created: artist.ai_created || false,
       needs_review: artist.needs_review !== undefined ? artist.needs_review : null,
       validated: artist.validated !== undefined ? artist.validated : true,
-      eventCount: eventCountMap[artist.id] || 0,
       createdAt: artist.createdAt
     }));
 
@@ -470,7 +443,10 @@ async function handleGetAllArtists() {
 
     return {
       statusCode: 200,
-      headers: getCorsHeaders(),
+      headers: {
+        ...getCorsHeaders(),
+        'Cache-Control': 'public, max-age=300'
+      },
       body: JSON.stringify(formattedArtists)
     };
   } catch (error) {
