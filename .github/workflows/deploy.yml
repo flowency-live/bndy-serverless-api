@@ -2,9 +2,9 @@ name: Deploy BNDY API
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 env:
   AWS_REGION: eu-west-2
@@ -58,8 +58,8 @@ jobs:
     name: Deploy to AWS
     needs: [test, validate]
     runs-on: ubuntu-latest
-    # Only deploy on push to main (not on PRs)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Only deploy on push to master (not on PRs)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
 
     steps:
       - uses: actions/checkout@v4
