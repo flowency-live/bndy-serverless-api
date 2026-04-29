@@ -20,7 +20,6 @@ lint = true
 [default.deploy.parameters]
 capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
 confirm_changeset = true
-resolve_s3 = true
 s3_prefix = "bndy-serverless-api"
 # Use existing S3 bucket for deployment artifacts
 s3_bucket = "bndy-deployment-artifacts-1758805276"
