@@ -33,7 +33,7 @@ jobs:
               if grep -q '"test"' "$dir/package.json"; then
                 echo "Running tests in $dir"
                 cd "$dir"
-                npm ci
+                npm install --legacy-peer-deps
                 npm test || exit 1
                 cd ..
               fi
@@ -88,7 +88,7 @@ jobs:
             if [[ -d "$dir" && -f "$dir/package.json" ]]; then
               echo "Installing dependencies in $dir"
               cd "$dir"
-              npm ci --production --ignore-scripts
+              npm install --production --legacy-peer-deps --ignore-scripts
               cd ..
             fi
           done
