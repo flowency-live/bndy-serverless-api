@@ -1,0 +1,544 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  BNDY Platform Serverless API
+  Lambda Functions + HTTP API Gateway
+
+  NOTE: This template manages the existing bndy-serverless-api stack.
+  All function names must match existing physical resource IDs to avoid recreation.
+
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment stage
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    MemorySize: 512
+    Timeout: 30
+    Tracing: Active
+    Environment:
+      Variables:
+        NODE_ENV: production
+        # JWT_SECRET is retrieved from Secrets Manager - see individual functions
+
+Resources:
+  # =============================================================================
+  # HTTP API Gateway
+  # =============================================================================
+  BndyHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      Description: BNDY Platform HTTP API
+      CorsConfiguration:
+        AllowOrigins:
+          - https://backstage.bndy.co.uk
+          - https://frontstage.bndy.co.uk
+          - https://d3cewujswmjafa.cloudfront.net
+          - http://localhost:3000
+          - http://localhost:3001
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - Cookie
+          - X-Requested-With
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowCredentials: true
+        MaxAge: 86400
+
+  # =============================================================================
+  # Lambda Functions - Core
+  # =============================================================================
+
+  # Artists Lambda
+  ArtistsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: bndy-serverless-api-ArtistsFunction-4wCJA9JLMwF5
+      Description: BNDY Artists API - handles /api/artists endpoints
+      CodeUri: ./artists-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+      Events:
+        # Core CRUD
+        GetAllArtists:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists
+            Method: GET
+        CreateArtist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists
+            Method: POST
+        CreateCommunityArtist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/community
+            Method: POST
+        GetArtistById:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}
+            Method: GET
+        UpdateArtist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}
+            Method: PUT
+        UpdateArtistMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}/mcp
+            Method: PUT
+        DeleteArtist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}
+            Method: DELETE
+        SearchArtists:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/search
+            Method: GET
+        GetArtistByExternalId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/by-external-id
+            Method: GET
+        # Artist nested routes
+        GetArtistEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/events
+            Method: GET
+        GetArtistMembers:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/members
+            Method: GET
+        GetArtistInvites:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/invites
+            Method: GET
+        # CRM routes
+        GetArtistCrmVenues:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues
+            Method: GET
+
+  # Events Lambda
+  EventsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: bndy-serverless-api-EventsFunction-03skAPFIwe9g
+      Description: BNDY Events API - handles /api/events endpoints
+      CodeUri: ./events-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      MemorySize: 1024
+      Timeout: 60
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+      Events:
+        # Core CRUD
+        GetAllEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events
+            Method: GET
+        CreateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events
+            Method: POST
+        CreateCommunityEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/community
+            Method: POST
+        GetEventById:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/{id}
+            Method: GET
+        UpdateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/{id}
+            Method: PUT
+        UpdateEventMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/{id}/mcp
+            Method: PUT
+        GetEventMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/{id}/mcp
+            Method: GET
+        DeleteEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/{id}
+            Method: DELETE
+        GetEventByExternalId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/by-external-id
+            Method: GET
+        # Public events (Frontstage)
+        GetPublicEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/public
+            Method: GET
+        GetPublicEventsGeo:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/public/geo
+            Method: GET
+        # Calendar
+        GetCalendarIcal:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/calendar/ical/{token}
+            Method: GET
+
+  # Venues Lambda
+  VenuesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: bndy-serverless-api-VenuesFunction-z91LnIIRKHhq
+      Description: BNDY Venues API - handles /api/venues endpoints
+      CodeUri: ./venues-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+      Events:
+        GetAllVenues:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues
+            Method: GET
+        CreateVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues
+            Method: POST
+        CreateCommunityVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/community
+            Method: POST
+        GetVenueById:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{id}
+            Method: GET
+        UpdateVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{id}
+            Method: PUT
+        DeleteVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{id}
+            Method: DELETE
+        GetVenueByExternalId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/by-external-id
+            Method: GET
+
+  # Auth Lambda
+  AuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: bndy-serverless-api-AuthFunction-gKJksEC1lGjw
+      Description: BNDY Authentication API - handles OAuth and sessions
+      CodeUri: ./auth-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+      Events:
+        GetMe:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/me
+            Method: GET
+        Login:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/login
+            Method: POST
+        Logout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/logout
+            Method: POST
+        Refresh:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/refresh
+            Method: POST
+        Register:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/register
+            Method: POST
+        GoogleAuth:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/google/callback
+            Method: GET
+        FacebookAuth:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/facebook/callback
+            Method: GET
+
+  # Users Lambda
+  UsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: bndy-serverless-api-UsersFunction-HNQeQw7kJO9b
+      Description: BNDY Users API - handles user profile endpoints
+      CodeUri: ./users-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+      Events:
+        GetUserById:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /users/{userId}
+            Method: GET
+        UpdateUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /users/{userId}
+            Method: PUT
+        DeleteUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /users/{userId}
+            Method: DELETE
+
+  # Memberships Lambda
+  MembershipsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: bndy-serverless-api-MembershipsFunction-adBmJyeWuWLA
+      Description: BNDY Memberships API - handles artist/band memberships
+      CodeUri: ./memberships-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+      Events:
+        GetMyMemberships:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/memberships/me
+            Method: GET
+        GetAllMemberships:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/memberships/all
+            Method: GET
+        GetArtistMemberships:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/memberships/artist/{artistId}
+            Method: GET
+        CreateMembership:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/memberships
+            Method: POST
+        UpdateMembership:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/memberships/{membershipId}
+            Method: PUT
+        DeleteMembership:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/memberships/{membershipId}
+            Method: DELETE
+
+  # Songs Lambda
+  SongsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: bndy-serverless-api-SongsFunction-c3eFxAdsTmeS
+      Description: BNDY Songs API - handles song library
+      CodeUri: ./songs-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+      Events:
+        GetAllSongs:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/songs
+            Method: GET
+        CreateSong:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/songs
+            Method: POST
+        GetSongById:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/songs/{id}
+            Method: GET
+        UpdateSong:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/songs/{id}
+            Method: PUT
+        DeleteSong:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/songs/{id}
+            Method: DELETE
+
+  # =============================================================================
+  # Lambda Functions - Supporting
+  # =============================================================================
+
+  # NOTE: Additional Lambda functions need to be added here:
+  # - InvitesFunction
+  # - IssuesFunction
+  # - NotificationsFunction
+  # - SetlistsFunction
+  # - UploadsFunction
+  # - SpotifyFunction
+  # - ArtistSongsFunction
+  # - EventsAgentFunction
+  # - FlowencyInviteFunction
+  # - VenueEnrichmentFunction
+  #
+  # Each function requires:
+  # 1. Correct FunctionName matching existing physical ID
+  # 2. All routes currently handled by that function
+  #
+  # Run: aws apigatewayv2 get-routes --api-id qry0k6pmd0
+  # to get all routes, then map to functions via integrations.
+
+# =============================================================================
+# Outputs
+# =============================================================================
+Outputs:
+  BndyHttpApiUrl:
+    Description: HTTP API Gateway endpoint URL
+    Value: !Sub "https://${BndyHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
+    Export:
+      Name: !Sub "${AWS::StackName}-HttpApiUrl"
+
+  BndyHttpApiId:
+    Description: HTTP API Gateway ID
+    Value: !Ref BndyHttpApi
+    Export:
+      Name: !Sub "${AWS::StackName}-HttpApiId"
+
+  ArtistsFunctionArn:
+    Description: Artists Lambda Function ARN
+    Value: !GetAtt ArtistsFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ArtistsFunctionArn"
+
+  EventsFunctionArn:
+    Description: Events Lambda Function ARN
+    Value: !GetAtt EventsFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-EventsFunctionArn"
+
+  VenuesFunctionArn:
+    Description: Venues Lambda Function ARN
+    Value: !GetAtt VenuesFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-VenuesFunctionArn"

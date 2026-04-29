@@ -1289,6 +1289,293 @@ const handleUpdateEvent = async (event, user) => {
   };
 };
 
+// GET /api/events/by-external-id - Lookup event by external ID (public endpoint)
+const handleGetEventByExternalId = async (event) => {
+  const source = event.queryStringParameters?.source;
+  const externalId = event.queryStringParameters?.id;
+
+  console.log(`[Events] Looking up event by external ID: ${source}:${externalId}`);
+
+  if (!source || !externalId) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'source and id query parameters are required' })
+    };
+  }
+
+  try {
+    // Scan and filter for matching externalId
+    const result = await dynamodb.scan({
+      TableName: EVENTS_TABLE
+    }).promise();
+
+    // Find event with matching externalId
+    const matchingEvent = result.Items.find(evt => {
+      const externalIds = evt.external_ids || [];
+      return externalIds.some(ext => ext.source === source && ext.id === externalId);
+    });
+
+    if (!matchingEvent) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          found: false,
+          source,
+          externalId,
+          message: `No event found with external ID ${source}:${externalId}`
+        })
+      };
+    }
+
+    // Get venue and artist details
+    let venueName = null;
+    let artistName = null;
+
+    if (matchingEvent.venueId) {
+      const venueResult = await dynamodb.get({
+        TableName: VENUES_TABLE,
+        Key: { id: matchingEvent.venueId }
+      }).promise();
+      venueName = venueResult.Item?.name || null;
+    }
+
+    if (matchingEvent.artistId) {
+      const artistResult = await dynamodb.get({
+        TableName: ARTISTS_TABLE,
+        Key: { id: matchingEvent.artistId }
+      }).promise();
+      artistName = artistResult.Item?.name || null;
+    }
+
+    const eventResponse = {
+      id: matchingEvent.id,
+      title: matchingEvent.title,
+      date: matchingEvent.date,
+      startTime: matchingEvent.startTime,
+      endTime: matchingEvent.endTime,
+      artistId: matchingEvent.artistId,
+      artistName,
+      venueId: matchingEvent.venueId,
+      venueName,
+      type: matchingEvent.type,
+      isPublic: matchingEvent.isPublic,
+      externalIds: matchingEvent.external_ids || [],
+      source: matchingEvent.source,
+      createdAt: matchingEvent.createdAt,
+      updatedAt: matchingEvent.updatedAt
+    };
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        found: true,
+        source,
+        externalId,
+        event: eventResponse
+      })
+    };
+  } catch (error) {
+    console.error('[ERROR] External ID lookup failed:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+};
+
+// PUT /api/events/:id/mcp - Update event via MCP (NO AUTH)
+const handleUpdateEventMcp = async (event) => {
+  const { id } = event.pathParameters;
+  const updates = JSON.parse(event.body || '{}');
+
+  console.log('[MCP] Updating event', { eventId: id, updates });
+
+  // Get existing event
+  const existing = await dynamodb.get({
+    TableName: EVENTS_TABLE,
+    Key: { id }
+  }).promise();
+
+  if (!existing.Item) {
+    return {
+      statusCode: 404,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Event not found' })
+    };
+  }
+
+  // Build update expression
+  const updateExpressions = [];
+  const attributeNames = {};
+  const attributeValues = {};
+
+  // Fields that MCP can update (apiField: dbField)
+  const allowedFields = {
+    'title': 'title',
+    'date': 'date',
+    'startTime': 'startTime',
+    'endTime': 'endTime',
+    'venueId': 'venueId',
+    'description': 'description',
+    'isPublic': 'isPublic',
+    'ticketed': 'ticketed',
+    'ticketUrl': 'ticketUrl',
+    'ticketinformation': 'ticketinformation',
+    'price': 'price',
+    'imageUrl': 'imageUrl',
+    'eventUrl': 'eventUrl',
+    'notes': 'notes',
+    'externalIds': 'external_ids'
+  };
+
+  Object.entries(allowedFields).forEach(([apiField, dbField]) => {
+    if (updates[apiField] !== undefined) {
+      const placeholder = `#${dbField}`;
+      const valuePlaceholder = `:${dbField}`;
+      attributeNames[placeholder] = dbField;
+      attributeValues[valuePlaceholder] = updates[apiField];
+      updateExpressions.push(`${placeholder} = ${valuePlaceholder}`);
+    }
+  });
+
+  // Always update updatedAt
+  attributeNames['#updatedAt'] = 'updatedAt';
+  attributeValues[':updatedAt'] = new Date().toISOString();
+  updateExpressions.push('#updatedAt = :updatedAt');
+
+  if (updateExpressions.length === 1) { // Only updatedAt
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'No valid fields to update' })
+    };
+  }
+
+  await dynamodb.update({
+    TableName: EVENTS_TABLE,
+    Key: { id },
+    UpdateExpression: `SET ${updateExpressions.join(', ')}`,
+    ExpressionAttributeNames: attributeNames,
+    ExpressionAttributeValues: attributeValues
+  }).promise();
+
+  // Fetch updated event with venue details
+  const updated = await dynamodb.get({
+    TableName: EVENTS_TABLE,
+    Key: { id }
+  }).promise();
+
+  const updatedEvent = updated.Item;
+
+  // Get venue name if venueId exists
+  let venueName = null;
+  if (updatedEvent.venueId) {
+    const venueResult = await dynamodb.get({
+      TableName: VENUES_TABLE,
+      Key: { id: updatedEvent.venueId }
+    }).promise();
+    venueName = venueResult.Item?.name || null;
+  }
+
+  console.log('[MCP] Event updated successfully', { eventId: id });
+
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(),
+    body: JSON.stringify({
+      ...updatedEvent,
+      externalIds: updatedEvent.external_ids || [],
+      venueName
+    })
+  };
+};
+
+// GET /api/events/:id/mcp - Get event by ID via MCP (NO AUTH)
+// Public read-only endpoint for MCP tools to fetch event details
+const handleGetEventMcp = async (event) => {
+  const { id } = event.pathParameters;
+
+  console.log('[MCP] Getting event', { eventId: id });
+
+  // Get event from database
+  const result = await dynamodb.get({
+    TableName: EVENTS_TABLE,
+    Key: { id }
+  }).promise();
+
+  if (!result.Item) {
+    return {
+      statusCode: 404,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Event not found' })
+    };
+  }
+
+  const eventItem = result.Item;
+
+  // Get venue details if venueId exists
+  let venueName = null;
+  let venueCity = null;
+  if (eventItem.venueId) {
+    const venueResult = await dynamodb.get({
+      TableName: VENUES_TABLE,
+      Key: { id: eventItem.venueId }
+    }).promise();
+    if (venueResult.Item) {
+      venueName = venueResult.Item.name || null;
+      venueCity = venueResult.Item.city || null;
+    }
+  }
+
+  // Get artist name if artistId exists
+  let artistName = null;
+  if (eventItem.artistId) {
+    const artistResult = await dynamodb.get({
+      TableName: ARTISTS_TABLE,
+      Key: { id: eventItem.artistId }
+    }).promise();
+    artistName = artistResult.Item?.name || null;
+  }
+
+  console.log('[MCP] Event retrieved successfully', { eventId: id });
+
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(),
+    body: JSON.stringify({
+      id: eventItem.id,
+      title: eventItem.title,
+      date: eventItem.date,
+      startTime: eventItem.startTime,
+      endTime: eventItem.endTime,
+      artistId: eventItem.artistId,
+      artistName,
+      venueId: eventItem.venueId,
+      venueName,
+      venueCity,
+      description: eventItem.description,
+      ticketed: eventItem.ticketed,
+      ticketUrl: eventItem.ticketUrl,
+      ticketinformation: eventItem.ticketinformation,
+      price: eventItem.price,
+      imageUrl: eventItem.imageUrl,
+      eventUrl: eventItem.eventUrl,
+      notes: eventItem.notes,
+      isPublic: eventItem.isPublic,
+      source: eventItem.source,
+      externalIds: eventItem.external_ids || [],
+      aiCreated: eventItem.aiCreated,
+      needsReview: eventItem.needsReview,
+      createdAt: eventItem.createdAt,
+      updatedAt: eventItem.updatedAt
+    })
+  };
+};
+
 // DELETE /api/artists/:artistId/events/:id - Delete event
 const handleDeleteEvent = async (event, user) => {
   const { artistId, id } = event.pathParameters;
@@ -2455,7 +2742,11 @@ const handleCreateCommunityEvent = async (event) => {
 
   try {
     const body = JSON.parse(event.body);
-    const { artistId, artistIds, venueId, date, startTime, endTime, title, isPublic, source, isOpenMic } = body;
+    const {
+      artistId, artistIds, venueId, date, startTime, endTime, title, isPublic, source, isOpenMic,
+      // Enrichment fields (parity with edit_event)
+      price, eventUrl, ticketed, ticketInformation, ticketUrl, imageUrl, description, notes
+    } = body;
 
     // Support both single artistId and multiple artistIds
     const artistIdsList = artistIds || (artistId ? [artistId] : []);
@@ -2541,12 +2832,28 @@ const handleCreateCommunityEvent = async (event) => {
       // Geolocation
       ...geohashFields,
 
+      // External IDs for cross-referencing
+      external_ids: body.externalIds || [],
+
+      // Enrichment fields (parity with edit_event)
+      ...(price !== undefined && { price }),
+      ...(eventUrl !== undefined && { eventUrl }),
+      ...(ticketed !== undefined && { ticketed }),
+      ...(ticketInformation !== undefined && { ticketinformation: ticketInformation }),
+      ...(ticketUrl !== undefined && { ticketUrl }),
+      ...(imageUrl !== undefined && { imageUrl }),
+      ...(description !== undefined && { description }),
+      ...(notes !== undefined && { notes }),
+
       // Community event flags
       source: source || 'community_wizard',
       verifiedByArtist: false,  // Ghost checkmark
       verifiedByVenue: false,   // Future feature
       createdByUserId: null,    // Anonymous community builder
       membershipId: null,       // No membership for community events
+
+      // AI import flags (when source is mcp_ai_import)
+      ...(source === 'mcp_ai_import' && { aiCreated: true, needsReview: true }),
 
       createdAt: now,
       updatedAt: now
@@ -2740,10 +3047,7 @@ const handleGetIcalFeed = async (event) => {
       console.error('CALENDAR_SYNC: Failed to update lastUsedAt', err)
     );
 
-    const { artistId, scope } = tokenData;
-
-    // Fetch events based on scope
-    let events = [];
+    const { artistId } = tokenData;
 
     // Query artist events
     const artistEventsResult = await dynamodb.query({
@@ -2757,17 +3061,17 @@ const handleGetIcalFeed = async (event) => {
       }
     }).promise();
 
-    events = artistEventsResult.Items || [];
+    // Filter to only public gigs and rehearsals
+    // Public gigs: isPublic=true AND type is gig-related
+    // Rehearsals: type='rehearsal'
+    const events = (artistEventsResult.Items || []).filter(e => {
+      const isPublicGig = e.isPublic === true && ['gig', 'public_gig', 'gig-public', 'festival', 'open-mic'].includes(e.type);
+      const isRehearsal = e.type === 'rehearsal';
+      return isPublicGig || isRehearsal;
+    });
 
-    // Filter by scope
-    if (scope === 'public') {
-      events = events.filter(e => e.isPublic === true);
-    }
-    // 'full' scope includes all events
-    // 'personal' scope would include user's unavailability - not implemented in this version
-
-    // Get cancellations for the artist
-    const cancellations = await getCancellationsForArtist(artistId);
+    // No cancellations in feed - only relevant if user had the event before deletion
+    const cancellations = [];
 
     // Get artist name for calendar title
     const artistResult = await dynamodb.get({
@@ -2781,9 +3085,7 @@ const handleGetIcalFeed = async (event) => {
 
     console.log('CALENDAR_SYNC: Generated iCal feed', {
       artistId,
-      scope,
-      eventCount: events.length,
-      cancellationCount: cancellations.length
+      eventCount: events.length
     });
 
     return {
@@ -2903,6 +3205,10 @@ exports.handler = async (event, context) => {
     const routeKey = `${method} ${path}`;
 
     // PUBLIC ROUTES (NO AUTH REQUIRED) - Check these BEFORE auth
+    if (routeKey.match(/GET \/api\/events\/by-external-id/)) {
+      return await handleGetEventByExternalId(event);
+    }
+
     if (routeKey.match(/GET \/api\/events\/public\/geo/)) {
       return await handleGetPublicEventsGeo(event);
     }
@@ -2930,6 +3236,21 @@ exports.handler = async (event, context) => {
     // Community event creation (public, no auth required)
     if (routeKey.match(/POST \/api\/events\/community/)) {
       return await handleCreateCommunityEvent(event);
+    }
+
+    // Integration API: Find-or-create event (API key required)
+    if (routeKey.match(/POST \/api\/integration\/events$/)) {
+      return await handleIntegrationFindOrCreateEvent(event);
+    }
+
+    // MCP event update (public, no auth required)
+    if (routeKey.match(/PUT \/api\/events\/[^/]+\/mcp$/)) {
+      return await handleUpdateEventMcp(event);
+    }
+
+    // MCP event read (public, no auth required)
+    if (routeKey.match(/GET \/api\/events\/[^/]+\/mcp$/)) {
+      return await handleGetEventMcp(event);
     }
 
     // Check conflicts (public, no auth required - read-only operation)
@@ -3036,6 +3357,196 @@ exports.handler = async (event, context) => {
       statusCode: 500,
       headers: getCorsHeaders(),
       body: JSON.stringify({ error: error.message })
+    };
+  }
+};
+
+// ============================================================================
+// INTEGRATION API ENDPOINTS (API Key Required)
+// ============================================================================
+
+// CORS headers for integration API (allows x-api-key header)
+const getIntegrationHeaders = () => ({
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type,x-api-key',
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  'Access-Control-Allow-Credentials': 'false'
+});
+
+// Validate API key from request headers
+const validateApiKey = (event) => {
+  const apiKey = event.headers?.['x-api-key'] || event.headers?.['X-Api-Key'];
+  if (!apiKey) return false;
+  const validKeys = (process.env.INTEGRATION_API_KEYS || '').split(',').filter(Boolean);
+  return validKeys.includes(apiKey);
+};
+
+/**
+ * Integration API: Find or Create Event
+ *
+ * Checks for existing event by artistId + date + venueId (existing duplicate check logic).
+ * Returns existing if found, creates new if not.
+ *
+ * Request: { artistId, venueId, date, title?, startTime?, endTime?, ticketUrl?, ticketPrice?, description? }
+ * Response: { success, event, isNew, matchMethod }
+ */
+const handleIntegrationFindOrCreateEvent = async (event) => {
+  console.log('[INTEGRATION] Events Lambda: Find-or-create event');
+
+  // 1. Validate API key
+  if (!validateApiKey(event)) {
+    return {
+      statusCode: 401,
+      headers: getIntegrationHeaders(),
+      body: JSON.stringify({ error: 'Invalid or missing API key' })
+    };
+  }
+
+  // 2. Parse and validate input
+  let body;
+  try {
+    body = JSON.parse(event.body || '{}');
+  } catch (e) {
+    return {
+      statusCode: 400,
+      headers: getIntegrationHeaders(),
+      body: JSON.stringify({ error: 'Invalid JSON body' })
+    };
+  }
+
+  const { artistId, venueId, date, title, startTime, endTime, ticketUrl, ticketPrice, description } = body;
+
+  if (!artistId) {
+    return {
+      statusCode: 400,
+      headers: getIntegrationHeaders(),
+      body: JSON.stringify({ error: 'artistId is required' })
+    };
+  }
+
+  if (!venueId) {
+    return {
+      statusCode: 400,
+      headers: getIntegrationHeaders(),
+      body: JSON.stringify({ error: 'venueId is required' })
+    };
+  }
+
+  if (!date) {
+    return {
+      statusCode: 400,
+      headers: getIntegrationHeaders(),
+      body: JSON.stringify({ error: 'date is required' })
+    };
+  }
+
+  try {
+    // 3. Check for existing event (artistId + date + venueId) - using existing GSI
+    const duplicateCheck = await dynamodb.query({
+      TableName: EVENTS_TABLE,
+      IndexName: 'artistId-date-index',
+      KeyConditionExpression: 'artistId = :artistId AND #date = :date',
+      FilterExpression: 'venueId = :venueId',
+      ExpressionAttributeNames: {
+        '#date': 'date'
+      },
+      ExpressionAttributeValues: {
+        ':artistId': artistId,
+        ':date': date,
+        ':venueId': venueId
+      }
+    }).promise();
+
+    // 4. If duplicate found, return existing event
+    if (duplicateCheck.Items && duplicateCheck.Items.length > 0) {
+      const existingEvent = duplicateCheck.Items[0];
+      console.log(`[INTEGRATION] Found existing event: ${existingEvent.id}`);
+
+      return {
+        statusCode: 200,
+        headers: getIntegrationHeaders(),
+        body: JSON.stringify({
+          success: true,
+          event: {
+            id: existingEvent.id,
+            artistId: existingEvent.artistId,
+            venueId: existingEvent.venueId,
+            date: existingEvent.date,
+            title: existingEvent.title || null,
+            startTime: existingEvent.startTime || null,
+            endTime: existingEvent.endTime || null,
+            ticketUrl: existingEvent.ticketUrl || null,
+            ticketPrice: existingEvent.ticketPrice || null,
+            type: existingEvent.type || 'public_gig'
+          },
+          isNew: false,
+          matchMethod: 'artist_venue_date'
+        })
+      };
+    }
+
+    // 5. No duplicate - create new event
+    console.log(`[INTEGRATION] No duplicate found - creating new event for artist ${artistId} at venue ${venueId} on ${date}`);
+
+    const now = new Date().toISOString();
+    const eventId = require('crypto').randomUUID();
+
+    const newEvent = {
+      id: eventId,
+      artistId: artistId,
+      venueId: venueId,
+      date: date,
+      title: title || '',
+      type: 'public_gig',
+      isPublic: true,
+      startTime: startTime || null,
+      endTime: endTime || null,
+      ticketUrl: ticketUrl || null,
+      ticketPrice: ticketPrice || null,
+      description: description || null,
+      source: 'integration_api',
+      ai_created: true,
+      needs_review: true,
+      created_at: now,
+      updated_at: now
+    };
+
+    await dynamodb.put({
+      TableName: EVENTS_TABLE,
+      Item: newEvent
+    }).promise();
+
+    console.log(`[INTEGRATION] Created new event: ${eventId}`);
+
+    return {
+      statusCode: 201,
+      headers: getIntegrationHeaders(),
+      body: JSON.stringify({
+        success: true,
+        event: {
+          id: eventId,
+          artistId: artistId,
+          venueId: venueId,
+          date: date,
+          title: newEvent.title,
+          startTime: newEvent.startTime,
+          endTime: newEvent.endTime,
+          ticketUrl: newEvent.ticketUrl,
+          ticketPrice: newEvent.ticketPrice,
+          type: newEvent.type
+        },
+        isNew: true,
+        matchMethod: 'new_event_created'
+      })
+    };
+
+  } catch (error) {
+    console.error('[INTEGRATION] Event find-or-create failed:', error);
+    return {
+      statusCode: 500,
+      headers: getIntegrationHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
     };
   }
 };

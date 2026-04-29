@@ -1,0 +1,35 @@
+# SAM Configuration for BNDY Serverless API
+#
+# This configuration targets the existing bndy-serverless-api stack.
+# DO NOT change stack_name or you will create a parallel stack.
+
+version = 0.1
+
+[default]
+[default.global.parameters]
+stack_name = "bndy-serverless-api"
+region = "eu-west-2"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
+confirm_changeset = true
+resolve_s3 = true
+s3_prefix = "bndy-serverless-api"
+# Use existing S3 bucket for deployment artifacts
+s3_bucket = "bndy-deployment-artifacts-1758805276"
+
+[default.sync.parameters]
+watch = true
+
+[default.local_start_api.parameters]
+warm_containers = "EAGER"
+
+[default.local_start_lambda.parameters]
+warm_containers = "EAGER"
