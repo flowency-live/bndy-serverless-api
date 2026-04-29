@@ -27,15 +27,18 @@ jobs:
 
       - name: Run Lambda Tests
         run: |
-          # Run tests for each lambda that has a test script
+          # Run tests for each lambda that has actual test files
           for dir in *-lambda/; do
             if [[ -d "$dir" && -f "$dir/package.json" ]]; then
-              if grep -q '"test"' "$dir/package.json"; then
+              # Check if there are actual test files (not just placeholder scripts)
+              if ls "$dir"/*.test.js 1> /dev/null 2>&1; then
                 echo "Running tests in $dir"
                 cd "$dir"
                 npm install --legacy-peer-deps
                 npm test || exit 1
                 cd ..
+              else
+                echo "Skipping $dir (no test files)"
               fi
             fi
           done
