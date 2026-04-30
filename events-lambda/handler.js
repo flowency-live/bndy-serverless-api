@@ -1305,16 +1305,28 @@ const handleGetEventByExternalId = async (event) => {
   }
 
   try {
-    // Scan and filter for matching externalId
-    const result = await dynamodb.scan({
-      TableName: EVENTS_TABLE
-    }).promise();
+    // Paginated scan to find event with matching externalId
+    let matchingEvent = null;
+    let lastEvaluatedKey = undefined;
 
-    // Find event with matching externalId
-    const matchingEvent = result.Items.find(evt => {
-      const externalIds = evt.external_ids || [];
-      return externalIds.some(ext => ext.source === source && ext.id === externalId);
-    });
+    do {
+      const scanParams = {
+        TableName: EVENTS_TABLE,
+        ExclusiveStartKey: lastEvaluatedKey
+      };
+
+      const result = await dynamodb.scan(scanParams).promise();
+
+      // Find event with matching externalId in this batch
+      matchingEvent = result.Items.find(evt => {
+        const externalIds = evt.external_ids || [];
+        return externalIds.some(ext => ext.source === source && ext.id === externalId);
+      });
+
+      if (matchingEvent) break;
+
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
 
     if (!matchingEvent) {
       return {
@@ -1574,6 +1586,85 @@ const handleGetEventMcp = async (event) => {
       updatedAt: eventItem.updatedAt
     })
   };
+};
+
+// POST /api/artists/:artistId/events/:id/leave - Leave a multi-artist event
+// Allows a collaborating artist to remove themselves without deleting the event
+const handleLeaveEvent = async (event) => {
+  const { artistId, id } = event.pathParameters;
+
+  console.log('LEAVE_EVENT: Request received', { artistId, eventId: id });
+
+  try {
+    // Get the existing event
+    const existing = await dynamodb.get({
+      TableName: EVENTS_TABLE,
+      Key: { id }
+    }).promise();
+
+    if (!existing.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Event not found' })
+      };
+    }
+
+    const existingEvent = existing.Item;
+    const collaboratingArtistIds = existingEvent.collaboratingArtistIds || [];
+
+    // Check if artist is the primary artist (cannot leave, must delete)
+    if (existingEvent.artistId === artistId) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'Primary artist cannot leave event. Use delete to remove the event entirely.'
+        })
+      };
+    }
+
+    // Check if artist is in the collaborating list
+    if (!collaboratingArtistIds.includes(artistId)) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Artist is not part of this event' })
+      };
+    }
+
+    // Remove artist from collaboratingArtistIds
+    const updatedCollaboratingIds = collaboratingArtistIds.filter(id => id !== artistId);
+
+    await dynamodb.update({
+      TableName: EVENTS_TABLE,
+      Key: { id },
+      UpdateExpression: 'SET collaboratingArtistIds = :ids, updatedAt = :now',
+      ExpressionAttributeValues: {
+        ':ids': updatedCollaboratingIds,
+        ':now': new Date().toISOString()
+      }
+    }).promise();
+
+    console.log('LEAVE_EVENT: Artist removed from event', { artistId, eventId: id, remainingCollaborators: updatedCollaboratingIds.length });
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        message: `Artist ${artistId} has left the event`,
+        eventId: id,
+        remainingCollaborators: updatedCollaboratingIds
+      })
+    };
+  } catch (error) {
+    console.error('LEAVE_EVENT: Error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Failed to leave event' })
+    };
+  }
 };
 
 // DELETE /api/artists/:artistId/events/:id - Delete event
@@ -2255,8 +2346,15 @@ const handleGetAllPublicEvents = async (event) => {
 
     console.log('PUBLIC_ALL: Found events', { count: allEvents.length });
 
-    // Enrich events with artist and venue data
-    const artistIds = [...new Set(allEvents.map(e => e.artistId).filter(Boolean))];
+    // Collect ALL artist IDs (primary + collaborating) for enrichment
+    const allArtistIds = new Set();
+    allEvents.forEach(e => {
+      if (e.artistId) allArtistIds.add(e.artistId);
+      if (e.collaboratingArtistIds && Array.isArray(e.collaboratingArtistIds)) {
+        e.collaboratingArtistIds.forEach(id => allArtistIds.add(id));
+      }
+    });
+    const artistIds = [...allArtistIds];
     const venueIds = [...new Set(allEvents.map(e => e.venueId).filter(Boolean))];
 
     const [artistResults, venueResults] = await Promise.all([
@@ -2275,15 +2373,27 @@ const handleGetAllPublicEvents = async (event) => {
       if (result.Item) venueMap[venueIds[idx]] = result.Item;
     });
 
-    // Join events with artist and venue data
-    const enrichedEvents = allEvents.map(e => ({
-      ...e,
-      artistName: artistMap[e.artistId]?.name,
-      venueName: venueMap[e.venueId]?.name,
-      venue: venueMap[e.venueId] ? {
-        city: venueMap[e.venueId].city
-      } : null
-    }));
+    // Join events with artist and venue data, including multi-artist arrays
+    const enrichedEvents = allEvents.map(e => {
+      // Build full artistIds array (primary + collaborating)
+      const eventArtistIds = e.artistId ? [e.artistId] : [];
+      if (e.collaboratingArtistIds && Array.isArray(e.collaboratingArtistIds)) {
+        eventArtistIds.push(...e.collaboratingArtistIds);
+      }
+      // Build artistNames array from artistIds
+      const eventArtistNames = eventArtistIds.map(id => artistMap[id]?.name).filter(Boolean);
+
+      return {
+        ...e,
+        artistName: artistMap[e.artistId]?.name,
+        artistIds: eventArtistIds.length > 0 ? eventArtistIds : undefined,
+        artistNames: eventArtistNames.length > 0 ? eventArtistNames : undefined,
+        venueName: venueMap[e.venueId]?.name,
+        venue: venueMap[e.venueId] ? {
+          city: venueMap[e.venueId].city
+        } : null
+      };
+    });
 
     console.log('PUBLIC_ALL: Enriched events with artist and venue data');
 
@@ -2327,8 +2437,8 @@ const handleGetArtistPublicEvents = async (event) => {
   console.log('ARTIST_PUBLIC_EVENTS: Query received', { artistId, startDate: start, endDate: end });
 
   try {
-    // Query events for this artist using the artistId-date-index GSI
-    const result = await dynamodb.query({
+    // Query events where this artist is the PRIMARY artist (using GSI)
+    const primaryResult = await dynamodb.query({
       TableName: EVENTS_TABLE,
       IndexName: 'artistId-date-index',
       KeyConditionExpression: 'artistId = :artistId AND #date BETWEEN :start AND :end',
@@ -2342,9 +2452,35 @@ const handleGetArtistPublicEvents = async (event) => {
       }
     }).promise();
 
-    const events = result.Items || [];
+    const primaryEvents = primaryResult.Items || [];
+    console.log('ARTIST_PUBLIC_EVENTS: Found primary events', { artistId, count: primaryEvents.length });
 
-    console.log('ARTIST_PUBLIC_EVENTS: Found events', { artistId, count: events.length });
+    // Scan for events where this artist is COLLABORATING (multi-artist support)
+    const collaboratingResult = await dynamodb.scan({
+      TableName: EVENTS_TABLE,
+      FilterExpression: 'isPublic = :true AND #date BETWEEN :start AND :end AND contains(collaboratingArtistIds, :artistId)',
+      ExpressionAttributeNames: { '#date': 'date' },
+      ExpressionAttributeValues: {
+        ':artistId': artistId,
+        ':start': start,
+        ':end': end,
+        ':true': true
+      }
+    }).promise();
+
+    const collaboratingEvents = collaboratingResult.Items || [];
+    console.log('ARTIST_PUBLIC_EVENTS: Found collaborating events', { artistId, count: collaboratingEvents.length });
+
+    // Combine and deduplicate events
+    const eventMap = new Map();
+    [...primaryEvents, ...collaboratingEvents].forEach(e => {
+      if (!eventMap.has(e.id)) {
+        eventMap.set(e.id, e);
+      }
+    });
+    const events = Array.from(eventMap.values());
+
+    console.log('ARTIST_PUBLIC_EVENTS: Total unique events', { artistId, count: events.length });
 
     // Enrich events with venue data
     const venueIds = [...new Set(events.map(e => e.venueId).filter(Boolean))];
@@ -2816,10 +2952,26 @@ const handleCreateCommunityEvent = async (event) => {
       }
     }
 
-    // Create main event with primary artist
+    // Fetch all artist names for multi-artist events
+    const allArtistNames = [];
+    if (artistIdsList.length > 0) {
+      const artistPromises = artistIdsList.map(id =>
+        dynamodb.get({ TableName: ARTISTS_TABLE, Key: { id } }).promise()
+      );
+      const artistResults = await Promise.all(artistPromises);
+      artistResults.forEach(result => {
+        if (result.Item) {
+          allArtistNames.push(result.Item.name);
+        }
+      });
+    }
+
+    // Create main event with primary artist and collaborating artists
+    const collaboratingArtistIds = artistIdsList.length > 1 ? artistIdsList.slice(1) : [];
     const newEvent = {
       id: eventId,
       artistId: artistIdsList[0] || null,
+      collaboratingArtistIds: collaboratingArtistIds, // Multi-artist support
       venueId: venueId,
       title: eventTitle,
       date: date,
@@ -2878,6 +3030,8 @@ const handleCreateCommunityEvent = async (event) => {
           date: newEvent.date,
           startTime: newEvent.startTime,
           artistId: newEvent.artistId,
+          artistIds: artistIdsList, // Full array of all artist IDs
+          artistNames: allArtistNames, // Full array of all artist names
           venueId: newEvent.venueId
         }
       })
@@ -3333,6 +3487,11 @@ exports.handler = async (event, context) => {
     // Update event
     if (routeKey.match(/PUT \/api\/artists\/[^/]+\/events\/[^/]+/)) {
       return await handleUpdateEvent(event, user);
+    }
+
+    // Leave event (multi-artist support - remove self from collaborating)
+    if (routeKey.match(/POST \/api\/artists\/[^/]+\/events\/[^/]+\/leave/)) {
+      return await handleLeaveEvent(event);
     }
 
     // Delete event
