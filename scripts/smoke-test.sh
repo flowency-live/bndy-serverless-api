@@ -46,12 +46,13 @@ test_endpoint() {
   return 0
 }
 
-# Test CORS headers
+# Test CORS headers using actual GET request with verbose headers
 test_cors() {
   local origin="$1"
   echo -n "Testing CORS for $origin... "
 
-  response=$(curl -s -I -H "Origin: $origin" "$API_URL/api/events/public?startDate=2026-01-01&endDate=2026-01-02" 2>/dev/null)
+  # Use -D - to get headers from a GET request (HEAD doesn't always return CORS headers)
+  response=$(curl -s -D - -H "Origin: $origin" "$API_URL/api/events/public?startDate=2026-01-01&endDate=2026-01-02" -o /dev/null 2>/dev/null)
 
   if echo "$response" | grep -qi "access-control-allow-origin: $origin"; then
     echo "PASSED"
