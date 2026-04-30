@@ -252,6 +252,20 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/events/public/geo
             Method: GET
+        # Artist public events (Frontstage)
+        GetArtistPublicEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/public-events
+            Method: GET
+        # Venue events (Frontstage)
+        GetVenueEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{venueId}/events
+            Method: GET
         # Calendar
         GetCalendarIcal:
           Type: HttpApi
