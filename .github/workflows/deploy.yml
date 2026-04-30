@@ -101,7 +101,7 @@ jobs:
           done
 
       - name: SAM Build
-        run: sam build --parallel --cached
+        run: sam build --parallel
 
       - name: SAM Deploy
         run: |
