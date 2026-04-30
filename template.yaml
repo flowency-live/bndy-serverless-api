@@ -224,6 +224,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/events/{id}
             Method: DELETE
+        LeaveEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/events/{id}/leave
+            Method: POST
         GetEventByExternalId:
           Type: HttpApi
           Properties:
