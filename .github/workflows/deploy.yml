@@ -53,6 +53,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Setup SAM CLI
         uses: aws-actions/setup-sam@v2
         with:
@@ -60,6 +65,12 @@ jobs:
 
       - name: Validate SAM Template
         run: sam validate --lint
+
+      - name: Verify Critical Routes
+        run: |
+          cd scripts
+          npm install
+          node verify-routes.js
 
   deploy:
     name: Deploy to AWS
@@ -113,6 +124,16 @@ jobs:
             --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
             --s3-bucket bndy-deployment-artifacts-1758805276 \
             --s3-prefix bndy-serverless-api
+
+      - name: Wait for API Gateway propagation
+        run: sleep 10
+
+      - name: Run Smoke Tests
+        run: |
+          chmod +x scripts/smoke-test.sh
+          ./scripts/smoke-test.sh
+        env:
+          API_URL: https://api.bndy.co.uk
 
       - name: Output Stack Info
         run: |

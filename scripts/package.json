@@ -1,0 +1,12 @@
+{
+  "name": "bndy-api-scripts",
+  "version": "1.0.0",
+  "description": "CI/CD and verification scripts for BNDY API",
+  "scripts": {
+    "verify-routes": "node verify-routes.js",
+    "smoke-test": "bash smoke-test.sh"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}
