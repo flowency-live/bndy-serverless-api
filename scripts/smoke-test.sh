@@ -69,7 +69,7 @@ echo "--- Public Endpoints ---"
 
 # Core public endpoints
 test_endpoint "GET /api/events/public" "GET" "/api/events/public?startDate=2026-04-30&endDate=2026-05-01" "200" "events"
-test_endpoint "GET /api/events/public/geo" "GET" "/api/events/public/geo?startDate=2026-04-30&endDate=2026-05-01" "200" ""
+test_endpoint "GET /api/events/public/geo" "GET" "/api/events/public/geo?geohash=gcqr&startDate=2026-04-30&endDate=2026-05-01" "200" ""
 test_endpoint "GET /api/artists (list)" "GET" "/api/artists" "200" ""
 test_endpoint "GET /api/venues (list)" "GET" "/api/venues" "200" ""
 
