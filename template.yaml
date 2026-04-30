@@ -16,10 +16,14 @@ Parameters:
       - staging
       - prod
     Description: Deployment stage
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    Description: JWT secret for authentication
 
 Globals:
   Function:
-    Runtime: nodejs20.x
+    Runtime: nodejs22.x
     MemorySize: 512
     Timeout: 30
     Tracing: Active
