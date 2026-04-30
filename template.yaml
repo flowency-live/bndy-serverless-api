@@ -24,7 +24,7 @@ Parameters:
 
 Globals:
   Function:
-    Runtime: nodejs20.x
+    Runtime: nodejs24.x
     MemorySize: 512
     Timeout: 30
     Tracing: Active
@@ -71,7 +71,6 @@ Resources:
   ArtistsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-ArtistsFunction-4wCJA9JLMwF5
       Description: BNDY Artists API - handles /api/artists endpoints
       CodeUri: ./artists-lambda/
       Handler: handler.handler
@@ -166,7 +165,6 @@ Resources:
   EventsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-EventsFunction-03skAPFIwe9g
       Description: BNDY Events API - handles /api/events endpoints
       CodeUri: ./events-lambda/
       Handler: handler.handler
@@ -257,7 +255,6 @@ Resources:
   VenuesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-VenuesFunction-z91LnIIRKHhq
       Description: BNDY Venues API - handles /api/venues endpoints
       CodeUri: ./venues-lambda/
       Handler: handler.handler
@@ -313,7 +310,6 @@ Resources:
   AuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-AuthFunction-gKJksEC1lGjw
       Description: BNDY Authentication API - handles OAuth and sessions
       CodeUri: ./auth-lambda/
       Handler: handler.handler
@@ -369,7 +365,6 @@ Resources:
   UsersFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-UsersFunction-HNQeQw7kJO9b
       Description: BNDY Users API - handles user profile endpoints
       CodeUri: ./users-lambda/
       Handler: handler.handler
@@ -401,7 +396,6 @@ Resources:
   MembershipsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-MembershipsFunction-adBmJyeWuWLA
       Description: BNDY Memberships API - handles artist/band memberships
       CodeUri: ./memberships-lambda/
       Handler: handler.handler
@@ -451,7 +445,6 @@ Resources:
   SongsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-SongsFunction-c3eFxAdsTmeS
       Description: BNDY Songs API - handles song library
       CodeUri: ./songs-lambda/
       Handler: handler.handler
