@@ -112,8 +112,7 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
             --s3-bucket bndy-deployment-artifacts-1758805276 \
-            --s3-prefix bndy-serverless-api \
-            --parameter-overrides JwtSecret=${{ secrets.JWT_SECRET }}
+            --s3-prefix bndy-serverless-api
 
       - name: Output Stack Info
         run: |

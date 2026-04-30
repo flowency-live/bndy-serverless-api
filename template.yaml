@@ -19,7 +19,8 @@ Parameters:
   JwtSecret:
     Type: String
     NoEcho: true
-    Description: JWT secret for authentication
+    Default: "unused-jwt-secret-fetched-from-ssm-at-runtime"
+    Description: JWT secret for authentication (not used - Lambdas fetch from SSM)
 
 Globals:
   Function:
