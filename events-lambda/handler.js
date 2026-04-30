@@ -1553,7 +1553,24 @@ const handleGetEventMcp = async (event) => {
     artistName = artistResult.Item?.name || null;
   }
 
-  console.log('[MCP] Event retrieved successfully', { eventId: id });
+  // Get collaborating artist names for multi-artist events
+  const collaboratingArtistIds = eventItem.collaboratingArtistIds || [];
+  let collaboratingArtistNames = [];
+  if (collaboratingArtistIds.length > 0) {
+    const results = await Promise.all(
+      collaboratingArtistIds.map(id => dynamodb.get({
+        TableName: ARTISTS_TABLE,
+        Key: { id }
+      }).promise())
+    );
+    collaboratingArtistNames = results.filter(r => r.Item).map(r => r.Item.name);
+  }
+
+  // Build full arrays for multi-artist support
+  const artistIds = [eventItem.artistId, ...collaboratingArtistIds].filter(Boolean);
+  const artistNames = [artistName, ...collaboratingArtistNames].filter(Boolean);
+
+  console.log('[MCP] Event retrieved successfully', { eventId: id, artistCount: artistIds.length });
 
   return {
     statusCode: 200,
@@ -1566,6 +1583,8 @@ const handleGetEventMcp = async (event) => {
       endTime: eventItem.endTime,
       artistId: eventItem.artistId,
       artistName,
+      artistIds,
+      artistNames,
       venueId: eventItem.venueId,
       venueName,
       venueCity,
