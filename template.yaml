@@ -46,6 +46,9 @@ Resources:
         AllowOrigins:
           - https://backstage.bndy.co.uk
           - https://frontstage.bndy.co.uk
+          - https://live.bndy.co.uk
+          - https://www.bndy.co.uk
+          - https://bndy.co.uk
           - https://d3cewujswmjafa.cloudfront.net
           - http://localhost:3000
           - http://localhost:3001
