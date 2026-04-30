@@ -5,60 +5,38 @@
  * Compares routes defined in Lambda handlers with routes in template.yaml
  * to catch misconfigurations BEFORE deployment.
  *
+ * Uses regex parsing to avoid CloudFormation intrinsic function issues.
+ *
  * Usage: node scripts/verify-routes.js
  */
 
 const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
 
 const ROOT = path.join(__dirname, '..');
 
-// Extract routes from handler files using regex
-function extractHandlerRoutes(handlerPath) {
-  const content = fs.readFileSync(handlerPath, 'utf-8');
-  const routes = [];
-
-  // Match route comments like: // GET /api/events/public
-  // and routeKey.match patterns like: routeKey.match(/GET \/api\/events\/public/)
-  const commentPattern = /\/\/\s*(GET|POST|PUT|DELETE|PATCH)\s+(\/api\/[^\s\n]+)/g;
-  const matchPattern = /routeKey\.match\(\/(GET|POST|PUT|DELETE|PATCH)\s+\\?(\/[^/]+(?:\\?\/[^/]+)*)/g;
-
-  let match;
-  while ((match = commentPattern.exec(content)) !== null) {
-    routes.push({ method: match[1], path: match[2].replace(/\s*-.*$/, '').trim() });
-  }
-
-  return routes;
-}
-
-// Extract routes from template.yaml
+// Extract routes from template.yaml using regex (avoids CloudFormation intrinsic function issues)
 function extractTemplateRoutes(templatePath) {
   const content = fs.readFileSync(templatePath, 'utf-8');
-  const template = yaml.load(content);
   const routes = [];
 
-  const resources = template.Resources || {};
+  // Match HttpApi events with Path and Method
+  // Pattern matches blocks like:
+  //   SomeEvent:
+  //     Type: HttpApi
+  //     Properties:
+  //       ApiId: !Ref BndyHttpApi
+  //       Path: /api/something
+  //       Method: GET
+  const eventPattern = /(\w+):\s*\n\s+Type:\s*HttpApi\s*\n\s+Properties:[\s\S]*?Path:\s*([^\n]+)\s*\n\s+Method:\s*(\w+)/g;
 
-  for (const [name, resource] of Object.entries(resources)) {
-    if (resource.Type === 'AWS::Serverless::Function') {
-      const events = resource.Properties?.Events || {};
-
-      for (const [eventName, event] of Object.entries(events)) {
-        if (event.Type === 'HttpApi') {
-          const method = event.Properties?.Method;
-          const apiPath = event.Properties?.Path;
-          if (method && apiPath) {
-            routes.push({
-              method: method.toUpperCase(),
-              path: apiPath,
-              functionName: name,
-              eventName
-            });
-          }
-        }
-      }
-    }
+  let match;
+  while ((match = eventPattern.exec(content)) !== null) {
+    routes.push({
+      eventName: match[1],
+      path: match[2].trim(),
+      method: match[3].toUpperCase()
+    });
   }
 
   return routes;
@@ -83,7 +61,7 @@ function verifyRoutes() {
 
   const templateRoutes = extractTemplateRoutes(templatePath);
 
-  console.log(`Found ${templateRoutes.length} routes in template.yaml\n`);
+  console.log(`Found ${templateRoutes.length} HttpApi routes in template.yaml\n`);
 
   // Critical public routes that MUST exist
   const criticalRoutes = [

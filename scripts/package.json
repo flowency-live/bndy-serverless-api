@@ -6,7 +6,5 @@
     "verify-routes": "node verify-routes.js",
     "smoke-test": "bash smoke-test.sh"
   },
-  "dependencies": {
-    "js-yaml": "^4.1.0"
-  }
+  "dependencies": {}
 }
