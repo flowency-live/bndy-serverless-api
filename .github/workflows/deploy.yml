@@ -64,7 +64,7 @@ jobs:
           use-installer: true
 
       - name: Validate SAM Template
-        run: sam validate  # Skipping --lint temporarily due to nodejs20.x deprecation warnings
+        run: sam validate --no-lint  # Skipping lint due to nodejs20.x deprecation warnings (to be upgraded to nodejs24.x)
 
       - name: Verify Critical Routes
         run: |
