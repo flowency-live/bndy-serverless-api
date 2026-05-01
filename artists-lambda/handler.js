@@ -1565,23 +1565,8 @@ async function handleMCPUpdateArtist(event) {
       };
     }
 
-    // Security check: Only allow updates to AI-created or community artists
-    const source = existingArtist.Item.source || '';
-    const aiCreated = existingArtist.Item.ai_created || false;
-    const allowedSources = ['mcp', 'mcp_ai_import', 'community_wizard', 'frontstage'];
-    const isAllowed = aiCreated || allowedSources.some(s => source.includes(s));
-
-    if (!isAllowed) {
-      console.log(`[MCP_UPDATE_ARTIST] Rejected - artist source "${source}" not allowed for MCP updates`);
-      return {
-        statusCode: 403,
-        headers: getCommunityHeaders(),
-        body: JSON.stringify({
-          error: 'Cannot update this artist via MCP',
-          message: 'Only AI-created or community artists can be updated via MCP endpoint'
-        })
-      };
-    }
+    // Log update for audit trail (no source restrictions - MCP can enrich any artist)
+    console.log(`[MCP_UPDATE_ARTIST] Updating artist: ${artistId} (source: ${existingArtist.Item.source || 'unknown'})`);
 
     const now = new Date().toISOString();
 
