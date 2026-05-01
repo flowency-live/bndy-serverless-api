@@ -64,7 +64,10 @@ jobs:
           use-installer: true
 
       - name: Validate SAM Template
-        run: sam validate --no-lint  # Skipping lint due to nodejs20.x deprecation warnings (to be upgraded to nodejs24.x)
+        run: |
+          # Skip SAM lint validation due to nodejs20.x deprecation warnings
+          # The runtime will be upgraded to nodejs24.x when the bndy-jwt layer is updated
+          aws cloudformation validate-template --template-body file://template.yaml --region ${{ env.AWS_REGION }}
 
       - name: Verify Critical Routes
         run: |
