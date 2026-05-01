@@ -389,6 +389,54 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /auth/facebook/callback
             Method: GET
+        GoogleOAuthInit:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/google
+            Method: GET
+        AppleOAuthInit:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/apple
+            Method: GET
+        OAuthCallback:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/callback
+            Method: GET
+        PhoneRequestOtp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/phone/request-otp
+            Method: POST
+        PhoneVerifyOtp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/phone/verify-otp
+            Method: POST
+        PhoneVerifyAndOnboard:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/phone/verify-and-onboard
+            Method: POST
+        EmailRequestMagic:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/email/request-magic
+            Method: POST
+        CheckIdentity:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/check-identity
+            Method: POST
 
   # Users Lambda
   UsersFunction:
