@@ -277,6 +277,90 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/calendar/ical/{token}
             Method: GET
+        # Artist calendar routes
+        GetArtistCalendar:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/calendar
+            Method: GET
+        CreateCalendarSubscription:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/calendar/subscribe
+            Method: POST
+        GetCalendarSubscriptions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/calendar/subscriptions
+            Method: GET
+        DeleteCalendarSubscription:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/calendar/subscriptions/{subscriptionId}
+            Method: DELETE
+        GetEventIcal:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/events/{id}/ical
+            Method: GET
+        # Availability routes
+        ToggleAvailability:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/events/toggle-availability
+            Method: POST
+        BulkAvailability:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/events/bulk-availability
+            Method: POST
+        CheckConflicts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/events/check-conflicts
+            Method: POST
+        GetPublicAvailability:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/public-availability
+            Method: GET
+        # Public gigs (MCP/Admin)
+        CreatePublicGig:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/public-gigs
+            Method: POST
+        # User unavailability
+        CreateUserUnavailability:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/users/me/unavailability
+            Method: POST
+        # Batch operations
+        BatchEventsWithJoins:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/batch
+            Method: POST
+        # Integration API
+        IntegrationFindOrCreateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/integration/events
+            Method: POST
 
   # Venues Lambda
   VenuesFunction:
@@ -780,6 +864,37 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/setlists/{id}
             Method: DELETE
+        # Artist-specific setlist routes (used by backstage)
+        GetArtistSetlists:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/setlists
+            Method: GET
+        CreateArtistSetlist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/setlists
+            Method: POST
+        GetArtistSetlistById:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/setlists/{setlistId}
+            Method: GET
+        UpdateArtistSetlist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/setlists/{setlistId}
+            Method: PUT
+        DeleteArtistSetlist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/setlists/{setlistId}
+            Method: DELETE
 
   # Spotify Lambda
   SpotifyFunction:
@@ -842,6 +957,86 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{artistId}/songs/{songId}
             Method: DELETE
+        # Playbook routes
+        GetPlaybook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/playbook
+            Method: GET
+        AddToPlaybook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/playbook
+            Method: POST
+        UpdatePlaybookSong:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/playbook/{artistSongId}
+            Method: PUT
+        DeletePlaybookSong:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/playbook/{artistSongId}
+            Method: DELETE
+        # Pipeline routes
+        GetPipeline:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/pipeline
+            Method: GET
+        AddPipelineSuggestion:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/pipeline/suggestions
+            Method: POST
+        VotePipelineSong:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/pipeline/{artistSongId}/vote
+            Method: POST
+        DeletePipelineSong:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/pipeline/{artistSongId}
+            Method: DELETE
+        UpdatePipelineRag:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/pipeline/{artistSongId}/rag
+            Method: POST
+        UpdatePipelineRagStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/pipeline/{artistSongId}/rag-status
+            Method: PUT
+        UpdatePipelineStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/pipeline/{artistSongId}/status
+            Method: PUT
+        UpdatePipelineComment:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/pipeline/{artistSongId}/comment
+            Method: PUT
+        CheckVoteReminders:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/check-vote-reminders
+            Method: POST
 
   # VenueCRM Lambda
   VenueCRMFunction:
