@@ -3,8 +3,16 @@
   "version": "1.0.0",
   "description": "BNDY Venues Lambda Function - DynamoDB Version",
   "main": "handler.js",
+  "scripts": {
+    "test": "jest"
+  },
   "dependencies": {
-    "aws-sdk": "^2.1692.0"
+    "aws-sdk": "^2.1692.0",
+    "@googlemaps/google-maps-services-js": "^3.4.2",
+    "ngeohash": "^0.6.3"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   },
   "engines": {
     "node": ">=18.0.0"

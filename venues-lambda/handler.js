@@ -5,6 +5,7 @@ const AWS = require('aws-sdk');
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 const lambda = new AWS.Lambda({ region: 'eu-west-2' });
 const https = require('https');
+const ngeohash = require('ngeohash');
 const { Client, PlaceInputType } = require('@googlemaps/google-maps-services-js');
 
 // Google Places API client for integration endpoints
@@ -111,6 +112,94 @@ function mergeExternalIds(existing, incoming) {
 }
 
 // ===== END EXTERNAL ID MERGE HELPERS =====
+
+// ===== LOCATION CASCADE HELPERS =====
+
+// Compute geohash fields from venue location (same logic as events-lambda)
+function computeGeohashFields(venue) {
+  if (!venue || !venue.latitude || !venue.longitude) {
+    return {
+      geohash6: null,
+      geohash4: null,
+      geoLat: null,
+      geoLng: null
+    };
+  }
+
+  return {
+    geohash6: ngeohash.encode(venue.latitude, venue.longitude, 6),
+    geohash4: ngeohash.encode(venue.latitude, venue.longitude, 4),
+    geoLat: venue.latitude,
+    geoLng: venue.longitude
+  };
+}
+
+// Cascade venue location changes to all events at that venue
+async function cascadeLocationToEvents(venueId, newLatitude, newLongitude) {
+  console.log(`[Venues] Cascading location update to events for venue: ${venueId}`);
+
+  try {
+    // Query all events for this venue using the GSI
+    const eventsResult = await dynamodb.query({
+      TableName: 'bndy-events',
+      IndexName: 'venueId-date-index',
+      KeyConditionExpression: 'venueId = :venueId',
+      ExpressionAttributeValues: {
+        ':venueId': venueId
+      }
+    }).promise();
+
+    const events = eventsResult.Items || [];
+    console.log(`[Venues] Found ${events.length} event(s) to update`);
+
+    if (events.length === 0) {
+      return { updated: 0, skipped: 0 };
+    }
+
+    // Compute new geohash fields
+    const geohashFields = computeGeohashFields({ latitude: newLatitude, longitude: newLongitude });
+    const now = new Date().toISOString();
+
+    let updated = 0;
+    let skipped = 0;
+
+    for (const event of events) {
+      // Skip if already has correct coordinates
+      if (event.geoLat === geohashFields.geoLat && event.geoLng === geohashFields.geoLng) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        await dynamodb.update({
+          TableName: 'bndy-events',
+          Key: { id: event.id },
+          UpdateExpression: 'SET geoLat = :lat, geoLng = :lng, geohash6 = :gh6, geohash4 = :gh4, updatedAt = :now',
+          ExpressionAttributeValues: {
+            ':lat': geohashFields.geoLat,
+            ':lng': geohashFields.geoLng,
+            ':gh6': geohashFields.geohash6,
+            ':gh4': geohashFields.geohash4,
+            ':now': now
+          }
+        }).promise();
+        updated++;
+        console.log(`[Venues] Updated event ${event.id} with new location`);
+      } catch (updateError) {
+        console.error(`[Venues] Failed to update event ${event.id}:`, updateError.message);
+      }
+    }
+
+    console.log(`[Venues] Cascade complete: ${updated} updated, ${skipped} skipped`);
+    return { updated, skipped };
+  } catch (error) {
+    console.error('[Venues] Failed to cascade location to events:', error);
+    // Don't throw - venue update should still succeed even if cascade fails
+    return { updated: 0, skipped: 0, error: error.message };
+  }
+}
+
+// ===== END LOCATION CASCADE HELPERS =====
 
 // Safe JSON parse helper - handles both string and object body
 function parseBody(body) {
@@ -516,6 +605,23 @@ async function handleUpdateVenue(venueId, venueData, event) {
   console.log(`[Venues] Venues Lambda: Updating venue: ${venueId}`);
   console.log(`[Venues] Update data:`, JSON.stringify(venueData, null, 2));
 
+  // Get existing venue to detect location changes
+  let existingVenue = null;
+  const isLocationChanging = venueData.latitude !== undefined || venueData.longitude !== undefined;
+
+  if (isLocationChanging) {
+    try {
+      const existingResult = await dynamodb.get({
+        TableName: 'bndy-venues',
+        Key: { id: venueId }
+      }).promise();
+      existingVenue = existingResult.Item;
+      console.log(`[Venues] Existing venue coords: ${existingVenue?.latitude}, ${existingVenue?.longitude}`);
+    } catch (getError) {
+      console.error('[Venues] Failed to get existing venue for location check:', getError.message);
+    }
+  }
+
   const now = new Date().toISOString();
 
   // Build dynamic update expression - separate SET and REMOVE operations
@@ -631,6 +737,25 @@ async function handleUpdateVenue(venueId, venueData, event) {
       createdAt: result.Attributes.created_at,
       updatedAt: result.Attributes.updated_at
     };
+
+    // Cascade location changes to events (if coordinates changed)
+    if (existingVenue && isLocationChanging) {
+      const newLat = result.Attributes.latitude;
+      const newLng = result.Attributes.longitude;
+      const oldLat = existingVenue.latitude;
+      const oldLng = existingVenue.longitude;
+
+      if (newLat !== oldLat || newLng !== oldLng) {
+        console.log(`[Venues] Location changed from (${oldLat}, ${oldLng}) to (${newLat}, ${newLng})`);
+        // Await cascade to ensure it completes before Lambda terminates
+        // But don't let cascade failure break the venue update
+        try {
+          await cascadeLocationToEvents(venueId, newLat, newLng);
+        } catch (cascadeError) {
+          console.error('[Venues] Cascade failed (venue update still succeeded):', cascadeError.message);
+        }
+      }
+    }
 
     return {
       statusCode: 200,
