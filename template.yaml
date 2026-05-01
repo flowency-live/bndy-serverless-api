@@ -139,6 +139,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/by-external-id
             Method: GET
+        ListArtistsMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/list
+            Method: GET
         # Artist nested routes
         GetArtistEvents:
           Type: HttpApi
@@ -146,24 +152,11 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{artistId}/events
             Method: GET
-        GetArtistMembers:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /api/artists/{artistId}/members
-            Method: GET
         GetArtistInvites:
           Type: HttpApi
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{artistId}/invites
-            Method: GET
-        # CRM routes
-        GetArtistCrmVenues:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /api/artists/{artistId}/crm/venues
             Method: GET
 
   # Events Lambda
@@ -270,44 +263,6 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues/{venueId}/events
             Method: GET
-        # Calendar
-        GetCalendarIcal:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /api/calendar/ical/{token}
-            Method: GET
-        # Artist calendar routes
-        GetArtistCalendar:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /api/artists/{artistId}/calendar
-            Method: GET
-        CreateCalendarSubscription:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /api/artists/{artistId}/calendar/subscribe
-            Method: POST
-        GetCalendarSubscriptions:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /api/artists/{artistId}/calendar/subscriptions
-            Method: GET
-        DeleteCalendarSubscription:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /api/artists/{artistId}/calendar/subscriptions/{subscriptionId}
-            Method: DELETE
-        GetEventIcal:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /api/artists/{artistId}/events/{id}/ical
-            Method: GET
         # Availability routes
         ToggleAvailability:
           Type: HttpApi
@@ -361,6 +316,59 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/integration/events
             Method: POST
+
+  # Calendar Lambda (split from Events to reduce Lambda policy size)
+  CalendarFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: BNDY Calendar API - handles calendar and iCal endpoints
+      CodeUri: ./events-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
+      MemorySize: 1024
+      Timeout: 60
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+      Events:
+        GetCalendarIcal:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/calendar/ical/{token}
+            Method: GET
+        GetArtistCalendar:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/calendar
+            Method: GET
+        CreateCalendarSubscription:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/calendar/subscribe
+            Method: POST
+        GetCalendarSubscriptions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/calendar/subscriptions
+            Method: GET
+        DeleteCalendarSubscription:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/calendar/subscriptions/{subscriptionId}
+            Method: DELETE
+        GetEventIcal:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/events/{id}/ical
+            Method: GET
 
   # Venues Lambda
   VenuesFunction:
@@ -633,6 +641,19 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/memberships/{membershipId}
             Method: DELETE
+        # Artist members routes (proxy from /api/artists/{artistId}/members)
+        GetArtistMembers:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/members
+            Method: GET
+        CreateArtistMember:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/members
+            Method: POST
 
   # Songs Lambda
   SongsFunction:
@@ -1065,6 +1086,85 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/venue-crm
             Method: POST
+        # Artist CRM routes
+        GetArtistCrmVenues:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues
+            Method: GET
+        CreateArtistCrmVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues
+            Method: POST
+        UpdateArtistCrmVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues/{venueId}
+            Method: PUT
+        DeleteArtistCrmVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues/{venueId}
+            Method: DELETE
+        GetArtistCrmVenueContacts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues/{venueId}/contacts
+            Method: GET
+        CreateArtistCrmVenueContact:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues/{venueId}/contacts
+            Method: POST
+        UpdateArtistCrmVenueContact:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues/{venueId}/contacts/{contactId}
+            Method: PUT
+        DeleteArtistCrmVenueContact:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues/{venueId}/contacts/{contactId}
+            Method: DELETE
+        GetArtistCrmVenueGigs:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues/{venueId}/gigs
+            Method: GET
+        GetArtistCrmVenueNotes:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues/{venueId}/notes
+            Method: GET
+        CreateArtistCrmVenueNote:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues/{venueId}/notes
+            Method: POST
+        UpdateArtistCrmVenueNote:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues/{venueId}/notes/{noteId}
+            Method: PUT
+        DeleteArtistCrmVenueNote:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/crm/venues/{venueId}/notes/{noteId}
+            Method: DELETE
 
   # EventsAgent Lambda
   EventsAgentFunction:

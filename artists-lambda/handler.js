@@ -330,6 +330,11 @@ exports.handler = async (event, context) => {
       return await handleGetArtistByExternalId(event);
     }
 
+    // MCP list artists endpoint (paginated with filters)
+    if (method === 'GET' && path === '/api/artists/list') {
+      return await handleListArtistsMcp(event);
+    }
+
     // Artist search endpoint (fuzzy matching for duplicate prevention)
     if (method === 'GET' && path === '/api/artists/search') {
       return await handleSearchArtists(event);
@@ -1683,6 +1688,151 @@ async function handleMCPUpdateArtist(event) {
     };
   } catch (error) {
     console.error('[MCP_UPDATE_ARTIST] Error:', error);
+    return {
+      statusCode: 500,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+}
+
+// ============================================================================
+// MCP LIST ARTISTS ENDPOINT (Public, No Auth Required)
+// ============================================================================
+
+async function handleListArtistsMcp(event) {
+  const queryParams = event.queryStringParameters || {};
+
+  // Parse pagination params
+  const limit = Math.min(parseInt(queryParams.limit) || 100, 500);
+  const offset = parseInt(queryParams.offset) || 0;
+
+  // Parse filter params
+  const missingSocials = queryParams.missingSocials === 'true';
+  const missingLocation = queryParams.missingLocation === 'true';
+  const missingGenres = queryParams.missingGenres === 'true';
+  const region = queryParams.region || null;
+  const createdSince = queryParams.createdSince || null;
+
+  console.log(`[MCP_LIST_ARTISTS] Listing artists - limit: ${limit}, offset: ${offset}, filters: missingSocials=${missingSocials}, missingLocation=${missingLocation}, missingGenres=${missingGenres}, region=${region}, createdSince=${createdSince}`);
+
+  try {
+    // Build filter expressions for DynamoDB scan
+    const filterExpressions = [];
+    const expressionAttributeNames = {
+      '#name': 'name',
+      '#location': 'location',
+      '#source': 'source'
+    };
+    const expressionAttributeValues = {};
+
+    // Filter: missingSocials - no Facebook, Instagram, or website
+    if (missingSocials) {
+      filterExpressions.push('(attribute_not_exists(facebookUrl) OR facebookUrl = :emptyStr) AND (attribute_not_exists(instagramUrl) OR instagramUrl = :emptyStr) AND (attribute_not_exists(websiteUrl) OR websiteUrl = :emptyStr)');
+      expressionAttributeValues[':emptyStr'] = '';
+    }
+
+    // Filter: missingLocation - no location string
+    if (missingLocation) {
+      filterExpressions.push('(attribute_not_exists(#location) OR #location = :emptyStr2)');
+      expressionAttributeValues[':emptyStr2'] = '';
+    }
+
+    // Filter: missingGenres - empty or no genres array
+    if (missingGenres) {
+      filterExpressions.push('(attribute_not_exists(genres) OR size(genres) = :zero)');
+      expressionAttributeValues[':zero'] = 0;
+    }
+
+    // Filter: region - location contains region string
+    if (region) {
+      filterExpressions.push('contains(#location, :region)');
+      expressionAttributeValues[':region'] = region;
+    }
+
+    // Filter: createdSince - created after specified date
+    if (createdSince) {
+      filterExpressions.push('createdAt >= :createdSince');
+      expressionAttributeValues[':createdSince'] = createdSince;
+    }
+
+    // Build scan params
+    const scanParams = {
+      TableName: 'bndy-artists',
+      ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, youtubeUrl, spotifyUrl, twitterUrl, profileImageUrl, isVerified, claimedByUserId, artist_type, actType, acoustic, #source, ai_created, needs_review, external_ids, createdAt, updated_at',
+      ExpressionAttributeNames: expressionAttributeNames
+    };
+
+    if (filterExpressions.length > 0) {
+      scanParams.FilterExpression = filterExpressions.join(' AND ');
+      scanParams.ExpressionAttributeValues = expressionAttributeValues;
+    }
+
+    // Scan all items (for filtering - DynamoDB requires full scan for complex filters)
+    const allItems = [];
+    let lastEvaluatedKey = null;
+
+    do {
+      if (lastEvaluatedKey) {
+        scanParams.ExclusiveStartKey = lastEvaluatedKey;
+      }
+      const result = await dynamodb.scan(scanParams).promise();
+      allItems.push(...result.Items);
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+
+    // Apply pagination in memory (DynamoDB scan doesn't support offset)
+    const totalCount = allItems.length;
+    const paginatedItems = allItems.slice(offset, offset + limit);
+
+    // Transform to API format
+    const formattedArtists = paginatedItems.map(artist => ({
+      id: artist.id,
+      name: artist.name,
+      artistType: artist.artist_type || null,
+      bio: artist.bio || '',
+      location: artist.location || '',
+      locationLat: artist.locationLat || null,
+      locationLng: artist.locationLng || null,
+      locationType: artist.locationType || null,
+      genres: artist.genres || [],
+      actType: artist.actType || null,
+      acoustic: artist.acoustic || false,
+      facebookUrl: artist.facebookUrl || '',
+      instagramUrl: artist.instagramUrl || '',
+      websiteUrl: artist.websiteUrl || '',
+      youtubeUrl: artist.youtubeUrl || '',
+      spotifyUrl: artist.spotifyUrl || '',
+      twitterUrl: artist.twitterUrl || '',
+      profileImageUrl: artist.profileImageUrl || '',
+      externalIds: artist.external_ids || [],
+      isVerified: artist.isVerified || false,
+      isClaimed: !!artist.claimedByUserId,
+      source: artist.source || null,
+      aiCreated: artist.ai_created || false,
+      needsReview: artist.needs_review || false,
+      createdAt: artist.createdAt || null,
+      updatedAt: artist.updated_at || null
+    }));
+
+    console.log(`[MCP_LIST_ARTISTS] Returning ${formattedArtists.length} of ${totalCount} total artists`);
+
+    return {
+      statusCode: 200,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({
+        artists: formattedArtists,
+        pagination: {
+          count: totalCount,
+          returned: formattedArtists.length,
+          offset: offset,
+          limit: limit,
+          hasMore: offset + limit < totalCount
+        }
+      })
+    };
+  } catch (error) {
+    console.error('[MCP_LIST_ARTISTS] Error:', error);
     return {
       statusCode: 500,
       headers: getCommunityHeaders(),
