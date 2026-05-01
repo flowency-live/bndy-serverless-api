@@ -3000,8 +3000,8 @@ const handleCreateCommunityEvent = async (event) => {
       isPublic: isPublic !== undefined ? isPublic : true,
       isAllDay: false,
 
-      // Geolocation
-      ...geohashFields,
+      // Geolocation - only include if venue has coordinates (sparse GSI)
+      ...(geohashFields.geohash6 && geohashFields),
 
       // External IDs for cross-referencing
       external_ids: body.externalIds || [],
