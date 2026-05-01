@@ -589,7 +589,7 @@ Resources:
   IssuesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-IssuesFunction
+      # FunctionName removed - SAM will manage
       Description: BNDY Issues API - user feedback and bug reports
       CodeUri: ./issues-lambda/
       Handler: handler.handler
@@ -633,7 +633,7 @@ Resources:
   UploadsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-UploadsFunction
+      # FunctionName removed - SAM will manage
       Description: BNDY Uploads API - S3 presigned URLs for file uploads
       CodeUri: ./uploads-lambda/
       Handler: handler.handler
@@ -653,7 +653,7 @@ Resources:
   InvitesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-InvitesFunction
+      # FunctionName removed - SAM will manage
       Description: BNDY Invites API - band member invitations
       CodeUri: ./invites-lambda/
       Handler: handler.handler
@@ -691,7 +691,7 @@ Resources:
   NotificationsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-NotificationsFunction
+      # FunctionName removed - SAM will manage
       Description: BNDY Notifications API - push notifications
       CodeUri: ./notifications-lambda/
       Handler: handler.handler
@@ -717,7 +717,7 @@ Resources:
   SetlistsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-SetlistsFunction
+      # FunctionName removed - SAM will manage
       Description: BNDY Setlists API - band setlists
       CodeUri: ./setlists-lambda/
       Handler: handler.handler
@@ -761,7 +761,7 @@ Resources:
   SpotifyFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-SpotifyFunction
+      # FunctionName removed - SAM will manage
       Description: BNDY Spotify API - Spotify integration
       CodeUri: ./spotify-lambda/
       Handler: handler.handler
@@ -781,7 +781,7 @@ Resources:
   ArtistSongsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-ArtistSongsFunction
+      # FunctionName removed - SAM will manage
       Description: BNDY Artist Songs API - artist song relationships
       CodeUri: ./artist-songs-lambda/
       Handler: handler.handler
@@ -819,7 +819,7 @@ Resources:
   VenueCRMFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-VenueCRMFunction
+      # FunctionName removed - SAM will manage
       Description: BNDY Venue CRM API - venue relationship management
       CodeUri: ./venue-crm-lambda/
       Handler: handler.handler
@@ -845,7 +845,7 @@ Resources:
   EventsAgentFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: bndy-serverless-api-EventsAgentFunction
+      # FunctionName removed - SAM will manage
       Description: BNDY Events Agent API - AI event discovery and ingestion
       CodeUri: ./events-agent-lambda/
       Handler: handler.handler
