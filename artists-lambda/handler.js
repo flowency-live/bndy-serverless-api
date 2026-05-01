@@ -325,6 +325,11 @@ exports.handler = async (event, context) => {
       return await handleGetAllArtists();
     }
 
+    // External ID lookup endpoint
+    if (method === 'GET' && path === '/api/artists/by-external-id') {
+      return await handleGetArtistByExternalId(event);
+    }
+
     // Artist search endpoint (fuzzy matching for duplicate prevention)
     if (method === 'GET' && path === '/api/artists/search') {
       return await handleSearchArtists(event);
@@ -508,6 +513,7 @@ async function handleGetArtistById(artistId) {
       source: result.Item.source || null,
       ai_created: result.Item.ai_created || false,
       needs_review: result.Item.needs_review !== undefined ? result.Item.needs_review : null,
+      external_ids: result.Item.external_ids || [],
       createdAt: result.Item.createdAt,
       updatedAt: result.Item.updatedAt
     };
@@ -520,6 +526,90 @@ async function handleGetArtistById(artistId) {
   } catch (error) {
     console.error(' DynamoDB get failed:', error);
     throw error;
+  }
+}
+
+/**
+ * Get artist by external ID (public endpoint for MCP)
+ * Scans and filters for matching external_ids entry
+ */
+async function handleGetArtistByExternalId(event) {
+  const source = event.queryStringParameters?.source;
+  const externalId = event.queryStringParameters?.id;
+
+  console.log(`[Artists] Looking up artist by external ID: ${source}:${externalId}`);
+
+  if (!source || !externalId) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'source and id query parameters are required' })
+    };
+  }
+
+  try {
+    // Scan and filter for matching externalId
+    const result = await dynamodb.scan({
+      TableName: 'bndy-artists'
+    }).promise();
+
+    // Find artist with matching externalId
+    const matchingArtist = result.Items.find(artist => {
+      const externalIds = artist.external_ids || [];
+      return externalIds.some(ext => ext.source === source && ext.id === externalId);
+    });
+
+    if (!matchingArtist) {
+      return {
+        statusCode: 200,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          found: false,
+          source,
+          externalId,
+          message: `No artist found with external ID ${source}:${externalId}`
+        })
+      };
+    }
+
+    // Transform to match expected API format
+    const artist = {
+      id: matchingArtist.id,
+      name: matchingArtist.name,
+      artistType: matchingArtist.artist_type || null,
+      location: matchingArtist.location || '',
+      bio: matchingArtist.bio || '',
+      genres: matchingArtist.genres || [],
+      profileImageUrl: matchingArtist.profileImageUrl || '',
+      externalIds: matchingArtist.external_ids || [],
+      facebookUrl: matchingArtist.facebookUrl || '',
+      instagramUrl: matchingArtist.instagramUrl || '',
+      websiteUrl: matchingArtist.websiteUrl || '',
+      youtubeUrl: matchingArtist.youtubeUrl || '',
+      spotifyUrl: matchingArtist.spotifyUrl || '',
+      ai_created: matchingArtist.ai_created,
+      needs_review: matchingArtist.needs_review,
+      createdAt: matchingArtist.created_at,
+      updatedAt: matchingArtist.updated_at
+    };
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        found: true,
+        entityType: 'artist',
+        artist,
+        message: `Found artist "${artist.name}" with external ID ${source}:${externalId}`
+      })
+    };
+  } catch (error) {
+    console.error('[Artists] Error looking up by external ID:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
   }
 }
 
@@ -1310,7 +1400,7 @@ async function handleCreateCommunityArtist(event) {
 
   try {
     const body = JSON.parse(event.body);
-    const { name, location, locationType, locationLat, locationLng, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic, profileImageUrl } = body;
+    const { name, location, locationType, locationLat, locationLng, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic, profileImageUrl, externalIds } = body;
 
     // Validation
     if (!name || name.trim().length === 0) {
@@ -1410,6 +1500,9 @@ async function handleCreateCommunityArtist(event) {
       ai_created: body.ai_created || false,
       needs_review: true,    // Requires admin review before considered clean
 
+      // External IDs for cross-referencing (MCP imports)
+      external_ids: externalIds || [],
+
       created_at: now,
       updated_at: now
     };
@@ -1432,7 +1525,8 @@ async function handleCreateCommunityArtist(event) {
           location: newArtist.location,
           locationLat: newArtist.locationLat,
           locationLng: newArtist.locationLng,
-          locationType: newArtist.locationType
+          locationType: newArtist.locationType,
+          externalIds: newArtist.external_ids
         }
       })
     };
@@ -1493,10 +1587,7 @@ async function handleMCPUpdateArtist(event) {
 
     // Build update expression dynamically
     const updateParts = ['updated_at = :updated_at'];
-    const expressionAttributeNames = {
-      '#name': 'name',
-      '#location': 'location'
-    };
+    const expressionAttributeNames = {};
     const expressionAttributeValues = {
       ':updated_at': now
     };
@@ -1504,6 +1595,7 @@ async function handleMCPUpdateArtist(event) {
     // Update only fields that are provided
     if (artistData.name !== undefined) {
       const searchFields = generateNameSearchFields(artistData.name);
+      expressionAttributeNames['#name'] = 'name';
       updateParts.push('#name = :name', 'name_lower = :name_lower', 'name_prefix = :name_prefix');
       expressionAttributeValues[':name'] = artistData.name;
       expressionAttributeValues[':name_lower'] = searchFields.name_lower;
@@ -1514,6 +1606,7 @@ async function handleMCPUpdateArtist(event) {
       expressionAttributeValues[':bio'] = artistData.bio || '';
     }
     if (artistData.location !== undefined) {
+      expressionAttributeNames['#location'] = 'location';
       updateParts.push('#location = :location');
       expressionAttributeValues[':location'] = artistData.location || '';
     }
@@ -1561,15 +1654,23 @@ async function handleMCPUpdateArtist(event) {
       updateParts.push('profileImageUrl = :profileImageUrl');
       expressionAttributeValues[':profileImageUrl'] = artistData.profileImageUrl || '';
     }
+    if (artistData.externalIds !== undefined) {
+      updateParts.push('external_ids = :external_ids');
+      expressionAttributeValues[':external_ids'] = artistData.externalIds || [];
+    }
 
     const params = {
       TableName: 'bndy-artists',
       Key: { id: artistId },
       UpdateExpression: `SET ${updateParts.join(', ')}`,
-      ExpressionAttributeNames: expressionAttributeNames,
       ExpressionAttributeValues: expressionAttributeValues,
       ReturnValues: 'ALL_NEW'
     };
+
+    // Only add ExpressionAttributeNames if we have reserved word mappings
+    if (Object.keys(expressionAttributeNames).length > 0) {
+      params.ExpressionAttributeNames = expressionAttributeNames;
+    }
 
     const result = await dynamodb.update(params).promise();
 
