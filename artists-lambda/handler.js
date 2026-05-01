@@ -1595,6 +1595,18 @@ async function handleMCPUpdateArtist(event) {
       updateParts.push('#location = :location');
       expressionAttributeValues[':location'] = artistData.location || '';
     }
+    if (artistData.locationType !== undefined) {
+      updateParts.push('locationType = :locationType');
+      expressionAttributeValues[':locationType'] = artistData.locationType;
+    }
+    if (artistData.locationLat !== undefined) {
+      updateParts.push('locationLat = :locationLat');
+      expressionAttributeValues[':locationLat'] = artistData.locationLat;
+    }
+    if (artistData.locationLng !== undefined) {
+      updateParts.push('locationLng = :locationLng');
+      expressionAttributeValues[':locationLng'] = artistData.locationLng;
+    }
     if (artistData.genres !== undefined) {
       updateParts.push('genres = :genres');
       expressionAttributeValues[':genres'] = artistData.genres || [];
