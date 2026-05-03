@@ -1003,6 +1003,17 @@ async function handleUpdateArtist(event) {
   if (artistData.facebookUrl !== undefined) {
     updateParts.push('facebookUrl = :facebookUrl');
     expressionAttributeValues[':facebookUrl'] = artistData.facebookUrl || null;
+
+    // Auto-fetch Facebook profile image if facebookUrl is being set and profileImageUrl is not explicitly provided
+    if (artistData.facebookUrl && artistData.profileImageUrl === undefined) {
+      console.log('[UPDATE_ARTIST] Attempting to fetch Facebook profile image...');
+      const fbImage = await fetchFacebookProfilePicture(artistData.facebookUrl);
+      if (fbImage) {
+        console.log('[UPDATE_ARTIST] Facebook image fetched successfully:', fbImage);
+        updateParts.push('profileImageUrl = :profileImageUrl');
+        expressionAttributeValues[':profileImageUrl'] = fbImage;
+      }
+    }
   }
   if (artistData.instagramUrl !== undefined) {
     updateParts.push('instagramUrl = :instagramUrl');
