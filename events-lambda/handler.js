@@ -279,21 +279,21 @@ const getVenue = async (venueId) => {
   return result.Item;
 };
 
-// Helper: Check for duplicate events (same venue + date + artist + time)
-const checkForDuplicateEvent = async (venueId, date, artistIds, startTime) => {
-  // Scan for events at this venue on this date
+// Helper: Check for duplicate events (same venue + date + artist)
+// An artist can only have ONE event at a venue on a given day (time is ignored)
+const checkForDuplicateEvent = async (venueId, date, artistIds) => {
+  // Scan for events at this venue on this date (time ignored - one gig per day per artist)
   const params = {
     TableName: EVENTS_TABLE,
-    FilterExpression: 'venueId = :venueId AND #date = :date AND startTime = :startTime',
+    FilterExpression: 'venueId = :venueId AND #date = :date',
     ExpressionAttributeNames: {
       '#date': 'date'
     },
     ExpressionAttributeValues: {
       ':venueId': venueId,
-      ':date': date,
-      ':startTime': startTime
+      ':date': date
     },
-    ProjectionExpression: 'id, title, artistId, collaboratingArtistIds'
+    ProjectionExpression: 'id, title, artistId, collaboratingArtistIds, startTime'
   };
 
   const result = await dynamodb.scan(params).promise();
@@ -2992,9 +2992,9 @@ const handleCreateCommunityEvent = async (event) => {
       artist = artistResult.Item;
     }
 
-    // Check for duplicate events (same venue + date + artist + time)
+    // Check for duplicate events (same venue + date + artist - one gig per day)
     if (artistIdsList.length > 0) {
-      const duplicateEvent = await checkForDuplicateEvent(venueId, date, artistIdsList, startTime);
+      const duplicateEvent = await checkForDuplicateEvent(venueId, date, artistIdsList);
       if (duplicateEvent) {
         console.log(`DUPLICATE_PREVENTED: Event already exists - ${duplicateEvent.id} (${duplicateEvent.title})`);
         return {
@@ -3002,9 +3002,10 @@ const handleCreateCommunityEvent = async (event) => {
           headers: getCorsHeaders(),
           body: JSON.stringify({
             error: 'Duplicate event detected',
-            message: `An event with this artist at this venue on ${date} at ${startTime} already exists`,
+            message: `An event with this artist at this venue on ${date} already exists (${duplicateEvent.startTime || 'time unknown'})`,
             existingEventId: duplicateEvent.id,
-            existingEventTitle: duplicateEvent.title
+            existingEventTitle: duplicateEvent.title,
+            existingStartTime: duplicateEvent.startTime
           })
         };
       }
