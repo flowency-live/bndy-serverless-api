@@ -305,8 +305,11 @@ const checkForDuplicateByExternalId = async (externalIds) => {
       params.ExclusiveStartKey = lastEvaluatedKey;
     }
     const result = await dynamodb.scan(params).promise();
-    allItems.push(...(result.Items || []));
-    lastEvaluatedKey = result.LastEvaluatedKey;
+    // Handle undefined result from mocks or empty scans
+    if (result && result.Items) {
+      allItems.push(...result.Items);
+    }
+    lastEvaluatedKey = result?.LastEvaluatedKey;
   } while (lastEvaluatedKey);
 
   // Check for matching externalIds
@@ -347,7 +350,8 @@ const checkForDuplicateEvent = async (venueId, date, artistIds) => {
 
   const result = await dynamodb.scan(params).promise();
 
-  if (!result.Items || result.Items.length === 0) {
+  // Handle undefined result from mocks or empty scans
+  if (!result || !result.Items || result.Items.length === 0) {
     return null; // No duplicates
   }
 
