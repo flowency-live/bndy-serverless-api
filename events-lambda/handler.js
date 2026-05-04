@@ -279,6 +279,46 @@ const getVenue = async (venueId) => {
   return result.Item;
 };
 
+// Helper: Check for duplicate events (same venue + date + artist + time)
+const checkForDuplicateEvent = async (venueId, date, artistIds, startTime) => {
+  // Scan for events at this venue on this date
+  const params = {
+    TableName: EVENTS_TABLE,
+    FilterExpression: 'venueId = :venueId AND #date = :date AND startTime = :startTime',
+    ExpressionAttributeNames: {
+      '#date': 'date'
+    },
+    ExpressionAttributeValues: {
+      ':venueId': venueId,
+      ':date': date,
+      ':startTime': startTime
+    },
+    ProjectionExpression: 'id, title, artistId, collaboratingArtistIds'
+  };
+
+  const result = await dynamodb.scan(params).promise();
+
+  if (!result.Items || result.Items.length === 0) {
+    return null; // No duplicates
+  }
+
+  // Check if any existing event has overlapping artists
+  for (const existingEvent of result.Items) {
+    const existingArtistIds = [
+      existingEvent.artistId,
+      ...(existingEvent.collaboratingArtistIds || [])
+    ].filter(Boolean);
+
+    // Check for any overlapping artist
+    const overlap = artistIds.some(id => existingArtistIds.includes(id));
+    if (overlap) {
+      return existingEvent; // Found duplicate
+    }
+  }
+
+  return null; // No duplicates with matching artists
+};
+
 // Helper: Compute geohash fields from venue location
 const computeGeohashFields = (venue) => {
   if (!venue || !venue.latitude || !venue.longitude) {
@@ -2950,6 +2990,24 @@ const handleCreateCommunityEvent = async (event) => {
       }
 
       artist = artistResult.Item;
+    }
+
+    // Check for duplicate events (same venue + date + artist + time)
+    if (artistIdsList.length > 0) {
+      const duplicateEvent = await checkForDuplicateEvent(venueId, date, artistIdsList, startTime);
+      if (duplicateEvent) {
+        console.log(`DUPLICATE_PREVENTED: Event already exists - ${duplicateEvent.id} (${duplicateEvent.title})`);
+        return {
+          statusCode: 409,
+          headers: getCorsHeaders(),
+          body: JSON.stringify({
+            error: 'Duplicate event detected',
+            message: `An event with this artist at this venue on ${date} at ${startTime} already exists`,
+            existingEventId: duplicateEvent.id,
+            existingEventTitle: duplicateEvent.title
+          })
+        };
+      }
     }
 
     // Compute geohash fields from venue location
