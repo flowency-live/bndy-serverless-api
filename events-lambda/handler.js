@@ -279,6 +279,55 @@ const getVenue = async (venueId) => {
   return result.Item;
 };
 
+// Helper: Check for duplicate events by externalId
+// If any externalId (source+id) already exists, block creation
+const checkForDuplicateByExternalId = async (externalIds) => {
+  if (!externalIds || externalIds.length === 0) {
+    return null;
+  }
+
+  // Scan for events with matching externalIds
+  // Note: DynamoDB can't filter on array contains efficiently, so we scan and check in memory
+  const params = {
+    TableName: EVENTS_TABLE,
+    FilterExpression: 'attribute_exists(external_ids)',
+    ProjectionExpression: 'id, title, external_ids, #date, startTime, venueId',
+    ExpressionAttributeNames: {
+      '#date': 'date'
+    }
+  };
+
+  const allItems = [];
+  let lastEvaluatedKey = null;
+
+  do {
+    if (lastEvaluatedKey) {
+      params.ExclusiveStartKey = lastEvaluatedKey;
+    }
+    const result = await dynamodb.scan(params).promise();
+    allItems.push(...(result.Items || []));
+    lastEvaluatedKey = result.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  // Check for matching externalIds
+  for (const existingEvent of allItems) {
+    const existingExternalIds = existingEvent.external_ids || [];
+    for (const newExtId of externalIds) {
+      const match = existingExternalIds.find(
+        e => e.source === newExtId.source && e.id === newExtId.id
+      );
+      if (match) {
+        return {
+          ...existingEvent,
+          matchedExternalId: match
+        };
+      }
+    }
+  }
+
+  return null;
+};
+
 // Helper: Check for duplicate events (same venue + date + artist)
 // An artist can only have ONE event at a venue on a given day (time is ignored)
 const checkForDuplicateEvent = async (venueId, date, artistIds) => {
@@ -2990,6 +3039,27 @@ const handleCreateCommunityEvent = async (event) => {
       }
 
       artist = artistResult.Item;
+    }
+
+    // Check for duplicate by externalId FIRST (most reliable dedup)
+    if (body.externalIds && body.externalIds.length > 0) {
+      const duplicateByExtId = await checkForDuplicateByExternalId(body.externalIds);
+      if (duplicateByExtId) {
+        console.log(`DUPLICATE_PREVENTED (externalId): Event already exists - ${duplicateByExtId.id} (${duplicateByExtId.title})`);
+        return {
+          statusCode: 409,
+          headers: getCorsHeaders(),
+          body: JSON.stringify({
+            error: 'Duplicate event detected (externalId match)',
+            message: `An event with externalId ${duplicateByExtId.matchedExternalId.source}:${duplicateByExtId.matchedExternalId.id} already exists`,
+            existingEventId: duplicateByExtId.id,
+            existingEventTitle: duplicateByExtId.title,
+            existingDate: duplicateByExtId.date,
+            existingStartTime: duplicateByExtId.startTime,
+            matchedExternalId: duplicateByExtId.matchedExternalId
+          })
+        };
+      }
     }
 
     // Check for duplicate events (same venue + date + artist - one gig per day)
