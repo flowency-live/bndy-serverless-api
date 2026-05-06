@@ -49,6 +49,7 @@ Resources:
           - https://live.bndy.co.uk
           - https://www.bndy.co.uk
           - https://bndy.co.uk
+          - https://klmasot.bndy.co.uk
           - https://d3cewujswmjafa.cloudfront.net
           - http://localhost:3000
           - http://localhost:3001
@@ -145,18 +146,24 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/list
             Method: GET
+        CheckArtistName:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/check-name
+            Method: GET
+        RefreshFacebookImage:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}/refresh-facebook-image
+            Method: POST
         # Artist nested routes
         GetArtistEvents:
           Type: HttpApi
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{artistId}/events
-            Method: GET
-        GetArtistInvites:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /api/artists/{artistId}/invites
             Method: GET
 
   # Events Lambda
@@ -223,6 +230,30 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/events/{id}
+            Method: DELETE
+        CreateArtistEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/events
+            Method: POST
+        GetArtistEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/events/{id}
+            Method: GET
+        UpdateArtistEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/events/{id}
+            Method: PUT
+        DeleteArtistEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/events/{id}
             Method: DELETE
         LeaveEvent:
           Type: HttpApi
@@ -432,6 +463,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues/by-external-id
             Method: GET
+        IntegrationVenues:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/integration/venues
+            Method: POST
 
   # Auth Lambda
   AuthFunction:
@@ -803,14 +840,45 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref BndyHttpApi
-            Path: /api/invites/{id}/accept
+            Path: /api/invites/{token}/accept
             Method: POST
         DeclineInvite:
           Type: HttpApi
           Properties:
             ApiId: !Ref BndyHttpApi
-            Path: /api/invites/{id}/decline
+            Path: /api/invites/{token}/decline
             Method: POST
+        # Artist-scoped invite routes
+        GetArtistInvites:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/invites
+            Method: GET
+        CreateGeneralInvite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/invites/general
+            Method: POST
+        CreatePhoneInvite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/invites/phone
+            Method: POST
+        DeleteInvite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/invites/{token}
+            Method: DELETE
+        GetInviteByToken:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/invites/{token}
+            Method: GET
 
   # Notifications Lambda
   NotificationsFunction:
@@ -931,6 +999,8 @@ Resources:
       Environment:
         Variables:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          SPOTIFY_CLIENT_ID: '{{resolve:secretsmanager:bndy/spotify:SecretString:client_id}}'
+          SPOTIFY_CLIENT_SECRET: '{{resolve:secretsmanager:bndy/spotify:SecretString:client_secret}}'
       Events:
         SpotifySearch:
           Type: HttpApi
