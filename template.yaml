@@ -576,6 +576,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /auth/check-identity
             Method: POST
+        MagicLinkVerify:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/magic/{token}
+            Method: GET
 
   # Users Lambda
   UsersFunction:
@@ -906,6 +912,30 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/notifications
+            Method: POST
+        MarkNotificationRead:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/notifications/{id}/read
+            Method: PUT
+        DismissNotification:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/notifications/{id}/dismiss
+            Method: PUT
+        DeleteNotification:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/notifications/{id}
+            Method: DELETE
+        MarkAllNotificationsRead:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/notifications/mark-all-read
             Method: POST
 
   # Setlists Lambda
@@ -1281,6 +1311,36 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/ingest/extract-venues
+            Method: POST
+        ApproveIngestItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/ingest/queue/{id}/approve
+            Method: POST
+        RejectIngestItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/ingest/queue/{id}/reject
+            Method: POST
+        EnrichVenueFacebook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/ingest/enrich-venue-facebook
+            Method: POST
+        UpdateVenuePlaceId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/ingest/update-venue-placeid
+            Method: POST
+        LoadPoc:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/ingest/load-poc
             Method: POST
 
 # =============================================================================
