@@ -512,14 +512,20 @@ const generateOccurrences = (event, rangeStart, rangeEnd) => {
   let current = new Date(start);
   let count = 0;
 
+  // Dates to exclude (deleted single occurrences)
+  const excludeDates = new Set(event.excludeDates || []);
+
   while (current <= end) {
-    if (current >= new Date(rangeStart)) {
+    const currentDateStr = current.toISOString().split('T')[0];
+
+    // Skip excluded dates (deleted single occurrences)
+    if (current >= new Date(rangeStart) && !excludeDates.has(currentDateStr)) {
       occurrences.push({
         ...event,
         parentEventId: event.id,
-        instanceDate: current.toISOString().split('T')[0],
+        instanceDate: currentDateStr,
         isRecurringInstance: true,
-        date: current.toISOString().split('T')[0]
+        date: currentDateStr
       });
     }
 
@@ -591,7 +597,7 @@ const handleGetCalendar = async (event, user) => {
   }).promise();
   const currentArtistDisplayColour = currentArtistResult.Item?.displayColour || null;
 
-  // Query 1: Artist events
+  // Query 1a: Artist events within date range
   const artistEventsResult = await dynamodb.query({
     TableName: EVENTS_TABLE,
     IndexName: 'artistId-date-index',
@@ -603,6 +609,33 @@ const handleGetCalendar = async (event, user) => {
       ':end': paddedEnd
     }
   }).promise();
+
+  // Query 1b: Recurring events that started BEFORE the range but may have occurrences within it
+  // These events have date < startDate but their recurring pattern extends into the requested range
+  const recurringEventsResult = await dynamodb.query({
+    TableName: EVENTS_TABLE,
+    IndexName: 'artistId-date-index',
+    KeyConditionExpression: 'artistId = :artistId AND #date < :start',
+    FilterExpression: 'attribute_exists(recurring)',
+    ExpressionAttributeNames: { '#date': 'date' },
+    ExpressionAttributeValues: {
+      ':artistId': artistId,
+      ':start': paddedStart
+    }
+  }).promise();
+
+  // Merge artist events with recurring events, avoiding duplicates
+  const artistEventIds = new Set((artistEventsResult.Items || []).map(e => e.id));
+  const allArtistEvents = [
+    ...(artistEventsResult.Items || []),
+    ...(recurringEventsResult.Items || []).filter(e => !artistEventIds.has(e.id))
+  ];
+
+  console.log('CALENDAR: Fetched events', {
+    inRange: artistEventsResult.Items?.length || 0,
+    recurringFromBefore: recurringEventsResult.Items?.length || 0,
+    totalArtistEvents: allArtistEvents.length
+  });
 
   // Query 2: Get all band members to show their unavailability
   const membershipsResult = await dynamodb.query({
@@ -854,7 +887,7 @@ const handleGetCalendar = async (event, user) => {
   });
 
   // Expand recurring events BEFORE filtering
-  const expandedArtistEvents = expandRecurring(artistEventsResult.Items || []);
+  const expandedArtistEvents = expandRecurring(allArtistEvents);
   const expandedUserEvents = expandRecurring(userEventsResult || []);
   const expandedOtherArtistEvents = expandRecurring(otherArtistEvents);
 
@@ -1782,6 +1815,7 @@ const handleLeaveEvent = async (event) => {
 // DELETE /api/artists/:artistId/events/:id - Delete event
 const handleDeleteEvent = async (event, user) => {
   const { artistId, id } = event.pathParameters;
+  const { deleteAll, instanceDate } = event.queryStringParameters || {};
 
   // Check access - platform admin OR member
   if (!user.platformAdmin) {
@@ -1838,12 +1872,62 @@ const handleDeleteEvent = async (event, user) => {
     }
   }
 
+  // Handle recurring event single occurrence deletion
+  // If event has recurring AND deleteAll is not true AND instanceDate is provided,
+  // add the date to excludeDates instead of deleting the whole event
+  const isRecurring = existingEvent.recurring && existingEvent.recurring.type && existingEvent.recurring.type !== 'none';
+  const shouldDeleteSingleOccurrence = isRecurring && deleteAll !== 'true' && instanceDate;
+
+  if (shouldDeleteSingleOccurrence) {
+    // Add instanceDate to excludeDates array
+    const currentExcludeDates = existingEvent.excludeDates || [];
+    if (!currentExcludeDates.includes(instanceDate)) {
+      const updatedExcludeDates = [...currentExcludeDates, instanceDate];
+
+      await dynamodb.update({
+        TableName: EVENTS_TABLE,
+        Key: { id },
+        UpdateExpression: 'SET excludeDates = :excludeDates, updatedAt = :updatedAt',
+        ExpressionAttributeValues: {
+          ':excludeDates': updatedExcludeDates,
+          ':updatedAt': new Date().toISOString()
+        }
+      }).promise();
+
+      console.log('EVENT: Excluded single occurrence from recurring event', {
+        eventId: id,
+        excludedDate: instanceDate,
+        totalExcluded: updatedExcludeDates.length
+      });
+
+      return {
+        statusCode: 200,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          message: 'Occurrence excluded',
+          excludedDate: instanceDate
+        })
+      };
+    }
+
+    // Date was already excluded
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        message: 'Occurrence was already excluded',
+        excludedDate: instanceDate
+      })
+    };
+  }
+
+  // Delete the entire event
   await dynamodb.delete({
     TableName: EVENTS_TABLE,
     Key: { id }
   }).promise();
 
-  console.log('EVENT: Deleted event', { eventId: id });
+  console.log('EVENT: Deleted event', { eventId: id, deleteAll: deleteAll === 'true' });
 
   // Create cancellation record for calendar sync (RFC 5545 METHOD:CANCEL)
   // This allows calendar apps to properly remove the event on next sync
