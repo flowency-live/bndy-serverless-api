@@ -502,6 +502,14 @@ const ensureVenueRelationship = async (artistId, venueId, gigDate) => {
   }
 };
 
+// Helper: Strip private fee fields from events for public endpoints
+const PRIVATE_FEE_FIELDS = ['agreedFee', 'actualFee', 'datePaid', 'paymentMethod', 'splitBetweenMembers'];
+const stripPrivateFields = (event) => {
+  const sanitized = { ...event };
+  PRIVATE_FEE_FIELDS.forEach(field => delete sanitized[field]);
+  return sanitized;
+};
+
 // Generate occurrences from recurring event rules
 const generateOccurrences = (event, rangeStart, rangeEnd) => {
   if (!event.recurring) return [event];
@@ -1151,6 +1159,13 @@ const handleCreateArtistEvent = async (event, user) => {
   if (eventData.notes) newEvent.notes = eventData.notes;
   if (eventData.recurring) newEvent.recurring = eventData.recurring;
 
+  // Fee tracking fields (private - artist backstage only)
+  if (eventData.agreedFee !== undefined) newEvent.agreedFee = eventData.agreedFee;
+  if (eventData.actualFee !== undefined) newEvent.actualFee = eventData.actualFee;
+  if (eventData.datePaid) newEvent.datePaid = eventData.datePaid;
+  if (eventData.paymentMethod) newEvent.paymentMethod = eventData.paymentMethod;
+  if (eventData.splitBetweenMembers !== undefined) newEvent.splitBetweenMembers = eventData.splitBetweenMembers;
+
   // Sparse GSI keys - only include if present (NOT null)
   if (eventData.venueId) {
     newEvent.venueId = eventData.venueId;
@@ -1367,7 +1382,7 @@ const handleUpdateEvent = async (event, user) => {
   const attributeNames = {};
   const attributeValues = {};
 
-  const allowedFields = ['type', 'title', 'date', 'endDate', 'startTime', 'endTime', 'venueId', 'location', 'notes', 'isPublic', 'isAllDay'];
+  const allowedFields = ['type', 'title', 'date', 'endDate', 'startTime', 'endTime', 'venueId', 'location', 'notes', 'isPublic', 'isAllDay', 'agreedFee', 'actualFee', 'datePaid', 'paymentMethod', 'splitBetweenMembers'];
 
   allowedFields.forEach(field => {
     if (updates[field] !== undefined) {
@@ -2211,6 +2226,13 @@ const handleCreatePublicGig = async (event, user) => {
   if (gigData.ticketPrice) newEvent.ticketPrice = gigData.ticketPrice;
   if (gigData.doorsTime) newEvent.doorsTime = gigData.doorsTime;
 
+  // Fee tracking fields (private - artist backstage only)
+  if (gigData.agreedFee !== undefined) newEvent.agreedFee = gigData.agreedFee;
+  if (gigData.actualFee !== undefined) newEvent.actualFee = gigData.actualFee;
+  if (gigData.datePaid) newEvent.datePaid = gigData.datePaid;
+  if (gigData.paymentMethod) newEvent.paymentMethod = gigData.paymentMethod;
+  if (gigData.splitBetweenMembers !== undefined) newEvent.splitBetweenMembers = gigData.splitBetweenMembers;
+
   // Check for duplicates (same artist, venue, date - regardless of public/private)
   const duplicateCheck = await dynamodb.query({
     TableName: EVENTS_TABLE,
@@ -2570,23 +2592,25 @@ const handleGetAllPublicEvents = async (event) => {
     });
 
     // Join events with artist and venue data, including multi-artist arrays
+    // Strip private fee fields for public endpoint
     const enrichedEvents = allEvents.map(e => {
+      const sanitizedEvent = stripPrivateFields(e);
       // Build full artistIds array (primary + collaborating)
-      const eventArtistIds = e.artistId ? [e.artistId] : [];
-      if (e.collaboratingArtistIds && Array.isArray(e.collaboratingArtistIds)) {
-        eventArtistIds.push(...e.collaboratingArtistIds);
+      const eventArtistIds = sanitizedEvent.artistId ? [sanitizedEvent.artistId] : [];
+      if (sanitizedEvent.collaboratingArtistIds && Array.isArray(sanitizedEvent.collaboratingArtistIds)) {
+        eventArtistIds.push(...sanitizedEvent.collaboratingArtistIds);
       }
       // Build artistNames array from artistIds
       const eventArtistNames = eventArtistIds.map(id => artistMap[id]?.name).filter(Boolean);
 
       return {
-        ...e,
-        artistName: artistMap[e.artistId]?.name,
+        ...sanitizedEvent,
+        artistName: artistMap[sanitizedEvent.artistId]?.name,
         artistIds: eventArtistIds.length > 0 ? eventArtistIds : undefined,
         artistNames: eventArtistNames.length > 0 ? eventArtistNames : undefined,
-        venueName: venueMap[e.venueId]?.name,
-        venue: venueMap[e.venueId] ? {
-          city: venueMap[e.venueId].city
+        venueName: venueMap[sanitizedEvent.venueId]?.name,
+        venue: venueMap[sanitizedEvent.venueId] ? {
+          city: venueMap[sanitizedEvent.venueId].city
         } : null
       };
     });
@@ -2698,11 +2722,13 @@ const handleGetArtistPublicEvents = async (event) => {
     });
 
     // Join events with venue data
+    // Strip private fee fields for public endpoint
     const enrichedEvents = events.map(e => {
-      const venue = venueMap[e.venueId];
+      const sanitizedEvent = stripPrivateFields(e);
+      const venue = venueMap[sanitizedEvent.venueId];
       return {
-        ...e,
-        venueName: venue?.name || e.venueName || 'Unknown Venue',
+        ...sanitizedEvent,
+        venueName: venue?.name || sanitizedEvent.venueName || 'Unknown Venue',
         venueCity: venue?.city || null
       };
     });

@@ -1,0 +1,17 @@
+{
+  "name": "bndy-expenses-lambda",
+  "version": "1.0.0",
+  "description": "BNDY Expenses/Finances Lambda Function",
+  "main": "handler.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1450.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "jest": "^30.3.0"
+  }
+}

@@ -1343,6 +1343,57 @@ Resources:
             Path: /api/ingest/load-poc
             Method: POST
 
+  # =============================================================================
+  # Lambda Functions - Finances
+  # =============================================================================
+
+  # Expenses Lambda
+  ExpensesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: BNDY Expenses API - handles /api/artists/{artistId}/expenses and finances endpoints
+      CodeUri: ./expenses-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+      Events:
+        # Expenses CRUD
+        CreateExpense:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/expenses
+            Method: POST
+        GetExpenses:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/expenses
+            Method: GET
+        UpdateExpense:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/expenses/{id}
+            Method: PUT
+        DeleteExpense:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/expenses/{id}
+            Method: DELETE
+        # Finances Summary
+        GetFinances:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/finances
+            Method: GET
+
 # =============================================================================
 # Outputs
 # =============================================================================
@@ -1376,3 +1427,9 @@ Outputs:
     Value: !GetAtt VenuesFunction.Arn
     Export:
       Name: !Sub "${AWS::StackName}-VenuesFunctionArn"
+
+  ExpensesFunctionArn:
+    Description: Expenses Lambda Function ARN
+    Value: !GetAtt ExpensesFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ExpensesFunctionArn"
