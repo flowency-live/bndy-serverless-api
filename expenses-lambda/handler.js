@@ -14,6 +14,7 @@ const INCOME_TABLE = 'bndy-income';
 const EVENTS_TABLE = 'bndy-events';
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
 const ARTISTS_TABLE = 'bndy-artists';
+const VENUES_TABLE = 'bndy-venues';
 
 // Valid income categories
 const INCOME_CATEGORIES = [
@@ -751,6 +752,24 @@ const handleGetFinances = async (event, user) => {
 
   const gigsWithFees = eventsResult.Items || [];
 
+  // Fetch venue names for gigs
+  const venueIds = [...new Set(gigsWithFees.map(g => g.venueId).filter(Boolean))];
+  let venueMap = {};
+  if (venueIds.length > 0) {
+    try {
+      const venueResults = await Promise.all(
+        venueIds.map(id => dynamodb.get({ TableName: VENUES_TABLE, Key: { id } }).promise())
+      );
+      venueResults.forEach(r => {
+        if (r.Item) {
+          venueMap[r.Item.id] = r.Item.name;
+        }
+      });
+    } catch (err) {
+      console.log('FINANCES: Venue lookup failed:', err.message);
+    }
+  }
+
   // Fetch standalone income for date range
   let standaloneIncome = [];
   try {
@@ -821,6 +840,7 @@ const handleGetFinances = async (event, user) => {
     date: gig.date,
     title: gig.title,
     venueId: gig.venueId,
+    venueName: venueMap[gig.venueId] || null,
     agreedFee: gig.agreedFee,
     actualFee: gig.actualFee,
     datePaid: gig.datePaid,
