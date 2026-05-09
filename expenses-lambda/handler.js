@@ -29,8 +29,24 @@ const EXPENSE_CATEGORIES = [
 // Valid payment methods (for gig fees)
 const PAYMENT_METHODS = ['cash', 'bank_transfer', 'gig_realm', 'events_uk', 'other'];
 
+// Users table for platformAdmin lookup
+const USERS_TABLE = 'bndy-users';
+
 // JWT Secret - cached after first retrieval
 let JWT_SECRET = null;
+
+// Module-level variable to store current request event for CORS
+let currentEvent = null;
+
+// Allowed CORS origins for frontend access
+const ALLOWED_ORIGINS = [
+  'https://www.bndy.co.uk',
+  'https://backstage.bndy.co.uk',
+  'https://bndy.co.uk',
+  'https://live.bndy.co.uk',
+  'http://localhost:3000',
+  'http://localhost:3001'
+];
 
 /**
  * Get JWT secret from SSM Parameter Store with fallback to env var
@@ -42,10 +58,11 @@ async function getJWTSecret() {
 
   try {
     const result = await ssm.getParameter({
-      Name: '/bndy/jwt-secret',
+      Name: '/bndy/auth/jwt-secret',
       WithDecryption: true
     }).promise();
     JWT_SECRET = result.Parameter.Value;
+    console.log('[EXPENSES] JWT_SECRET loaded from SSM');
     return JWT_SECRET;
   } catch (error) {
     console.log('SSM fetch failed, using env var:', error.message);
@@ -54,38 +71,78 @@ async function getJWTSecret() {
   }
 }
 
+// Get appropriate origin for CORS based on request origin
+const getAllowedOrigin = () => {
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
+
 /**
  * CORS headers for all responses
  */
 const getCorsHeaders = () => ({
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+  'Access-Control-Allow-Origin': getAllowedOrigin(),
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Credentials': 'true',
   'Content-Type': 'application/json'
 });
 
 /**
- * Authenticate user from JWT token
+ * Parse cookies from event
+ */
+const parseCookies = (cookieHeader) => {
+  if (!cookieHeader) return {};
+  return cookieHeader.split(';').reduce((cookies, cookie) => {
+    const [name, value] = cookie.trim().split('=');
+    cookies[name] = value;
+    return cookies;
+  }, {});
+};
+
+/**
+ * Authenticate user from session cookie (cookie-based auth like events-lambda)
  */
 async function authenticateUser(event) {
-  const authHeader = event.headers?.authorization || event.headers?.Authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  let sessionToken = null;
+
+  // Try event.cookies array first (HTTP API format)
+  if (event.cookies && Array.isArray(event.cookies)) {
+    const cookieString = event.cookies.find(c => c.startsWith('bndy_session='));
+    if (cookieString) {
+      sessionToken = cookieString.split('=')[1];
+    }
+  } else {
+    // Fallback to parsing Cookie header
+    const cookies = parseCookies(event.headers?.Cookie || event.headers?.cookie || '');
+    sessionToken = cookies.bndy_session;
+  }
+
+  if (!sessionToken) {
+    console.log('[EXPENSES] No session token found in cookies');
     return null;
   }
 
-  const token = authHeader.substring(7);
   const secret = await getJWTSecret();
 
   try {
-    const decoded = jwt.verify(token, secret);
+    const decoded = jwt.verify(sessionToken, secret);
+
+    // Fetch user to check platformAdmin flag
+    const userResult = await dynamodb.get({
+      TableName: USERS_TABLE,
+      Key: { cognito_id: decoded.userId }
+    }).promise();
+
+    const platformAdmin = userResult.Item?.platformAdmin || false;
+
     return {
       userId: decoded.userId || decoded.sub,
       email: decoded.email,
-      platformAdmin: decoded.platformAdmin || false
+      platformAdmin
     };
   } catch (error) {
-    console.log('JWT verification failed:', error.message);
+    console.log('[EXPENSES] JWT verification failed:', error.message);
     return null;
   }
 }
@@ -549,6 +606,9 @@ const handleGetFinances = async (event, user) => {
 // =============================================================================
 
 exports.handler = async (event) => {
+  // Set current event for CORS origin handling
+  currentEvent = event;
+
   console.log('EXPENSES: Request received', {
     path: event.rawPath || event.path,
     method: event.requestContext?.http?.method || event.httpMethod,
