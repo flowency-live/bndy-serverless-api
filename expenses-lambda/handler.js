@@ -777,6 +777,7 @@ const handleGetFinances = async (event, user) => {
   let totalUnpaidIncome = 0;
   let totalExpenses = 0;
   let totalStandaloneIncome = 0;
+  let totalGigIncome = 0; // Track gig revenue separately (even if distributed)
 
   // Income from gigs
   gigsWithFees.forEach(gig => {
@@ -785,6 +786,7 @@ const handleGetFinances = async (event, user) => {
       if (gig.datePaid && gig.actualFee !== undefined) {
         totalIncome += gig.actualFee;
         totalPaidIncome += gig.actualFee;
+        totalGigIncome += gig.actualFee; // Track gig revenue
       }
       // noFee gigs with no payment yet don't contribute to unpaid income
     } else {
@@ -792,6 +794,7 @@ const handleGetFinances = async (event, user) => {
       totalIncome += fee;
       if (gig.datePaid) {
         totalPaidIncome += fee;
+        totalGigIncome += fee; // Track gig revenue
       } else {
         totalUnpaidIncome += fee;
       }
@@ -830,6 +833,7 @@ const handleGetFinances = async (event, user) => {
   console.log('FINANCES: Summary generated', {
     artistId,
     income: totalIncome,
+    gigIncome: totalGigIncome,
     expenses: totalExpenses,
     balance,
     gigCount: gigsWithFees.length,
@@ -846,6 +850,7 @@ const handleGetFinances = async (event, user) => {
         totalPaidIncome,
         totalUnpaidIncome,
         totalStandaloneIncome,
+        totalGigIncome, // Gig revenue (even if distributed to members)
         totalExpenses,
         balance
       },
