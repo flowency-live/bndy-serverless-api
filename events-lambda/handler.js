@@ -503,7 +503,7 @@ const ensureVenueRelationship = async (artistId, venueId, gigDate) => {
 };
 
 // Helper: Strip private fee fields from events for public endpoints
-const PRIVATE_FEE_FIELDS = ['agreedFee', 'actualFee', 'datePaid', 'paymentMethod', 'splitBetweenMembers'];
+const PRIVATE_FEE_FIELDS = ['agreedFee', 'actualFee', 'datePaid', 'paymentMethod', 'splitBetweenMembers', 'noFee'];
 const stripPrivateFields = (event) => {
   const sanitized = { ...event };
   PRIVATE_FEE_FIELDS.forEach(field => delete sanitized[field]);
@@ -1165,6 +1165,7 @@ const handleCreateArtistEvent = async (event, user) => {
   if (eventData.datePaid) newEvent.datePaid = eventData.datePaid;
   if (eventData.paymentMethod) newEvent.paymentMethod = eventData.paymentMethod;
   if (eventData.splitBetweenMembers !== undefined) newEvent.splitBetweenMembers = eventData.splitBetweenMembers;
+  if (eventData.noFee !== undefined) newEvent.noFee = eventData.noFee;
 
   // Sparse GSI keys - only include if present (NOT null)
   if (eventData.venueId) {
@@ -1382,7 +1383,7 @@ const handleUpdateEvent = async (event, user) => {
   const attributeNames = {};
   const attributeValues = {};
 
-  const allowedFields = ['type', 'title', 'date', 'endDate', 'startTime', 'endTime', 'venueId', 'location', 'notes', 'isPublic', 'isAllDay', 'agreedFee', 'actualFee', 'datePaid', 'paymentMethod', 'splitBetweenMembers'];
+  const allowedFields = ['type', 'title', 'date', 'endDate', 'startTime', 'endTime', 'venueId', 'location', 'notes', 'isPublic', 'isAllDay', 'agreedFee', 'actualFee', 'datePaid', 'paymentMethod', 'splitBetweenMembers', 'noFee'];
 
   allowedFields.forEach(field => {
     if (updates[field] !== undefined) {
@@ -2232,6 +2233,7 @@ const handleCreatePublicGig = async (event, user) => {
   if (gigData.datePaid) newEvent.datePaid = gigData.datePaid;
   if (gigData.paymentMethod) newEvent.paymentMethod = gigData.paymentMethod;
   if (gigData.splitBetweenMembers !== undefined) newEvent.splitBetweenMembers = gigData.splitBetweenMembers;
+  if (gigData.noFee !== undefined) newEvent.noFee = gigData.noFee;
 
   // Check for duplicates (same artist, venue, date - regardless of public/private)
   const duplicateCheck = await dynamodb.query({

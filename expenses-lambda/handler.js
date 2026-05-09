@@ -10,9 +10,19 @@ const ssm = new AWS.SSM({ region: 'eu-west-2' });
 
 // Configuration
 const EXPENSES_TABLE = 'bndy-expenses';
+const INCOME_TABLE = 'bndy-income';
 const EVENTS_TABLE = 'bndy-events';
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
 const ARTISTS_TABLE = 'bndy-artists';
+
+// Valid income categories
+const INCOME_CATEGORIES = [
+  'gig_payment',        // Linked to event (use Mark as Paid for this)
+  'member_contribution', // Member adds to shared pot
+  'tips',               // Tips/donations
+  'merch',              // Merchandise sales
+  'other'               // Other income
+];
 
 // Valid expense categories
 const EXPENSE_CATEGORIES = [
@@ -477,6 +487,210 @@ const handleDeleteExpense = async (event, user) => {
 };
 
 // =============================================================================
+// Income Handlers
+// =============================================================================
+
+/**
+ * POST /api/artists/{artistId}/income - Create income entry
+ */
+const handleCreateIncome = async (event, user) => {
+  const { artistId } = event.pathParameters;
+  const incomeData = JSON.parse(event.body);
+
+  // Verify membership
+  if (!user.platformAdmin) {
+    const membership = await verifyMembership(user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  }
+
+  // Validate required fields
+  if (!incomeData.date) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'date is required' })
+    };
+  }
+
+  if (incomeData.amount === undefined || incomeData.amount === null) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'amount is required' })
+    };
+  }
+
+  if (!incomeData.category || !INCOME_CATEGORIES.includes(incomeData.category)) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        error: 'Invalid category',
+        validCategories: INCOME_CATEGORIES
+      })
+    };
+  }
+
+  // Require description for non-gig income
+  if (incomeData.category !== 'gig_payment' && !incomeData.description) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'description is required for non-gig income' })
+    };
+  }
+
+  const incomeId = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  const newIncome = {
+    id: incomeId,
+    artistId,
+    date: incomeData.date,
+    amount: parseFloat(incomeData.amount),
+    category: incomeData.category,
+    createdBy: user.userId,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  // Optional fields
+  if (incomeData.description) newIncome.description = incomeData.description;
+  if (incomeData.relatedEventId) newIncome.relatedEventId = incomeData.relatedEventId;
+  if (incomeData.memberId) newIncome.memberId = incomeData.memberId;
+
+  await dynamodb.put({
+    TableName: INCOME_TABLE,
+    Item: newIncome
+  }).promise();
+
+  console.log('INCOME: Created', { incomeId, artistId, category: incomeData.category, amount: newIncome.amount });
+
+  return {
+    statusCode: 201,
+    headers: getCorsHeaders(),
+    body: JSON.stringify(newIncome)
+  };
+};
+
+/**
+ * GET /api/artists/{artistId}/income - List income entries
+ */
+const handleGetIncome = async (event, user) => {
+  const { artistId } = event.pathParameters;
+  const { startDate, endDate } = event.queryStringParameters || {};
+
+  // Verify membership
+  if (!user.platformAdmin) {
+    const membership = await verifyMembership(user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  }
+
+  // Build query with optional date range
+  const queryParams = {
+    TableName: INCOME_TABLE,
+    IndexName: 'artistId-date-index',
+    KeyConditionExpression: 'artistId = :artistId',
+    ExpressionAttributeValues: {
+      ':artistId': artistId
+    },
+    ScanIndexForward: false // Most recent first
+  };
+
+  // Add date range filter if provided
+  if (startDate && endDate) {
+    queryParams.KeyConditionExpression += ' AND #date BETWEEN :start AND :end';
+    queryParams.ExpressionAttributeNames = { '#date': 'date' };
+    queryParams.ExpressionAttributeValues[':start'] = startDate;
+    queryParams.ExpressionAttributeValues[':end'] = endDate;
+  } else if (startDate) {
+    queryParams.KeyConditionExpression += ' AND #date >= :start';
+    queryParams.ExpressionAttributeNames = { '#date': 'date' };
+    queryParams.ExpressionAttributeValues[':start'] = startDate;
+  } else if (endDate) {
+    queryParams.KeyConditionExpression += ' AND #date <= :end';
+    queryParams.ExpressionAttributeNames = { '#date': 'date' };
+    queryParams.ExpressionAttributeValues[':end'] = endDate;
+  }
+
+  const result = await dynamodb.query(queryParams).promise();
+
+  console.log('INCOME: Listed', { artistId, count: result.Items?.length || 0 });
+
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(),
+    body: JSON.stringify({ income: result.Items || [] })
+  };
+};
+
+/**
+ * DELETE /api/artists/{artistId}/income/{id} - Delete income entry
+ */
+const handleDeleteIncome = async (event, user) => {
+  const { artistId, id } = event.pathParameters;
+
+  // Verify membership
+  if (!user.platformAdmin) {
+    const membership = await verifyMembership(user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  }
+
+  // Verify income exists and belongs to this artist
+  const existing = await dynamodb.get({
+    TableName: INCOME_TABLE,
+    Key: { id }
+  }).promise();
+
+  if (!existing.Item) {
+    return {
+      statusCode: 404,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Income entry not found' })
+    };
+  }
+
+  if (existing.Item.artistId !== artistId) {
+    return {
+      statusCode: 403,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Income entry does not belong to this artist' })
+    };
+  }
+
+  await dynamodb.delete({
+    TableName: INCOME_TABLE,
+    Key: { id }
+  }).promise();
+
+  console.log('INCOME: Deleted', { incomeId: id, artistId });
+
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(),
+    body: JSON.stringify({ success: true, message: 'Income entry deleted' })
+  };
+};
+
+// =============================================================================
 // Finances Summary Handler
 // =============================================================================
 
@@ -518,39 +732,77 @@ const handleGetFinances = async (event, user) => {
 
   const expenses = expensesResult.Items || [];
 
-  // Fetch gigs with fees for date range (public_gig and gig types)
+  // Fetch gigs with fees OR noFee flag for date range (public_gig and gig types)
   const eventsResult = await dynamodb.query({
     TableName: EVENTS_TABLE,
     IndexName: 'artistId-date-index',
     KeyConditionExpression: 'artistId = :artistId AND #date BETWEEN :start AND :end',
-    FilterExpression: '(#type = :gig OR #type = :publicGig) AND attribute_exists(agreedFee)',
+    FilterExpression: '(#type = :gig OR #type = :publicGig) AND (attribute_exists(agreedFee) OR noFee = :true)',
     ExpressionAttributeNames: { '#date': 'date', '#type': 'type' },
     ExpressionAttributeValues: {
       ':artistId': artistId,
       ':start': start,
       ':end': end,
       ':gig': 'gig',
-      ':publicGig': 'public_gig'
+      ':publicGig': 'public_gig',
+      ':true': true
     }
   }).promise();
 
   const gigsWithFees = eventsResult.Items || [];
+
+  // Fetch standalone income for date range
+  let standaloneIncome = [];
+  try {
+    const incomeResult = await dynamodb.query({
+      TableName: INCOME_TABLE,
+      IndexName: 'artistId-date-index',
+      KeyConditionExpression: 'artistId = :artistId AND #date BETWEEN :start AND :end',
+      ExpressionAttributeNames: { '#date': 'date' },
+      ExpressionAttributeValues: {
+        ':artistId': artistId,
+        ':start': start,
+        ':end': end
+      }
+    }).promise();
+    standaloneIncome = incomeResult.Items || [];
+  } catch (err) {
+    // Table may not exist yet, continue without standalone income
+    console.log('FINANCES: Income table query failed (may not exist yet):', err.message);
+  }
 
   // Calculate totals
   let totalIncome = 0;
   let totalPaidIncome = 0;
   let totalUnpaidIncome = 0;
   let totalExpenses = 0;
+  let totalStandaloneIncome = 0;
 
   // Income from gigs
   gigsWithFees.forEach(gig => {
-    const fee = gig.actualFee !== undefined ? gig.actualFee : gig.agreedFee;
-    totalIncome += fee;
-    if (gig.datePaid) {
-      totalPaidIncome += fee;
+    // For noFee gigs, only count actualFee if paid
+    if (gig.noFee) {
+      if (gig.datePaid && gig.actualFee !== undefined) {
+        totalIncome += gig.actualFee;
+        totalPaidIncome += gig.actualFee;
+      }
+      // noFee gigs with no payment yet don't contribute to unpaid income
     } else {
-      totalUnpaidIncome += fee;
+      const fee = gig.actualFee !== undefined ? gig.actualFee : gig.agreedFee;
+      totalIncome += fee;
+      if (gig.datePaid) {
+        totalPaidIncome += fee;
+      } else {
+        totalUnpaidIncome += fee;
+      }
     }
+  });
+
+  // Standalone income (already received)
+  standaloneIncome.forEach(inc => {
+    totalStandaloneIncome += inc.amount;
+    totalIncome += inc.amount;
+    totalPaidIncome += inc.amount; // Standalone income is always "received"
   });
 
   // Expenses
@@ -571,6 +823,7 @@ const handleGetFinances = async (event, user) => {
     datePaid: gig.datePaid,
     paymentMethod: gig.paymentMethod,
     splitBetweenMembers: gig.splitBetweenMembers,
+    noFee: gig.noFee || false,
     isPaid: !!gig.datePaid
   }));
 
@@ -580,6 +833,7 @@ const handleGetFinances = async (event, user) => {
     expenses: totalExpenses,
     balance,
     gigCount: gigsWithFees.length,
+    standaloneIncomeCount: standaloneIncome.length,
     expenseCount: expenses.length
   });
 
@@ -591,10 +845,12 @@ const handleGetFinances = async (event, user) => {
         totalIncome,
         totalPaidIncome,
         totalUnpaidIncome,
+        totalStandaloneIncome,
         totalExpenses,
         balance
       },
       income,
+      standaloneIncome,
       expenses,
       dateRange: { startDate: start, endDate: end }
     })
@@ -665,6 +921,21 @@ exports.handler = async (event) => {
     // DELETE /api/artists/{artistId}/expenses/{id}
     if (path.match(/\/api\/artists\/[^/]+\/expenses\/[^/]+$/) && method === 'DELETE') {
       return await handleDeleteExpense(event, user);
+    }
+
+    // POST /api/artists/{artistId}/income
+    if (path.match(/\/api\/artists\/[^/]+\/income$/) && method === 'POST') {
+      return await handleCreateIncome(event, user);
+    }
+
+    // GET /api/artists/{artistId}/income
+    if (path.match(/\/api\/artists\/[^/]+\/income$/) && method === 'GET') {
+      return await handleGetIncome(event, user);
+    }
+
+    // DELETE /api/artists/{artistId}/income/{id}
+    if (path.match(/\/api\/artists\/[^/]+\/income\/[^/]+$/) && method === 'DELETE') {
+      return await handleDeleteIncome(event, user);
     }
 
     // No matching route

@@ -1393,6 +1393,25 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{artistId}/finances
             Method: GET
+        # Income CRUD
+        CreateIncome:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/income
+            Method: POST
+        GetIncome:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/income
+            Method: GET
+        DeleteIncome:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/income/{id}
+            Method: DELETE
 
 # =============================================================================
 # Outputs
