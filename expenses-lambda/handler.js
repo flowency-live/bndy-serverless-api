@@ -794,6 +794,7 @@ const handleGetFinances = async (event, user) => {
   let totalIncome = 0;
   let totalPaidIncome = 0;
   let totalUnpaidIncome = 0;
+  let totalDistributed = 0; // Income that was distributed to members (off balance)
   let totalExpenses = 0;
   let totalStandaloneIncome = 0;
   let totalGigIncome = 0; // Track gig revenue separately (even if distributed)
@@ -806,6 +807,9 @@ const handleGetFinances = async (event, user) => {
         totalIncome += gig.actualFee;
         totalPaidIncome += gig.actualFee;
         totalGigIncome += gig.actualFee; // Track gig revenue
+        if (gig.distributed) {
+          totalDistributed += gig.actualFee;
+        }
       }
       // noFee gigs with no payment yet don't contribute to unpaid income
     } else {
@@ -814,6 +818,9 @@ const handleGetFinances = async (event, user) => {
       if (gig.datePaid) {
         totalPaidIncome += fee;
         totalGigIncome += fee; // Track gig revenue
+        if (gig.distributed) {
+          totalDistributed += fee;
+        }
       } else {
         totalUnpaidIncome += fee;
       }
@@ -832,7 +839,8 @@ const handleGetFinances = async (event, user) => {
     totalExpenses += expense.amount;
   });
 
-  const balance = totalPaidIncome - totalExpenses;
+  // Balance = income in the pot (paid income minus distributed minus expenses)
+  const balance = totalPaidIncome - totalDistributed - totalExpenses;
 
   // Build gigs list for income tab
   const income = gigsWithFees.map(gig => ({
@@ -847,6 +855,7 @@ const handleGetFinances = async (event, user) => {
     paymentMethod: gig.paymentMethod,
     splitBetweenMembers: gig.splitBetweenMembers,
     noFee: gig.noFee || false,
+    distributed: gig.distributed || false,
     isPaid: !!gig.datePaid
   }));
 
