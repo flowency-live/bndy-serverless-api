@@ -326,13 +326,6 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{artistId}/public-gigs
             Method: POST
-        # User unavailability
-        CreateUserUnavailability:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /api/users/me/unavailability
-            Method: POST
         # Batch operations
         BatchEventsWithJoins:
           Type: HttpApi
@@ -340,14 +333,6 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/events/batch
             Method: POST
-        # Integration API
-        IntegrationFindOrCreateEvent:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /api/integration/events
-            Method: POST
-
   # Calendar Lambda (split from Events to reduce Lambda policy size)
   CalendarFunction:
     Type: AWS::Serverless::Function
@@ -400,6 +385,19 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{artistId}/events/{id}/ical
             Method: GET
+        # Moved from EventsFunction to reduce route count
+        CreateUserUnavailability:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/users/me/unavailability
+            Method: POST
+        IntegrationFindOrCreateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/integration/events
+            Method: POST
 
   # Venues Lambda
   VenuesFunction:

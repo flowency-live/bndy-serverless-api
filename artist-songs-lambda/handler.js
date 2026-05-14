@@ -109,6 +109,21 @@ exports.handler = async (event, context) => {
     const artistSongId = event.pathParameters?.artistSongId;
     const userId = await extractUserId(event);
 
+    // SECURITY: Require authentication for all private artist-specific endpoints
+    // These endpoints expose sensitive data (playbook, pipeline, votes) and MUST NOT be publicly accessible
+    // Fix for: https://api.bndy.co.uk/api/artists/{id}/playbook returning data without auth
+    const PRIVATE_PATHS = ['/playbook', '/pipeline', '/check-vote-reminders'];
+    const isPrivateEndpoint = PRIVATE_PATHS.some(p => path.includes(p));
+
+    if (isPrivateEndpoint && !userId) {
+      console.log('[SECURITY] Blocked unauthenticated access to private endpoint:', path);
+      return {
+        statusCode: 401,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Authentication required' })
+      };
+    }
+
     // POST /api/artists/{artistId}/playbook - Add song
     if (method === 'POST' && path.includes('/playbook') && artistId) {
       return await handleAddSongToPlaybook(JSON.parse(event.body), artistId);
