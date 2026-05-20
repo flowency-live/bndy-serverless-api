@@ -732,7 +732,10 @@ async function handleVote(artistSongId, artistId, userId, body) {
     }
 
     const song = songResult.Item;
-    const votingScale = song.voting_scale || 3;  // Default to 3-star scale
+    // Detect actual scale from vote values - if any vote > 3, song was voted with 5-star scale
+    const existingVotes = song.votes || {};
+    const maxVoteValue = Math.max(...Object.values(existingVotes).map(v => v.value || 0), 0);
+    const votingScale = song.voting_scale || (maxVoteValue > 3 ? 5 : 3);
 
     if (body.vote_value === undefined || body.vote_value === null || body.vote_value < 0 || body.vote_value > votingScale) {
       console.error('[VOTE] Invalid vote value:', body.vote_value, 'for scale:', votingScale);
