@@ -734,7 +734,8 @@ async function handleVote(artistSongId, artistId, userId, body) {
     const song = songResult.Item;
     // Detect actual scale from vote values - if any vote > 3, song was voted with 5-star scale
     const existingVotes = song.votes || {};
-    const maxVoteValue = Math.max(...Object.values(existingVotes).map(v => v.value || 0), 0);
+    const voteValues = Object.values(existingVotes).map(v => (v && typeof v.value === 'number') ? v.value : 0);
+    const maxVoteValue = voteValues.length > 0 ? Math.max(...voteValues) : 0;
     const votingScale = song.voting_scale || (maxVoteValue > 3 ? 5 : 3);
 
     if (body.vote_value === undefined || body.vote_value === null || body.vote_value < 0 || body.vote_value > votingScale) {
