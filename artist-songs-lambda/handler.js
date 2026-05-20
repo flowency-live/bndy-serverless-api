@@ -228,7 +228,7 @@ async function handleAddSongToPlaybook(body, artistId) {
     notes: body.notes || '',
     youtube_url: body.youtube_url || '',
     reference_url: body.reference_url || '',
-    votes: [],
+    votes: {},  // Must be object (Map), not array (List) for userId-keyed votes
     readiness: [],
     vetos: [],
     last_performed_at: '1970-01-01T00:00:00.000Z',
@@ -732,8 +732,17 @@ async function handleVote(artistSongId, artistId, userId, body) {
     }
 
     const song = songResult.Item;
+
+    // FIX: Convert votes from array to object if needed (legacy data issue)
+    // Songs created via playbook had votes:[] instead of votes:{}
+    let existingVotes = song.votes;
+    if (Array.isArray(existingVotes)) {
+      console.log('[VOTE] Converting votes from array to object for song:', artistSongId);
+      existingVotes = {};
+    }
+    existingVotes = existingVotes || {};
+
     // Detect actual scale from vote values - if any vote > 3, song was voted with 5-star scale
-    const existingVotes = song.votes || {};
     const voteValues = Object.values(existingVotes).map(v => (v && typeof v.value === 'number') ? v.value : 0);
     const maxVoteValue = voteValues.length > 0 ? Math.max(...voteValues) : 0;
     const votingScale = song.voting_scale || (maxVoteValue > 3 ? 5 : 3);
@@ -746,7 +755,8 @@ async function handleVote(artistSongId, artistId, userId, body) {
         body: JSON.stringify({ error: `Invalid vote value. Must be between 0 and ${votingScale}.` })
       };
     }
-    const votes = song.votes || {};
+    // Use the already-converted existingVotes (handles array->object conversion)
+    const votes = existingVotes;
 
     console.log('[VOTE] Current votes before update:', Object.keys(votes));
 
