@@ -247,6 +247,11 @@ exports.handler = async (event, context) => {
       return await handleGetVenueByExternalId(event);
     }
 
+    // MCP list venues endpoint (paginated with filters)
+    if (method === 'GET' && path === '/api/venues/list') {
+      return await handleListVenuesMcp(event);
+    }
+
     if (method === 'POST' && path === '/api/venues/find-or-create') {
       return await handleFindOrCreateVenue(parseBody(event.body), event);
     }
@@ -333,11 +338,11 @@ async function handleGetAllVenues(event) {
     // Get event counts for all venues in parallel
     const eventCountPromises = validVenues.map(async (venue) => {
       try {
-        // Query events table using venue_id-index to count events
+        // Query events table using venueId-date-index to count events
         const eventCountResult = await dynamodb.query({
           TableName: 'bndy-events',
-          IndexName: 'venue_id-index',
-          KeyConditionExpression: 'venue_id = :venueId',
+          IndexName: 'venueId-date-index',
+          KeyConditionExpression: 'venueId = :venueId',
           ExpressionAttributeValues: {
             ':venueId': venue.id
           },
@@ -398,6 +403,169 @@ async function handleGetAllVenues(event) {
   } catch (error) {
     console.error('[ERROR] DynamoDB scan failed:', error);
     throw error;
+  }
+}
+
+// ============================================================================
+// MCP LIST VENUES ENDPOINT (Public, No Auth Required)
+// ============================================================================
+
+async function handleListVenuesMcp(event) {
+  const queryParams = event.queryStringParameters || {};
+
+  // Parse pagination params
+  const limit = Math.min(parseInt(queryParams.limit) || 100, 500);
+  const offset = parseInt(queryParams.offset) || 0;
+
+  // Parse filter params
+  const missingSocials = queryParams.missingSocials === 'true';
+  const missingAddress = queryParams.missingAddress === 'true';
+  const missingCity = queryParams.missingCity === 'true';
+  const missingCoordinates = queryParams.missingCoordinates === 'true';
+  const region = queryParams.region || null;
+  const city = queryParams.city || null;
+  const createdSince = queryParams.createdSince || null;
+  const aiCreated = queryParams.aiCreated === 'true' ? true : (queryParams.aiCreated === 'false' ? false : null);
+
+  console.log(`[MCP_LIST_VENUES] Listing venues - limit: ${limit}, offset: ${offset}, filters: missingSocials=${missingSocials}, missingAddress=${missingAddress}, missingCity=${missingCity}, missingCoordinates=${missingCoordinates}, region=${region}, city=${city}, aiCreated=${aiCreated}`);
+
+  try {
+    // Build filter expressions for DynamoDB scan
+    const filterExpressions = [];
+    const expressionAttributeNames = {
+      '#name': 'name'
+    };
+    const expressionAttributeValues = {};
+
+    // Filter: missingSocials - no website or social media
+    if (missingSocials) {
+      filterExpressions.push('(attribute_not_exists(website) OR website = :emptyStr) AND (attribute_not_exists(social_media_urls) OR size(social_media_urls) = :zero)');
+      expressionAttributeValues[':emptyStr'] = '';
+      expressionAttributeValues[':zero'] = 0;
+    }
+
+    // Filter: missingAddress
+    if (missingAddress) {
+      filterExpressions.push('(attribute_not_exists(address) OR address = :emptyStr2)');
+      expressionAttributeValues[':emptyStr2'] = '';
+    }
+
+    // Filter: missingCity
+    if (missingCity) {
+      filterExpressions.push('(attribute_not_exists(city) OR city = :emptyStr3)');
+      expressionAttributeValues[':emptyStr3'] = '';
+    }
+
+    // Filter: missingCoordinates
+    if (missingCoordinates) {
+      filterExpressions.push('(attribute_not_exists(latitude) OR attribute_not_exists(longitude) OR latitude = :zeroNum OR longitude = :zeroNum)');
+      expressionAttributeValues[':zeroNum'] = 0;
+    }
+
+    // Filter: region - address or city contains region string
+    if (region) {
+      filterExpressions.push('(contains(address, :region) OR contains(city, :region))');
+      expressionAttributeValues[':region'] = region;
+    }
+
+    // Filter: city - exact city match
+    if (city) {
+      filterExpressions.push('city = :city');
+      expressionAttributeValues[':city'] = city;
+    }
+
+    // Filter: createdSince
+    if (createdSince) {
+      filterExpressions.push('createdAt >= :createdSince');
+      expressionAttributeValues[':createdSince'] = createdSince;
+    }
+
+    // Filter: aiCreated
+    if (aiCreated !== null) {
+      filterExpressions.push('ai_created = :aiCreated');
+      expressionAttributeValues[':aiCreated'] = aiCreated;
+    }
+
+    // Build scan params
+    const scanParams = {
+      TableName: 'bndy-venues',
+      ProjectionExpression: 'id, #name, address, city, postcode, latitude, longitude, website, phone, social_media_urls, facilities, profile_image_url, standard_ticketed, standard_ticket_information, standard_ticket_url, ai_created, needs_review, created_source, external_ids, claimedByUserId, createdAt, updatedAt',
+      ExpressionAttributeNames: expressionAttributeNames
+    };
+
+    if (filterExpressions.length > 0) {
+      scanParams.FilterExpression = filterExpressions.join(' AND ');
+      scanParams.ExpressionAttributeValues = expressionAttributeValues;
+    }
+
+    // Scan all items (for filtering - DynamoDB requires full scan for complex filters)
+    const allItems = [];
+    let lastEvaluatedKey = null;
+
+    do {
+      if (lastEvaluatedKey) {
+        scanParams.ExclusiveStartKey = lastEvaluatedKey;
+      }
+      const result = await dynamodb.scan(scanParams).promise();
+      if (result && result.Items) {
+        allItems.push(...result.Items);
+      }
+      lastEvaluatedKey = result?.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+
+    // Apply pagination in memory
+    const totalCount = allItems.length;
+    const paginatedItems = allItems.slice(offset, offset + limit);
+
+    // Transform to API format
+    const formattedVenues = paginatedItems.map(venue => ({
+      id: venue.id,
+      name: venue.name,
+      address: venue.address || '',
+      city: venue.city || '',
+      postcode: venue.postcode || '',
+      latitude: venue.latitude || null,
+      longitude: venue.longitude || null,
+      website: venue.website || '',
+      phone: venue.phone || '',
+      socialMediaUrls: venue.social_media_urls || [],
+      facilities: venue.facilities || [],
+      profileImageUrl: venue.profile_image_url || '',
+      standardTicketed: venue.standard_ticketed || false,
+      standardTicketInformation: venue.standard_ticket_information || '',
+      standardTicketUrl: venue.standard_ticket_url || '',
+      externalIds: venue.external_ids || [],
+      isClaimed: !!venue.claimedByUserId,
+      aiCreated: venue.ai_created || false,
+      needsReview: venue.needs_review || false,
+      createdSource: venue.created_source || null,
+      createdAt: venue.createdAt || null,
+      updatedAt: venue.updatedAt || null
+    }));
+
+    console.log(`[MCP_LIST_VENUES] Returning ${formattedVenues.length} of ${totalCount} total venues`);
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        venues: formattedVenues,
+        pagination: {
+          count: totalCount,
+          returned: formattedVenues.length,
+          offset: offset,
+          limit: limit,
+          hasMore: offset + limit < totalCount
+        }
+      })
+    };
+  } catch (error) {
+    console.error('[MCP_LIST_VENUES] Error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
   }
 }
 

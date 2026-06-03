@@ -43,6 +43,8 @@ Resources:
       StageName: $default
       Description: BNDY Platform HTTP API
       CorsConfiguration:
+        # Note: *.bndy.live CORS is handled dynamically in Lambda handlers
+        # AWS HTTP API doesn't support wildcard subdomains in AllowOrigins
         AllowOrigins:
           - https://backstage.bndy.co.uk
           - https://frontstage.bndy.co.uk
@@ -460,6 +462,12 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues/by-external-id
+            Method: GET
+        ListVenuesMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/list
             Method: GET
         IntegrationVenues:
           Type: HttpApi
@@ -1411,6 +1419,89 @@ Resources:
             Path: /api/artists/{artistId}/income/{id}
             Method: DELETE
 
+  # =============================================================================
+  # Builders Lambda (Builder Persona - white-label subdomains)
+  # =============================================================================
+  BuildersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: BNDY Builders API - builder persona management for white-label subdomains
+      CodeUri: ./builders-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          BUILDERS_TABLE: bndy-builders
+          BUILDER_VENUES_TABLE: bndy-builder-venues
+          BUILDER_WHITELIST: ''  # Comma-separated user IDs for feature flag
+      Events:
+        # Public: Subdomain lookup (no auth)
+        GetBuilderBySubdomain:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/builders/by-subdomain/{slug}
+            Method: GET
+        # Authenticated: User's builders
+        GetMyBuilders:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/builders
+            Method: GET
+        CreateBuilder:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/builders
+            Method: POST
+        UpdateBuilder:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/builders/{id}
+            Method: PUT
+        DeleteBuilder:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/builders/{id}
+            Method: DELETE
+        PublishBuilder:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/builders/{id}/publish
+            Method: PUT
+        # Builder Venues
+        GetBuilderVenues:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/builders/{id}/venues
+            Method: GET
+        AddBuilderVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/builders/{id}/venues
+            Method: POST
+        UpdateBuilderVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/builders/{id}/venues/{venueId}
+            Method: PUT
+        DeleteBuilderVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/builders/{id}/venues/{venueId}
+            Method: DELETE
+
 # =============================================================================
 # Outputs
 # =============================================================================
@@ -1450,3 +1541,9 @@ Outputs:
     Value: !GetAtt ExpensesFunction.Arn
     Export:
       Name: !Sub "${AWS::StackName}-ExpensesFunctionArn"
+
+  BuildersFunctionArn:
+    Description: Builders Lambda Function ARN
+    Value: !GetAtt BuildersFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-BuildersFunctionArn"
