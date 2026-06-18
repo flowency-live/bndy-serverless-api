@@ -1,11 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
-  BNDY Platform Serverless API
-  Lambda Functions + HTTP API Gateway
-
-  NOTE: This template manages the existing bndy-serverless-api stack.
-  All function names must match existing physical resource IDs to avoid recreation.
+Description: BNDY Platform Serverless API
 
 Parameters:
   Stage:
@@ -1501,6 +1496,56 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/builders/{id}/venues/{venueId}
             Method: DELETE
+
+  # Source Runs (admin)
+  SourceRunsFunc:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./source-runs-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
+      Environment:
+        Variables:
+          SOURCE_RUNS_BUCKET: bndy-signals-prod-771551874768
+      Events:
+        A:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/source-runs
+            Method: GET
+        B:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/source-runs/summaries
+            Method: GET
+        C:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/source-runs/coverage
+            Method: GET
+        D:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/source-runs/{sourceId}
+            Method: GET
+        E:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/source-runs/{sourceId}/{runId}
+            Method: GET
+        F:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/review-items
+            Method: GET
 
 # =============================================================================
 # Outputs
