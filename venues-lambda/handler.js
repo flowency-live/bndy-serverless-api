@@ -543,6 +543,20 @@ async function handleGetVenueByExternalId(event) {
 async function handleCreateVenue(venueData, event) {
   console.log('[Venues] Venues Lambda: Creating new venue');
 
+  // ADR-018 INVARIANT: Venues MUST have google_place_id
+  // If caller doesn't have one, they should use /api/venues/find-or-create which will geocode
+  if (!venueData.googlePlaceId || venueData.googlePlaceId.trim() === '') {
+    console.log('[REJECT] handleCreateVenue: Missing google_place_id - ADR-018 violation');
+    return {
+      statusCode: 422,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        error: 'google_place_id is required. Use /api/venues/find-or-create for auto-geocoding.',
+        code: 'MISSING_PLACE_ID'
+      })
+    };
+  }
+
   const now = new Date().toISOString();
   const venue = {
     id: require('crypto').randomUUID(),
@@ -1294,6 +1308,23 @@ async function handleFindOrCreateVenue(venueData, event) {
 
     console.log('[NEW] LEVEL 4: No match found - creating new venue');
 
+    // ADR-018 INVARIANT: Final guard - NEVER create venue without google_place_id
+    // This should never trigger if L3.5 is working, but belt-and-suspenders
+    if (!venueData.googlePlaceId || venueData.googlePlaceId.trim() === '') {
+      console.error('[INVARIANT VIOLATION] Attempted to create venue without google_place_id');
+      return {
+        statusCode: 422,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({
+          error: 'Cannot create venue without google_place_id - geocoding failed or was bypassed',
+          code: 'MISSING_PLACE_ID',
+          needsReview: true,
+          providedName: venueData.name,
+          providedCity: venueData.city
+        })
+      };
+    }
+
     const now = new Date().toISOString();
     const newVenue = {
       id: require('crypto').randomUUID(),
@@ -1303,7 +1334,7 @@ async function handleFindOrCreateVenue(venueData, event) {
       latitude: venueData.latitude || 0,
       longitude: venueData.longitude || 0,
       location_object: venueData.location || { lat: venueData.latitude, lng: venueData.longitude },
-      google_place_id: venueData.googlePlaceId || '',
+      google_place_id: venueData.googlePlaceId,  // Now guaranteed non-empty
       website: venueData.website || '',
       validated: false,
       name_variants: venueData.nameVariants || [],
