@@ -1,12 +1,17 @@
 /**
  * Public Handlers for Events Lambda
  *
- * Handles public read-only event operations.
- * These endpoints have NO AUTH - they're for public/anonymous access.
+ * Handles public event operations (read-only + community creation).
+ * Most endpoints have NO AUTH - they're for public/anonymous access.
+ * handleCreatePublicGig requires auth.
  */
 
+const crypto = require('crypto');
 const ngeohash = require('ngeohash');
-const { stripPrivateFields, EVENTS_TABLE, VENUES_TABLE } = require('../lib/event-data');
+const { stripPrivateFields, EVENTS_TABLE, VENUES_TABLE, getVenue, checkForDuplicateEvent, checkForDuplicateByExternalId, ensureVenueRelationship } = require('../lib/event-data');
+const { computeGeohashFields } = require('../lib/geohash');
+const { verifyMembership } = require('../lib/auth');
+const { triggerNotification } = require('../lib/notifications');
 
 // Table constants
 const ARTISTS_TABLE = 'bndy-artists';
@@ -638,6 +643,445 @@ async function handleGetArtistPublicEvents(deps, event) {
   }
 }
 
+/**
+ * POST /api/artists/:artistId/public-gigs/create - Create public gig with venue resolution
+ * REQUIRES AUTH - user must be platform admin or member of artist
+ * @param {Object} deps - Dependencies { dynamodb, getCorsHeaders, lambda }
+ * @param {Object} event - Lambda event
+ * @param {Object} user - Authenticated user
+ */
+async function handleCreatePublicGig(deps, event, user) {
+  const { dynamodb, getCorsHeaders, lambda } = deps;
+  const { artistId } = event.pathParameters;
+  const gigData = JSON.parse(event.body);
+
+  console.log('PUBLIC_GIG: Create request', { artistId, gigData });
+
+  // Check access - platform admin OR member
+  let membership = null;
+  if (!user.platformAdmin) {
+    membership = await verifyMembership(dynamodb, user.userId, artistId);
+    if (!membership) {
+      return {
+        statusCode: 403,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ error: 'Not a member of this artist' })
+      };
+    }
+  } else {
+    console.log('[EVENTS] Platform admin access granted for public gig creation');
+    // Create a minimal membership object for compatibility
+    membership = { user_id: user.userId, artist_id: artistId, membership_id: 'platform-admin' };
+  }
+
+  // Validate required fields for public gig
+  if (!gigData.venueId) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'venueId is required for public gigs' })
+    };
+  }
+
+  if (!gigData.date) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'date is required' })
+    };
+  }
+
+  // Fetch venue to get location for geohash computation
+  const venue = await getVenue(dynamodb, gigData.venueId);
+  if (!venue) {
+    return {
+      statusCode: 404,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'Venue not found' })
+    };
+  }
+
+  // Validate venue has coordinates (required for public events)
+  if (!venue.latitude || !venue.longitude) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        error: 'Venue must have valid coordinates for public gigs',
+        venueId: gigData.venueId
+      })
+    };
+  }
+
+  // Check for duplicate events (same venue + date + artist - one gig per day)
+  const duplicateEvent = await checkForDuplicateEvent(dynamodb, gigData.venueId, gigData.date, [artistId]);
+  if (duplicateEvent) {
+    console.log(`DUPLICATE_PREVENTED: Event already exists - ${duplicateEvent.id} (${duplicateEvent.title})`);
+    return {
+      statusCode: 409,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        error: 'Duplicate event detected',
+        message: `An event with this artist at this venue on ${gigData.date} already exists`,
+        existingEventId: duplicateEvent.id,
+        existingEventTitle: duplicateEvent.title,
+        existingStartTime: duplicateEvent.startTime
+      })
+    };
+  }
+
+  // Compute geohash fields from venue location
+  const geohashFields = computeGeohashFields(venue);
+
+  const eventId = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  // Build public gig event
+  const newEvent = {
+    id: eventId,
+    artistId: artistId,
+    // ownerUserId omitted - XOR: this is an artist event
+    type: gigData.type || 'public_gig', // Allow 'festival' as well
+    date: gigData.date,
+    venueId: gigData.venueId,
+    isPublic: gigData.isPublic !== undefined ? gigData.isPublic : true, // Default to public
+    isAllDay: gigData.isAllDay || false,
+    membershipId: membership.membership_id,
+    createdAt: now,
+    updatedAt: now,
+    // Geohash fields for Frontstage geo-spatial queries (computed for all gigs)
+    ...geohashFields,
+    // Track creation source for analytics
+    source: gigData.source || 'backstage_wizard'
+  };
+
+  // Optional fields
+  if (gigData.title) newEvent.title = gigData.title;
+  if (gigData.hasCustomTitle !== undefined) newEvent.hasCustomTitle = gigData.hasCustomTitle;
+  if (gigData.description) newEvent.description = gigData.description;
+  if (gigData.endDate) newEvent.endDate = gigData.endDate;
+  if (gigData.startTime) newEvent.startTime = gigData.startTime;
+  if (gigData.endTime) newEvent.endTime = gigData.endTime;
+  if (gigData.notes) newEvent.notes = gigData.notes;
+
+  // Public gig specific fields (for future Frontstage features)
+  if (gigData.ticketUrl) newEvent.ticketUrl = gigData.ticketUrl;
+  if (gigData.ticketPrice) newEvent.ticketPrice = gigData.ticketPrice;
+  if (gigData.doorsTime) newEvent.doorsTime = gigData.doorsTime;
+
+  // Fee tracking fields (private - artist backstage only)
+  if (gigData.agreedFee !== undefined) newEvent.agreedFee = gigData.agreedFee;
+  if (gigData.actualFee !== undefined) newEvent.actualFee = gigData.actualFee;
+  if (gigData.datePaid) newEvent.datePaid = gigData.datePaid;
+  if (gigData.paymentMethod) newEvent.paymentMethod = gigData.paymentMethod;
+  if (gigData.splitBetweenMembers !== undefined) newEvent.splitBetweenMembers = gigData.splitBetweenMembers;
+  if (gigData.noFee !== undefined) newEvent.noFee = gigData.noFee;
+  if (gigData.distributed !== undefined) newEvent.distributed = gigData.distributed;
+
+  // Check for duplicates (same artist, venue, date - regardless of public/private)
+  const duplicateCheck = await dynamodb.query({
+    TableName: EVENTS_TABLE,
+    IndexName: 'artistId-date-index',
+    KeyConditionExpression: 'artistId = :artistId AND #date = :date',
+    FilterExpression: 'venueId = :venueId',
+    ExpressionAttributeNames: { '#date': 'date' },
+    ExpressionAttributeValues: {
+      ':artistId': artistId,
+      ':date': gigData.date,
+      ':venueId': gigData.venueId
+    }
+  }).promise();
+
+  if (duplicateCheck.Items && duplicateCheck.Items.length > 0) {
+    return {
+      statusCode: 409,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        error: 'Duplicate gig detected - this artist already has a gig at this venue on this date',
+        existingEvent: duplicateCheck.Items[0]
+      })
+    };
+  }
+
+  // Auto-create venue relationship before creating the event
+  await ensureVenueRelationship(dynamodb, artistId, gigData.venueId, gigData.date);
+
+  // Create the event
+  await dynamodb.put({
+    TableName: EVENTS_TABLE,
+    Item: newEvent
+  }).promise();
+
+  console.log('PUBLIC_GIG: Created successfully', {
+    eventId,
+    artistId,
+    venueId: gigData.venueId,
+    geohash6: geohashFields.geohash6,
+    coordinates: { lat: geohashFields.geoLat, lng: geohashFields.geoLng }
+  });
+
+  // Skip notifications for platform admin events
+  const skipNotifications = user.platformAdmin;
+
+  if (!skipNotifications) {
+    // Trigger gig_added notification
+    await triggerNotification(
+      { dynamodb, lambda },
+      'gig_added',
+      artistId,
+      user.userId,
+      {
+        eventId: eventId,
+        venueName: gigData.title || venue.name || 'TBA',
+        eventDate: gigData.date
+      }
+    );
+  } else {
+    console.log('[EVENTS] Skipping notifications for platform admin public gig creation');
+  }
+
+  return {
+    statusCode: 201,
+    headers: getCorsHeaders(event),
+    body: JSON.stringify(newEvent)
+  };
+}
+
+/**
+ * POST /api/events/community - Create community event (public endpoint)
+ * NO AUTH - anonymous community users can create events
+ * @param {Object} deps - Dependencies { dynamodb, getCorsHeaders }
+ * @param {Object} event - Lambda event
+ */
+async function handleCreateCommunityEvent(deps, event) {
+  const { dynamodb, getCorsHeaders } = deps;
+
+  console.log('COMMUNITY_EVENT: Create request');
+
+  try {
+    const body = JSON.parse(event.body);
+    const {
+      artistId, artistIds, venueId, date, startTime, endTime, title, isPublic, source, isOpenMic,
+      // Enrichment fields (parity with edit_event)
+      price, eventUrl, ticketed, ticketInformation, ticketUrl, imageUrl, description, notes
+    } = body;
+
+    // Support both single artistId and multiple artistIds
+    const artistIdsList = artistIds || (artistId ? [artistId] : []);
+
+    // Validation
+    if ((!artistIdsList || artistIdsList.length === 0) && !isOpenMic) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ error: 'artistId, artistIds, or isOpenMic flag is required' })
+      };
+    }
+
+    if (!venueId || !date || !startTime) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ error: 'venueId, date, and startTime are required' })
+      };
+    }
+
+    // Get venue details for geolocation
+    const venue = await getVenue(dynamodb, venueId);
+    if (!venue) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ error: 'Venue not found' })
+      };
+    }
+
+    // Get first artist details for title generation (or use provided title)
+    let artist = null;
+    if (artistIdsList.length > 0) {
+      const artistResult = await dynamodb.get({
+        TableName: ARTISTS_TABLE,
+        Key: { id: artistIdsList[0] }
+      }).promise();
+
+      if (!artistResult.Item) {
+        return {
+          statusCode: 404,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({ error: 'Artist not found' })
+        };
+      }
+
+      artist = artistResult.Item;
+    }
+
+    // Check for duplicate by externalId FIRST (most reliable dedup)
+    if (body.externalIds && body.externalIds.length > 0) {
+      const duplicateByExtId = await checkForDuplicateByExternalId(dynamodb, body.externalIds);
+      if (duplicateByExtId) {
+        console.log(`DUPLICATE_PREVENTED (externalId): Event already exists - ${duplicateByExtId.id} (${duplicateByExtId.title})`);
+        return {
+          statusCode: 409,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({
+            error: 'Duplicate event detected (externalId match)',
+            message: `An event with externalId ${duplicateByExtId.matchedExternalId.source}:${duplicateByExtId.matchedExternalId.id} already exists`,
+            existingEventId: duplicateByExtId.id,
+            existingEventTitle: duplicateByExtId.title,
+            existingDate: duplicateByExtId.date,
+            existingStartTime: duplicateByExtId.startTime,
+            matchedExternalId: duplicateByExtId.matchedExternalId
+          })
+        };
+      }
+    }
+
+    // Check for duplicate events (same venue + date + artist - one gig per day)
+    if (artistIdsList.length > 0) {
+      const duplicateEvent = await checkForDuplicateEvent(dynamodb, venueId, date, artistIdsList);
+      if (duplicateEvent) {
+        console.log(`DUPLICATE_PREVENTED: Event already exists - ${duplicateEvent.id} (${duplicateEvent.title})`);
+        return {
+          statusCode: 409,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({
+            error: 'Duplicate event detected',
+            message: `An event with this artist at this venue on ${date} already exists (${duplicateEvent.startTime || 'time unknown'})`,
+            existingEventId: duplicateEvent.id,
+            existingEventTitle: duplicateEvent.title,
+            existingStartTime: duplicateEvent.startTime
+          })
+        };
+      }
+    }
+
+    // Compute geohash fields from venue location
+    const geohashFields = computeGeohashFields(venue);
+
+    const now = new Date().toISOString();
+    const eventId = crypto.randomUUID();
+
+    // Generate title
+    let eventTitle = title;
+    if (!eventTitle) {
+      if (isOpenMic) {
+        eventTitle = `Open Mic @ ${venue.name}`;
+      } else if (artist) {
+        const artistNames = artistIdsList.length > 1 ? `${artist.name} + ${artistIdsList.length - 1} more` : artist.name;
+        eventTitle = `${artistNames} @ ${venue.name}`;
+      } else {
+        eventTitle = `Event @ ${venue.name}`;
+      }
+    }
+
+    // Fetch all artist names for multi-artist events
+    const allArtistNames = [];
+    if (artistIdsList.length > 0) {
+      const artistPromises = artistIdsList.map(id =>
+        dynamodb.get({ TableName: ARTISTS_TABLE, Key: { id } }).promise()
+      );
+      const artistResults = await Promise.all(artistPromises);
+      artistResults.forEach(result => {
+        if (result.Item) {
+          allArtistNames.push(result.Item.name);
+        }
+      });
+    }
+
+    // Create main event with primary artist and collaborating artists
+    const collaboratingArtistIds = artistIdsList.length > 1 ? artistIdsList.slice(1) : [];
+    const newEvent = {
+      id: eventId,
+      artistId: artistIdsList[0] || null,
+      collaboratingArtistIds: collaboratingArtistIds, // Multi-artist support
+      venueId: venueId,
+      title: eventTitle,
+      date: date,
+      startTime: startTime,
+      endTime: endTime || '00:00',
+      type: isOpenMic ? 'open-mic' : 'gig',
+      isPublic: isPublic !== undefined ? isPublic : true,
+      isAllDay: false,
+
+      // Geolocation - only include if venue has coordinates (sparse GSI)
+      ...(geohashFields.geohash6 && geohashFields),
+
+      // External IDs for cross-referencing
+      external_ids: body.externalIds || [],
+
+      // Enrichment fields (parity with edit_event)
+      ...(price !== undefined && { price }),
+      ...(eventUrl !== undefined && { eventUrl }),
+      ...(ticketed !== undefined && { ticketed }),
+      ...(ticketInformation !== undefined && { ticketinformation: ticketInformation }),
+      ...(ticketUrl !== undefined && { ticketUrl }),
+      ...(imageUrl !== undefined && { imageUrl }),
+      ...(description !== undefined && { description }),
+      ...(notes !== undefined && { notes }),
+
+      // Community event flags
+      source: source || 'community_wizard',
+      verifiedByArtist: false,  // Ghost checkmark
+      verifiedByVenue: false,   // Future feature
+      createdByUserId: null,    // Anonymous community builder
+      membershipId: null,       // No membership for community events
+
+      // AI import flags (when source is mcp_ai_import)
+      ...(source === 'mcp_ai_import' && { aiCreated: true, needsReview: true }),
+
+      createdAt: now,
+      updatedAt: now
+    };
+
+    // Write to DynamoDB
+    await dynamodb.put({
+      TableName: EVENTS_TABLE,
+      Item: newEvent
+    }).promise();
+
+    // DEFENSIVE: Read back to verify persistence (prevents silent data loss bug)
+    // Addresses issue where put returns success but record not persisted (~1-3% incidence)
+    const verifyResult = await dynamodb.get({
+      TableName: EVENTS_TABLE,
+      Key: { id: eventId },
+      ConsistentRead: true // Force strong consistency to catch write failures
+    }).promise();
+
+    if (!verifyResult.Item) {
+      console.error(`CRITICAL: Event ${eventId} put succeeded but verification read failed - data loss detected`);
+      throw new Error('Event creation verification failed - write did not persist');
+    }
+
+    console.log(` Community event created: ${eventId} (${eventTitle})`);
+
+    return {
+      statusCode: 201,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        message: 'Event created successfully',
+        id: eventId,
+        event: {
+          id: eventId,
+          title: newEvent.title,
+          date: newEvent.date,
+          startTime: newEvent.startTime,
+          artistId: newEvent.artistId,
+          artistIds: artistIdsList, // Full array of all artist IDs
+          artistNames: allArtistNames, // Full array of all artist names
+          venueId: newEvent.venueId
+        }
+      })
+    };
+  } catch (error) {
+    console.error(' Community event creation failed:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+}
+
 module.exports = {
   handleCheckConflicts,
   handleGetPublicEventsGeo,
@@ -645,6 +1089,8 @@ module.exports = {
   handleGetVenueEvents,
   handleGetAllPublicEvents,
   handleGetArtistPublicEvents,
+  handleCreatePublicGig,
+  handleCreateCommunityEvent,
   EVENTS_TABLE,
   VENUES_TABLE,
   ARTISTS_TABLE,
