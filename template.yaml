@@ -106,6 +106,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/community
             Method: POST
+        FindOrCreateArtist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/find-or-create
+            Method: POST
         GetArtistById:
           Type: HttpApi
           Properties:
@@ -124,6 +130,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{id}/mcp
             Method: PUT
+        DeleteArtistMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}/mcp
+            Method: DELETE
         DeleteArtist:
           Type: HttpApi
           Properties:
@@ -167,6 +179,31 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{artistId}/events
             Method: GET
+        # Acts CRUD routes (#60 Acts Model)
+        CreateAct:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}/acts
+            Method: POST
+        UpdateAct:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}/acts/{actId}
+            Method: PUT
+        DeleteAct:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}/acts/{actId}
+            Method: DELETE
+        SetDefaultAct:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}/acts/{actId}/default
+            Method: PUT
 
   # Events Lambda
   EventsFunction:
@@ -227,6 +264,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/events/{id}/mcp
             Method: GET
+        DeleteEventMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/{id}/mcp
+            Method: DELETE
         DeleteEvent:
           Type: HttpApi
           Properties:
@@ -414,6 +457,7 @@ Resources:
       Environment:
         Variables:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          GOOGLE_PLACES_API_KEY: '{{resolve:secretsmanager:bndy/google-places:SecretString:api_key}}'
       Events:
         GetAllVenues:
           Type: HttpApi
@@ -457,6 +501,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues/{id}
             Method: DELETE
+        DeleteVenueMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{id}/mcp
+            Method: DELETE
         GetVenueByExternalId:
           Type: HttpApi
           Properties:
@@ -474,6 +524,12 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/integration/venues
+            Method: POST
+        EnrichVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{id}/enrich
             Method: POST
 
   # Auth Lambda
@@ -1502,6 +1558,58 @@ Resources:
             Path: /api/builders/{id}/venues/{venueId}
             Method: DELETE
 
+  # Source Runs Lambda (admin only - observability for source runner dashboard)
+  SourceRunsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: BNDY Source Runs API - source runner observability (admin only)
+      CodeUri: ./source-runs-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          SOURCE_RUNS_BUCKET: bndy-signals-prod-771551874768
+      Events:
+        ListSourceRuns:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/source-runs
+            Method: GET
+        GetSourceRunsSummaries:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/source-runs/summaries
+            Method: GET
+        GetSourceRunsCoverage:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/source-runs/coverage
+            Method: GET
+        GetSourceRunsBySource:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/source-runs/{sourceId}
+            Method: GET
+        GetSourceRun:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/source-runs/{sourceId}/{runId}
+            Method: GET
+        GetReviewItems:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/review-items
+            Method: GET
+
 # =============================================================================
 # Outputs
 # =============================================================================
@@ -1547,3 +1655,9 @@ Outputs:
     Value: !GetAtt BuildersFunction.Arn
     Export:
       Name: !Sub "${AWS::StackName}-BuildersFunctionArn"
+
+  SourceRunsFunctionArn:
+    Description: Source Runs Lambda Function ARN
+    Value: !GetAtt SourceRunsFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-SourceRunsFunctionArn"
