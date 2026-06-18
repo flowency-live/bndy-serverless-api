@@ -409,6 +409,7 @@ Resources:
       Environment:
         Variables:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          GOOGLE_PLACES_API_KEY: '{{resolve:secretsmanager:bndy/google-places:SecretString:api_key}}'
       Events:
         GetAllVenues:
           Type: HttpApi
