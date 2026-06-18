@@ -333,11 +333,13 @@ const checkForDuplicateByExternalId = async (externalIds) => {
 
 // Helper: Check for duplicate events (same venue + date + artist)
 // An artist can only have ONE event at a venue on a given day (time is ignored)
+// Uses venueId-date-index GSI for efficient lookup (scan would miss events on later pages)
 const checkForDuplicateEvent = async (venueId, date, artistIds) => {
-  // Scan for events at this venue on this date (time ignored - one gig per day per artist)
+  // Query the venueId-date-index GSI for events at this venue on this date
   const params = {
     TableName: EVENTS_TABLE,
-    FilterExpression: 'venueId = :venueId AND #date = :date',
+    IndexName: 'venueId-date-index',
+    KeyConditionExpression: 'venueId = :venueId AND #date = :date',
     ExpressionAttributeNames: {
       '#date': 'date'
     },
@@ -348,7 +350,7 @@ const checkForDuplicateEvent = async (venueId, date, artistIds) => {
     ProjectionExpression: 'id, title, artistId, collaboratingArtistIds, startTime'
   };
 
-  const result = await dynamodb.scan(params).promise();
+  const result = await dynamodb.query(params).promise();
 
   // Handle undefined result from mocks or empty scans
   if (!result || !result.Items || result.Items.length === 0) {
@@ -1128,6 +1130,25 @@ const handleCreateArtistEvent = async (event, user) => {
     }
   }
 
+  // Check for duplicate events (same venue + date + artist - one gig per day)
+  if (eventData.venueId) {
+    const duplicateEvent = await checkForDuplicateEvent(eventData.venueId, eventData.date, [artistId]);
+    if (duplicateEvent) {
+      console.log(`DUPLICATE_PREVENTED: Event already exists - ${duplicateEvent.id} (${duplicateEvent.title})`);
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'Duplicate event detected',
+          message: `An event with this artist at this venue on ${eventData.date} already exists`,
+          existingEventId: duplicateEvent.id,
+          existingEventTitle: duplicateEvent.title,
+          existingStartTime: duplicateEvent.startTime
+        })
+      };
+    }
+  }
+
   // Auto-create venue relationship if this is a gig with a venueId
   if (eventData.venueId && (eventData.type === 'gig' || eventData.type === 'public_gig')) {
     await ensureVenueRelationship(artistId, eventData.venueId, eventData.date);
@@ -1574,6 +1595,7 @@ const handleUpdateEventMcp = async (event) => {
     'date': 'date',
     'startTime': 'startTime',
     'endTime': 'endTime',
+    'artist_id': 'artist_id',  // Reassign event to different artist (for merging duplicates)
     'venueId': 'venueId',
     'description': 'description',
     'isPublic': 'isPublic',
@@ -1646,6 +1668,51 @@ const handleUpdateEventMcp = async (event) => {
       externalIds: updatedEvent.external_ids || [],
       venueName
     })
+  };
+};
+
+// DELETE /api/events/:id/mcp - Delete event via MCP (NO AUTH)
+// Allows deletion of ANY event record via MCP
+const handleDeleteEventMcp = async (event) => {
+  const { id } = event.pathParameters;
+
+  console.log('[MCP] Deleting event', { eventId: id });
+
+  // Get existing event
+  const existing = await dynamodb.get({
+    TableName: EVENTS_TABLE,
+    Key: { id }
+  }).promise();
+
+  if (!existing.Item) {
+    return {
+      statusCode: 404,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Event not found' })
+    };
+  }
+
+  const existingEvent = existing.Item;
+
+  // Delete the event
+  await dynamodb.delete({
+    TableName: EVENTS_TABLE,
+    Key: { id }
+  }).promise();
+
+  // Best-effort calendar cancellation record so calendar subscribers remove it (non-fatal)
+  try {
+    await createCancellationRecord(existingEvent, 'mcp-system');
+  } catch (cancelErr) {
+    console.error('[MCP] Failed to create cancellation record (non-fatal)', cancelErr);
+  }
+
+  console.log('[MCP] Event deleted', { eventId: id });
+
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(),
+    body: JSON.stringify({ message: 'Event deleted', id })
   };
 };
 
@@ -2189,6 +2256,23 @@ const handleCreatePublicGig = async (event, user) => {
     };
   }
 
+  // Check for duplicate events (same venue + date + artist - one gig per day)
+  const duplicateEvent = await checkForDuplicateEvent(gigData.venueId, gigData.date, [artistId]);
+  if (duplicateEvent) {
+    console.log(`DUPLICATE_PREVENTED: Event already exists - ${duplicateEvent.id} (${duplicateEvent.title})`);
+    return {
+      statusCode: 409,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        error: 'Duplicate event detected',
+        message: `An event with this artist at this venue on ${gigData.date} already exists`,
+        existingEventId: duplicateEvent.id,
+        existingEventTitle: duplicateEvent.title,
+        existingStartTime: duplicateEvent.startTime
+      })
+    };
+  }
+
   // Compute geohash fields from venue location
   const geohashFields = computeGeohashFields(venue);
 
@@ -2552,19 +2636,31 @@ const handleGetAllPublicEvents = async (event) => {
   console.log('PUBLIC_ALL: Query received', { startDate: start, endDate: end });
 
   try {
-    // Scan table with FilterExpression (no GSI needed - simple and works for 250 events/weekend)
-    const result = await dynamodb.scan({
-      TableName: EVENTS_TABLE,
-      FilterExpression: 'isPublic = :true AND #date BETWEEN :start AND :end',
-      ExpressionAttributeNames: { '#date': 'date' },
-      ExpressionAttributeValues: {
-        ':true': true,
-        ':start': start,
-        ':end': end
-      }
-    }).promise();
+    // Scan table with FilterExpression, handling pagination for large result sets
+    // DynamoDB returns max 1MB per scan - must paginate to get all results
+    const allEvents = [];
+    let lastEvaluatedKey;
 
-    const allEvents = result.Items || [];
+    do {
+      const scanParams = {
+        TableName: EVENTS_TABLE,
+        FilterExpression: 'isPublic = :true AND #date BETWEEN :start AND :end',
+        ExpressionAttributeNames: { '#date': 'date' },
+        ExpressionAttributeValues: {
+          ':true': true,
+          ':start': start,
+          ':end': end
+        }
+      };
+
+      if (lastEvaluatedKey) {
+        scanParams.ExclusiveStartKey = lastEvaluatedKey;
+      }
+
+      const result = await dynamodb.scan(scanParams).promise();
+      allEvents.push(...(result.Items || []));
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
 
     console.log('PUBLIC_ALL: Found events', { count: allEvents.length });
 
@@ -3277,10 +3373,24 @@ const handleCreateCommunityEvent = async (event) => {
       updatedAt: now
     };
 
+    // Write to DynamoDB
     await dynamodb.put({
       TableName: EVENTS_TABLE,
       Item: newEvent
     }).promise();
+
+    // DEFENSIVE: Read back to verify persistence (prevents silent data loss bug)
+    // Addresses issue where put returns success but record not persisted (~1-3% incidence)
+    const verifyResult = await dynamodb.get({
+      TableName: EVENTS_TABLE,
+      Key: { id: eventId },
+      ConsistentRead: true // Force strong consistency to catch write failures
+    }).promise();
+
+    if (!verifyResult.Item) {
+      console.error(`CRITICAL: Event ${eventId} put succeeded but verification read failed - data loss detected`);
+      throw new Error('Event creation verification failed - write did not persist');
+    }
 
     console.log(` Community event created: ${eventId} (${eventTitle})`);
 
@@ -3671,6 +3781,11 @@ exports.handler = async (event, context) => {
     // MCP event read (public, no auth required)
     if (routeKey.match(/GET \/api\/events\/[^/]+\/mcp$/)) {
       return await handleGetEventMcp(event);
+    }
+
+    // MCP event delete (public, no auth required)
+    if (routeKey.match(/DELETE \/api\/events\/[^/]+\/mcp$/)) {
+      return await handleDeleteEventMcp(event);
     }
 
     // Check conflicts (public, no auth required - read-only operation)

@@ -273,7 +273,16 @@ exports.handler = async (event, context) => {
       return await handleUpdateVenue(event.pathParameters.id, parseBody(event.body), event);
     }
 
+    // MCP venue enrichment endpoint (public, no auth - geocode/backfill)
+    if (method === 'POST' && event.pathParameters?.id && path.includes('/enrich')) {
+      return await handleEnrichVenue(event.pathParameters.id, parseBody(event.body), event);
+    }
+
     if (method === 'DELETE' && event.pathParameters?.id) {
+      // Check if this is an MCP delete request (public, no auth)
+      if (path.includes('/mcp')) {
+        return await handleMCPDeleteVenue(event.pathParameters.id, event);
+      }
       return await handleDeleteVenue(event.pathParameters.id, event);
     }
 
@@ -957,14 +966,213 @@ async function handleDeleteVenue(venueId, event) {
   }
 }
 
+// DELETE /api/venues/:id/mcp - Delete venue via MCP (NO AUTH)
+// Allows deletion of ANY venue record via MCP
+async function handleMCPDeleteVenue(venueId, event) {
+  console.log(`[Venues] MCP: Delete request for venue: ${venueId}`);
+
+  try {
+    // Step 1: Fetch venue to verify it exists
+    const venueResult = await dynamodb.get({
+      TableName: 'bndy-venues',
+      Key: { id: venueId }
+    }).promise();
+
+    if (!venueResult.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ error: 'Venue not found', id: venueId })
+      };
+    }
+
+    // Step 2: Delete the venue record
+    await dynamodb.delete({
+      TableName: 'bndy-venues',
+      Key: { id: venueId }
+    }).promise();
+
+    console.log(`[Venues] MCP: Venue ${venueId} deleted successfully`);
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        message: 'Venue deleted successfully',
+        id: venueId
+      })
+    };
+  } catch (error) {
+    console.error('[ERROR] MCP venue deletion failed:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+}
+
+// POST /api/venues/:id/enrich - Geocode/backfill an existing venue (NO AUTH, MCP-style)
+// Used to add google_place_id + coords to legacy venues that lack them.
+// Prevents duplicates when source-runner runs against venues without place_id (ADR-018).
+async function handleEnrichVenue(venueId, body, event) {
+  console.log(`[Venues] Enrich request for venue: ${venueId}`);
+
+  const force = body?.force === true;
+
+  try {
+    // Step 1: Load the venue
+    const venueResult = await dynamodb.get({
+      TableName: 'bndy-venues',
+      Key: { id: venueId }
+    }).promise();
+
+    if (!venueResult.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ error: 'Venue not found', id: venueId })
+      };
+    }
+
+    const venue = venueResult.Item;
+    console.log(`[Venues] Found venue: "${venue.name}", place_id: ${venue.google_place_id || 'MISSING'}`);
+
+    // Step 2: If already has google_place_id, return unchanged unless force=true
+    if (venue.google_place_id && !force) {
+      console.log(`[Venues] Venue already has place_id, returning unchanged (use force=true to re-geocode)`);
+      return {
+        statusCode: 200,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({
+          action: 'skipped',
+          reason: 'Venue already has google_place_id',
+          venue: formatVenueResponse(venue),
+          hint: 'Use force=true to re-geocode anyway'
+        })
+      };
+    }
+
+    // Step 3: Geocode using findPlaceFromGoogle
+    // Prefer: name + city, fallback to name + address
+    const searchCity = venue.city || '';
+    const searchAddress = venue.address || '';
+    const searchQuery = searchCity || searchAddress;
+
+    if (!venue.name || !searchQuery) {
+      console.log(`[Venues] Cannot geocode: missing name or city/address`);
+      return {
+        statusCode: 422,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({
+          needsReview: true,
+          error: 'Cannot geocode - venue is missing name or city/address',
+          venue: formatVenueResponse(venue)
+        })
+      };
+    }
+
+    console.log(`[Venues] Geocoding: "${venue.name}" in "${searchQuery}"`);
+    const placeData = await findPlaceFromGoogle(venue.name, searchQuery);
+
+    if (!placeData) {
+      console.log(`[Venues] Geocode returned no results for: "${venue.name}" in "${searchQuery}"`);
+      return {
+        statusCode: 422,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({
+          needsReview: true,
+          error: 'Geocode returned no results - venue needs manual review',
+          searchedFor: { name: venue.name, location: searchQuery },
+          venue: formatVenueResponse(venue)
+        })
+      };
+    }
+
+    console.log(`[Venues] Geocode hit: place_id=${placeData.placeId}, coords=(${placeData.latitude}, ${placeData.longitude})`);
+
+    // Step 4: Update the venue with geocoded data
+    const now = new Date().toISOString();
+    const updateParams = {
+      TableName: 'bndy-venues',
+      Key: { id: venueId },
+      UpdateExpression: 'SET google_place_id = :placeId, latitude = :lat, longitude = :lng, location_object = :loc, updated_at = :now',
+      ExpressionAttributeValues: {
+        ':placeId': placeData.placeId,
+        ':lat': placeData.latitude,
+        ':lng': placeData.longitude,
+        ':loc': { lat: placeData.latitude, lng: placeData.longitude },
+        ':now': now
+      },
+      ReturnValues: 'ALL_NEW'
+    };
+
+    // Also update address if it was missing
+    if (!venue.address && placeData.address) {
+      updateParams.UpdateExpression += ', address = :address';
+      updateParams.ExpressionAttributeValues[':address'] = placeData.address;
+    }
+
+    const updateResult = await dynamodb.update(updateParams).promise();
+    const updatedVenue = updateResult.Attributes;
+
+    console.log(`[Venues] Successfully enriched venue: ${venueId}`);
+
+    // Step 5: Optionally trigger venue-enrichment-lambda for socials (async, non-blocking)
+    try {
+      await triggerVenueEnrichment(venueId);
+    } catch (enrichErr) {
+      console.error(`[Venues] Enrichment lambda trigger failed (non-fatal):`, enrichErr.message);
+    }
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        action: 'enriched',
+        geocodedPlaceId: placeData.placeId,
+        venue: formatVenueResponse(updatedVenue)
+      })
+    };
+
+  } catch (error) {
+    console.error('[ERROR] Venue enrichment failed:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'Internal server error', details: error.message })
+    };
+  }
+}
+
+// Helper to format venue response consistently
+function formatVenueResponse(venue) {
+  return {
+    id: venue.id,
+    name: venue.name,
+    address: venue.address || '',
+    city: venue.city || '',
+    postcode: venue.postcode || '',
+    latitude: venue.latitude || null,
+    longitude: venue.longitude || null,
+    googlePlaceId: venue.google_place_id || null,
+    website: venue.website || '',
+    validated: venue.validated || false,
+    externalIds: venue.external_ids || []
+  };
+}
+
 async function handleFindOrCreateVenue(venueData, event) {
   console.log('[Venues] Venues Lambda: Find-or-create venue with deduplication');
+  // ADR-021: canCreate defaults true (backwards compat); runner passes false to prevent auto-create
+  const canCreate = venueData.canCreate !== false;
   console.log('[Venues] Input:', {
     name: venueData.name,
     googlePlaceId: venueData.googlePlaceId,
     address: venueData.address,
     latitude: venueData.latitude,
-    longitude: venueData.longitude
+    longitude: venueData.longitude,
+    canCreate
   });
 
   // Scan all venues for matching
@@ -1147,7 +1355,127 @@ async function handleFindOrCreateVenue(venueData, event) {
       }
     }
 
-    // === LEVEL 4: Create new venue (no match found) ===
+    // === LEVEL 3.5: Auto-geocode if no googlePlaceId provided (ADR-018) ===
+    // Before creating, attempt to resolve place_id via Google
+    // This prevents creating venues with empty place_id and lat/lng=0
+    if (!venueData.googlePlaceId && venueData.name && venueData.city) {
+      console.log('[Venues] No googlePlaceId provided - attempting geocode via Google Places');
+
+      try {
+        const placeData = await findPlaceFromGoogle(venueData.name, venueData.city);
+
+        if (placeData) {
+          console.log(`[Venues] Geocoded to place_id: ${placeData.placeId}`);
+
+          // Check if this place_id already exists in our database (re-run L1 check)
+          const googlePlaceMatch = existingVenues.find(
+            (v) => v.google_place_id === placeData.placeId
+          );
+
+          if (googlePlaceMatch) {
+            console.log('[SUCCESS] LEVEL 3.5 MATCH: Geocoded place_id matched existing venue');
+
+            // Merge incoming externalIds into existing venue
+            const mergedExternalIds = mergeExternalIds(
+              googlePlaceMatch.external_ids || [],
+              venueData.externalIds || []
+            );
+
+            if (venueData.externalIds && venueData.externalIds.length > 0) {
+              console.log(`[Venues] Merging ${venueData.externalIds.length} externalIds into matched venue`);
+              await dynamodb
+                .update({
+                  TableName: 'bndy-venues',
+                  Key: { id: googlePlaceMatch.id },
+                  UpdateExpression: 'SET external_ids = :extIds, updated_at = :now',
+                  ExpressionAttributeValues: {
+                    ':extIds': mergedExternalIds,
+                    ':now': new Date().toISOString(),
+                  },
+                })
+                .promise();
+            }
+
+            const formattedVenue = {
+              id: googlePlaceMatch.id,
+              name: googlePlaceMatch.name,
+              address: googlePlaceMatch.address,
+              latitude: googlePlaceMatch.latitude,
+              longitude: googlePlaceMatch.longitude,
+              location: googlePlaceMatch.location_object || {
+                lat: googlePlaceMatch.latitude,
+                lng: googlePlaceMatch.longitude,
+              },
+              googlePlaceId: googlePlaceMatch.google_place_id,
+              validated: googlePlaceMatch.validated,
+              externalIds: mergedExternalIds,
+              matchConfidence: 100,
+              matchMethod: 'google_place_id',
+            };
+            return {
+              statusCode: 200,
+              headers: getCorsHeaders(event),
+              body: JSON.stringify(formattedVenue),
+            };
+          }
+
+          // No existing match - enrich venueData with geocoded info for L4 creation
+          venueData.googlePlaceId = placeData.placeId;
+          venueData.latitude = placeData.latitude;
+          venueData.longitude = placeData.longitude;
+          venueData.address = venueData.address || placeData.address;
+          console.log('[Venues] Enriched venueData with geocoded place_id and coords');
+        } else {
+          // Google found nothing - refuse to create placeless venue (ADR-018 invariant)
+          console.log('[REJECT] Cannot geocode venue - refusing to create placeless venue');
+          return {
+            statusCode: 422,
+            headers: getCorsHeaders(event),
+            body: JSON.stringify({
+              error: 'Could not geocode venue - Google Places returned no results',
+              needsReview: true,
+              providedName: venueData.name,
+              providedCity: venueData.city,
+            }),
+          };
+        }
+      } catch (error) {
+        console.error('[ERROR] Geocode failed:', error.message);
+        // On geocode error, also refuse to create (fail safe)
+        return {
+          statusCode: 422,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({
+            error: 'Geocode service unavailable - cannot verify venue identity',
+            needsReview: true,
+          }),
+        };
+      }
+    }
+
+    // === LEVEL 4: Create new venue (with guaranteed place_id from geocode or caller) ===
+    // At this point venueData.googlePlaceId is either:
+    // - provided by caller directly, OR
+    // - populated by L3.5 geocode above
+    // If neither and we have name+city, L3.5 would have returned 422
+
+    // ADR-021: If canCreate=false, return review instead of creating
+    // Runner passes canCreate:false → venues need human validation before entry
+    if (!canCreate) {
+      console.log('[REVIEW] canCreate=false - returning for review instead of creating');
+      return {
+        statusCode: 200,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({
+          action: 'review',
+          reason: 'likely-new',
+          queryName: venueData.name,
+          queryCity: venueData.city,
+          candidates: [] // No plausible match found
+        })
+      };
+    }
+
     console.log('[NEW] LEVEL 4: No match found - creating new venue');
 
     const now = new Date().toISOString();
