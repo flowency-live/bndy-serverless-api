@@ -452,6 +452,18 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues/{id}
             Method: DELETE
+        DeleteVenueMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{id}/mcp
+            Method: DELETE
+        EnrichVenueMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{id}/enrich
+            Method: POST
         GetVenueByExternalId:
           Type: HttpApi
           Properties:
