@@ -363,13 +363,42 @@ async function handleSearchFestivals(deps, event) {
     expressionAttributeValues[':dateTo'] = dateTo;
   }
 
-  const result = await dynamodb.scan({
-    TableName: FESTIVALS_TABLE,
-    FilterExpression: filterExpressions.join(' AND '),
-    ExpressionAttributeValues: expressionAttributeValues
-  }).promise();
+  console.log('[FESTIVALS_SEARCH] DEBUG v2 - Scanning with:', {
+    table: FESTIVALS_TABLE,
+    filter: filterExpressions.join(' AND '),
+    values: expressionAttributeValues,
+    timestamp: new Date().toISOString()
+  });
 
-  let festivals = result.Items || [];
+  // Paginated scan to get all festivals
+  let festivals = [];
+  let lastEvaluatedKey = undefined;
+  let totalScanned = 0;
+
+  do {
+    const params = {
+      TableName: FESTIVALS_TABLE,
+      FilterExpression: filterExpressions.join(' AND '),
+      ExpressionAttributeValues: expressionAttributeValues
+    };
+    if (lastEvaluatedKey) {
+      params.ExclusiveStartKey = lastEvaluatedKey;
+    }
+
+    const result = await dynamodb.scan(params).promise();
+    totalScanned += result.ScannedCount || 0;
+
+    if (result.Items && result.Items.length > 0) {
+      festivals = festivals.concat(result.Items);
+    }
+
+    lastEvaluatedKey = result.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  console.log('[FESTIVALS_SEARCH] Scan complete:', {
+    festivalCount: festivals.length,
+    totalScanned
+  });
 
   // Filter by name (case-insensitive contains)
   if (name) {
@@ -420,13 +449,28 @@ async function handleGetPublicFestivals(deps, event) {
     expressionAttributeValues[':endDate'] = endDate;
   }
 
-  const result = await dynamodb.scan({
-    TableName: FESTIVALS_TABLE,
-    FilterExpression: filterExpressions.join(' AND '),
-    ExpressionAttributeValues: expressionAttributeValues
-  }).promise();
+  // Paginated scan to get all public festivals
+  let allItems = [];
+  let lastEvaluatedKey = undefined;
 
-  const festivals = (result.Items || []).map(f => ({
+  do {
+    const params = {
+      TableName: FESTIVALS_TABLE,
+      FilterExpression: filterExpressions.join(' AND '),
+      ExpressionAttributeValues: expressionAttributeValues
+    };
+    if (lastEvaluatedKey) {
+      params.ExclusiveStartKey = lastEvaluatedKey;
+    }
+
+    const result = await dynamodb.scan(params).promise();
+    if (result.Items && result.Items.length > 0) {
+      allItems = allItems.concat(result.Items);
+    }
+    lastEvaluatedKey = result.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  const festivals = allItems.map(f => ({
     id: f.id,
     slug: f.slug,
     name: f.name,
