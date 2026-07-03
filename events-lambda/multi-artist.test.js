@@ -30,6 +30,19 @@ jest.mock('aws-sdk', () => ({
       put: (params) => ({ promise: () => mockDynamoDB.put(params) }),
       scan: (params) => ({ promise: () => mockDynamoDB.scan(params) }),
       get: (params) => ({ promise: () => mockDynamoDB.get(params) }),
+      batchGet: (params) => ({
+        promise: async () => {
+          const Responses = {};
+          for (const [table, spec] of Object.entries(params.RequestItems)) {
+            Responses[table] = [];
+            for (const key of spec.Keys) {
+              const r = await mockDynamoDB.get({ TableName: table, Key: key });
+              if (r && r.Item) Responses[table].push(r.Item);
+            }
+          }
+          return { Responses };
+        }
+      }),
       update: (params) => ({ promise: () => mockDynamoDB.update(params) }),
       delete: (params) => ({ promise: () => mockDynamoDB.delete(params) })
     }))

@@ -9,6 +9,8 @@ const { normalizeForSearch, calculateSimilarity } = require('../lib/fuzzy-matche
 const { computeGeohashFields, cascadeLocationToEvents } = require('../lib/geohash');
 const { findPlaceFromGoogle } = require('../lib/google-places');
 const { formatVenueResponse, triggerVenueEnrichment } = require('../lib/venue-deduplication');
+const { jsonResponse } = require('../lib/http-response');
+const { scanAll } = require('../lib/scan-all');
 
 /**
  * GET /api/venues - Get all venues with optional search
@@ -26,10 +28,10 @@ async function handleGetAllVenues(deps, event) {
   };
 
   try {
-    const result = await dynamodb.scan(params).promise();
+    const allItems = await scanAll(dynamodb, params);
 
     // Filter venues with valid coordinates (like the PostgreSQL query)
-    let validVenues = result.Items.filter(venue =>
+    let validVenues = allItems.filter(venue =>
       venue.latitude && venue.longitude &&
       venue.latitude !== 0 && venue.longitude !== 0
     );
@@ -57,32 +59,10 @@ async function handleGetAllVenues(deps, event) {
       console.log(`[Venues] Venues Lambda: Search for "${searchTerm}" returned ${validVenues.length} results`);
     }
 
-    // Get event counts for all venues in parallel
-    const eventCountPromises = validVenues.map(async (venue) => {
-      try {
-        // Query events table using venueId-date-index to count events
-        const eventCountResult = await dynamodb.query({
-          TableName: 'bndy-events',
-          IndexName: 'venueId-date-index',
-          KeyConditionExpression: 'venueId = :venueId',
-          ExpressionAttributeValues: {
-            ':venueId': venue.id
-          },
-          Select: 'COUNT'
-        }).promise();
-
-        return { venueId: venue.id, count: eventCountResult.Count || 0 };
-      } catch (error) {
-        console.error(`Error counting events for venue ${venue.id}:`, error);
-        return { venueId: venue.id, count: 0 };
-      }
-    });
-
-    const eventCounts = await Promise.all(eventCountPromises);
-    const eventCountMap = eventCounts.reduce((map, { venueId, count }) => {
-      map[venueId] = count;
-      return map;
-    }, {});
+    // NOTE: per-venue event COUNT queries removed (N+1 - one query per venue
+    // per request; measured 10.8s at 1,417 venues). No consumer reads eventCount
+    // from this endpoint. If a count is ever needed, maintain a counter
+    // attribute on the venue at event create/delete.
 
     // Transform to match expected API format
     const formattedVenues = validVenues.map(venue => ({
@@ -107,21 +87,18 @@ async function handleGetAllVenues(deps, event) {
       standardTicketInformation: venue.standard_ticket_information || '',
       standardTicketUrl: venue.standard_ticket_url || '',
       enrichment_status: venue.enrichment_status,
-      enrichment_data: venue.enrichment_data,
       enrichment_date: venue.enrichment_date,
       ai_created: venue.ai_created,
       needs_review: venue.needs_review,
-      created_source: venue.created_source,
-      eventCount: eventCountMap[venue.id] || 0
+      created_source: venue.created_source
     }));
 
-    console.log(`[Venues] Venues Lambda: Served ${formattedVenues.length} venues (${result.Items.length} total in DB)`);
+    console.log(`[Venues] Venues Lambda: Served ${formattedVenues.length} venues (${allItems.length} total in DB)`);
 
-    return {
-      statusCode: 200,
-      headers: getCorsHeaders(event),
-      body: JSON.stringify(formattedVenues)
-    };
+    return jsonResponse(event, 200, formattedVenues, {
+      corsHeaders: getCorsHeaders(event),
+      cacheControl: 'public, max-age=60'
+    });
   } catch (error) {
     console.error('[ERROR] DynamoDB scan failed:', error);
     throw error;
@@ -378,13 +355,13 @@ async function handleGetVenueByExternalId(deps, event) {
   }
 
   try {
-    // Scan and filter for matching externalId
-    const result = await dynamodb.scan({
+    // Scan (fully paginated) and filter for matching externalId
+    const allVenueItems = await scanAll(dynamodb, {
       TableName: 'bndy-venues'
-    }).promise();
+    });
 
     // Find venue with matching externalId
-    const matchingVenue = result.Items.find(venue => {
+    const matchingVenue = allVenueItems.find(venue => {
       const externalIds = venue.external_ids || [];
       return externalIds.some(ext => ext.source === source && ext.id === externalId);
     });

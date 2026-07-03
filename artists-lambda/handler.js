@@ -6,9 +6,14 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const https = require('https');
 
-const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
+// Keep-alive agent: SDK v2 opens a new TLS connection per DynamoDB call by
+// default; reusing connections saves ~10-50ms per call on busy handlers.
+const keepAliveAgent = new (require('https').Agent)({ keepAlive: true });
+const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2', httpOptions: { agent: keepAliveAgent } });
 const ssm = new AWS.SSM({ region: 'eu-west-2' });
 const s3 = new AWS.S3({ region: 'eu-west-2' });
+const { jsonResponse } = require('./lib/http-response');
+const { scanAll } = require('./lib/scan-all');
 
 // Configuration
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
@@ -303,6 +308,23 @@ const requireAuth = async (event) => {
   }
 };
 
+/**
+ * Require platform admin authentication
+ * Returns { user } on success, { error, statusCode } on failure
+ */
+const requirePlatformAdmin = async (event) => {
+  const authResult = await requireAuth(event);
+  if (authResult.error) {
+    return { error: authResult.error, statusCode: 401 };
+  }
+
+  if (!authResult.user.platformAdmin) {
+    return { error: 'Platform admin access required', statusCode: 403 };
+  }
+
+  return authResult;
+};
+
 exports.handler = async (event, context) => {
   // Store event for CORS headers
   currentEvent = event;
@@ -322,7 +344,7 @@ exports.handler = async (event, context) => {
   try {
     // Route requests
     if (method === 'GET' && path === '/api/artists') {
-      return await handleGetAllArtists();
+      return await handleGetAllArtists(event);
     }
 
     // External ID lookup endpoint
@@ -369,6 +391,29 @@ exports.handler = async (event, context) => {
       return await handleCreateCommunityArtist(event);
     }
 
+    // Find-or-create artist (public, no auth) - server-side resolution gate (ADR-014)
+    if (method === 'POST' && path === '/api/artists/find-or-create') {
+      return await handleFindOrCreateArtist(event);
+    }
+
+    // Acts CRUD routes - #60 Acts Model
+    // These must come before the generic PUT/DELETE routes
+    if (method === 'POST' && path.includes('/acts') && event.pathParameters?.id) {
+      return await handleCreateAct(event);
+    }
+
+    if (method === 'PUT' && path.includes('/acts/') && path.includes('/default')) {
+      return await handleSetDefaultAct(event);
+    }
+
+    if (method === 'PUT' && path.includes('/acts/') && event.pathParameters?.actId) {
+      return await handleUpdateAct(event);
+    }
+
+    if (method === 'DELETE' && path.includes('/acts/') && event.pathParameters?.actId) {
+      return await handleDeleteAct(event);
+    }
+
     if (method === 'PUT' && event.pathParameters?.id) {
       // Check if this is an MCP update request (public, no auth)
       if (path.includes('/mcp')) {
@@ -378,6 +423,10 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'DELETE' && event.pathParameters?.id) {
+      // Check if this is an MCP delete request (public, no auth)
+      if (path.includes('/mcp')) {
+        return await handleMCPDeleteArtist(event.pathParameters.id);
+      }
       return await handleDeleteArtist(event.pathParameters.id);
     }
 
@@ -397,12 +446,12 @@ exports.handler = async (event, context) => {
   }
 };
 
-async function handleGetAllArtists() {
+async function handleGetAllArtists(event) {
   console.log(' Artists Lambda: Scanning all artists from DynamoDB...');
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
+    ProjectionExpression: 'id, #name, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
@@ -411,10 +460,10 @@ async function handleGetAllArtists() {
   };
 
   try {
-    const result = await dynamodb.scan(params).promise();
+    const allItems = await scanAll(dynamodb, params);
 
     // Transform to match expected API format
-    const formattedArtists = result.Items.map(artist => ({
+    const formattedArtists = allItems.map(artist => ({
       id: artist.id,
       name: artist.name,
       artist_type: artist.artist_type || null,
@@ -451,14 +500,10 @@ async function handleGetAllArtists() {
 
     console.log(` Artists Lambda: Served ${formattedArtists.length} artists`);
 
-    return {
-      statusCode: 200,
-      headers: {
-        ...getCorsHeaders(),
-        'Cache-Control': 'public, max-age=300'
-      },
-      body: JSON.stringify(formattedArtists)
-    };
+    return jsonResponse(event, 200, formattedArtists, {
+      corsHeaders: getCorsHeaders(),
+      cacheControl: 'public, max-age=300'
+    });
   } catch (error) {
     console.error(' DynamoDB scan failed:', error);
     throw error;
@@ -519,6 +564,8 @@ async function handleGetArtistById(artistId) {
       ai_created: result.Item.ai_created || false,
       needs_review: result.Item.needs_review !== undefined ? result.Item.needs_review : null,
       external_ids: result.Item.external_ids || [],
+      actsEnabled: result.Item.actsEnabled || false,
+      acts: result.Item.acts || [],
       createdAt: result.Item.createdAt,
       updatedAt: result.Item.updatedAt
     };
@@ -553,13 +600,13 @@ async function handleGetArtistByExternalId(event) {
   }
 
   try {
-    // Scan and filter for matching externalId
-    const result = await dynamodb.scan({
+    // Scan (fully paginated) and filter for matching externalId
+    const allArtistItems = await scanAll(dynamodb, {
       TableName: 'bndy-artists'
-    }).promise();
+    });
 
     // Find artist with matching externalId
-    const matchingArtist = result.Items.find(artist => {
+    const matchingArtist = allArtistItems.find(artist => {
       const externalIds = artist.external_ids || [];
       return externalIds.some(ext => ext.source === source && ext.id === externalId);
     });
@@ -1055,6 +1102,18 @@ async function handleUpdateArtist(event) {
     expressionAttributeValues[':source'] = artistData.source;
   }
 
+  // Acts model fields (#60) - actsEnabled toggle
+  if (artistData.actsEnabled !== undefined) {
+    updateParts.push('actsEnabled = :actsEnabled');
+    expressionAttributeValues[':actsEnabled'] = artistData.actsEnabled;
+  }
+
+  // Acts array - typically managed via dedicated acts routes, but allow direct update
+  if (artistData.acts !== undefined) {
+    updateParts.push('acts = :acts');
+    expressionAttributeValues[':acts'] = artistData.acts || [];
+  }
+
   const params = {
     TableName: 'bndy-artists',
     Key: { id: artistId },
@@ -1262,6 +1321,73 @@ async function handleDeleteArtist(artistId) {
   } catch (error) {
     console.error(' Artist deletion failed:', error);
     throw error;
+  }
+}
+
+// DELETE /api/artists/:id/mcp - Delete artist via MCP (NO AUTH)
+// Allows deletion of ANY artist record via MCP
+async function handleMCPDeleteArtist(artistId) {
+  console.log(` Artists Lambda MCP: Delete request for artist: ${artistId}`);
+
+  try {
+    // Step 1: Fetch artist to verify it exists
+    const artistResult = await dynamodb.get({
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
+    }).promise();
+
+    if (!artistResult.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Artist not found', id: artistId })
+      };
+    }
+
+    // Step 2: Delete memberships (cascade)
+    const membershipQueryParams = {
+      TableName: MEMBERSHIPS_TABLE,
+      IndexName: 'artist_id-index',
+      KeyConditionExpression: 'artist_id = :artistId',
+      ExpressionAttributeValues: {
+        ':artistId': artistId
+      }
+    };
+
+    const membershipsResult = await dynamodb.query(membershipQueryParams).promise();
+    console.log(` Found ${membershipsResult.Items.length} memberships to delete`);
+
+    for (const membership of membershipsResult.Items) {
+      await dynamodb.delete({
+        TableName: MEMBERSHIPS_TABLE,
+        Key: { membership_id: membership.membership_id }
+      }).promise();
+    }
+
+    // Step 4: Delete the artist record
+    await dynamodb.delete({
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
+    }).promise();
+
+    console.log(` MCP: Artist ${artistId} deleted successfully`);
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        message: 'Artist deleted successfully',
+        id: artistId,
+        cascadedMemberships: membershipsResult.Items.length
+      })
+    };
+  } catch (error) {
+    console.error(' MCP artist deletion failed:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
   }
 }
 
@@ -1551,6 +1677,987 @@ async function handleCreateCommunityArtist(event) {
     return {
       statusCode: 500,
       headers: getCommunityHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+}
+
+// ============================================================================
+// FIND-OR-CREATE ARTIST (Public, No Auth) - server-side artist resolution
+// ADR-014 gate: normalise before scoring; require a shared significant token (no
+// "Adam Forman" -> "Adam Morgan" false positives); region is a SIGNAL not a filter;
+// 60-90% -> review; genuine no-hit -> create (needs_review:true). One place for
+// artist dedup, shared by source-runner + MCP + the planned form.
+// ============================================================================
+
+// Leading articles to strip for matching (common in band names)
+const LEADING_ARTICLES = ['the ', 'a ', 'an '];
+// Trailing suffixes to strip (act type descriptors, not part of core identity)
+// ADR-023: Order by length DESC - check compound suffixes before simple ones
+// e.g., "acoustic duo" must match before "duo" alone
+const TRAILING_SUFFIXES = [
+  ' acoustic duo',   // Most specific compound suffixes first
+  ' acoustic trio',
+  ' acoustic band',
+  ' acoustic show',
+  ' party band',
+  ' rock band',
+  ' cover band',
+  ' band',           // Simple suffixes after compounds
+  ' duo',
+  ' trio',
+  ' live',
+  ' acoustic',
+  ' show',
+  ' experience',
+  ' collective',
+  ' solo',
+];
+
+// Strip leading article from name (returns name without article, or original if no match)
+function stripLeadingArticle(name) {
+  const lower = (name || '').toLowerCase().trim();
+  for (const article of LEADING_ARTICLES) {
+    if (lower.startsWith(article)) {
+      return name.trim().substring(article.length);
+    }
+  }
+  return name;
+}
+
+// Strip trailing suffix from name
+function stripTrailingSuffix(name) {
+  const lower = (name || '').toLowerCase();
+  for (const suffix of TRAILING_SUFFIXES) {
+    if (lower.endsWith(suffix)) {
+      return name.slice(0, -suffix.length).trim();
+    }
+  }
+  return name;
+}
+
+/**
+ * Extract the act qualifier from a billing string (ADR-023).
+ * Returns { core, act } where:
+ * - core is the artist name with act qualifier stripped
+ * - act is the qualifier (e.g., "Acoustic Duo", "Band") or null if none
+ *
+ * Example: "The Vanz Acoustic Duo" → { core: "The Vanz", act: "Acoustic Duo" }
+ */
+function extractActQualifier(name) {
+  const trimmed = (name || '').trim();
+  const lower = trimmed.toLowerCase();
+
+  for (const suffix of TRAILING_SUFFIXES) {
+    if (lower.endsWith(suffix)) {
+      return {
+        core: trimmed.slice(0, -suffix.length).trim(),
+        act: trimmed.slice(-suffix.length + 1).trim() // +1 to skip leading space
+      };
+    }
+  }
+  return { core: trimmed, act: null };
+}
+
+// Slug-strength normalisation (ADR-013): strip articles/suffixes/apostrophes/punctuation/spacing/case.
+// "The Magnetic Jellyfish" → "magneticjellyfish" (same as "Magnetic Jellyfish")
+// "Circa 81 Band" → "circa81" (same as "Circa81")
+function artistSlugNormalise(raw) {
+  let name = (raw || '').toLowerCase();
+  // Strip leading article
+  for (const article of LEADING_ARTICLES) {
+    if (name.startsWith(article)) {
+      name = name.substring(article.length);
+      break;
+    }
+  }
+  // Strip trailing suffix
+  for (const suffix of TRAILING_SUFFIXES) {
+    if (name.endsWith(suffix)) {
+      name = name.slice(0, -suffix.length);
+      break;
+    }
+  }
+  // Remove apostrophes and non-alphanumeric
+  return name
+    .replace(/[''‚‛'`]/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+// Significant tokens: alphanumeric words of length >= 4 (ignore short/common words).
+function significantTokens(raw) {
+  return (raw || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length >= 4);
+}
+
+// Levenshtein similarity percentage between two strings.
+function similarityPct(a, b) {
+  if (!a.length && !b.length) return 100;
+  if (!a.length || !b.length) return 0;
+  const dist = levenshteinDistance(a, b);
+  const maxLen = Math.max(a.length, b.length);
+  return ((maxLen - dist) / maxLen) * 100;
+}
+
+// =============================================================================
+// BATCH 3: Footprint scoring infrastructure (ADR-021 rev.3)
+// =============================================================================
+
+/**
+ * Get an artist's gig-geography footprint.
+ * Returns a map of regions → weight (based on event count/recency).
+ *
+ * Per ADR-021 spec: "put it behind a getArtistFootprint(artistId) interface
+ * so the source swaps to the knowledge layer later without touching the resolver"
+ *
+ * @param {string} artistId - The artist ID to get footprint for
+ * @param {Map<string, string>} [venueRegionCache] - Optional cache for venue→region lookups (N+1 fix)
+ * @returns {Promise<{regions: Map<string, number>, totalEvents: number}>}
+ */
+async function getArtistFootprint(artistId, venueRegionCache) {
+  const footprint = { regions: new Map(), totalEvents: 0 };
+  // Use provided cache or create local one (cache is request-scoped, not cross-request)
+  const cache = venueRegionCache || new Map();
+
+  try {
+    // Query events by artistId (limit to last 50 for efficiency)
+    const eventsResult = await dynamodb.query({
+      TableName: 'bndy-events',
+      IndexName: 'artistId-index',
+      KeyConditionExpression: 'artistId = :artistId',
+      ExpressionAttributeValues: { ':artistId': artistId },
+      ProjectionExpression: 'id, venueId, #date',
+      ExpressionAttributeNames: { '#date': 'date' },
+      Limit: 50,
+      ScanIndexForward: false // Most recent first
+    }).promise();
+
+    const events = eventsResult.Items || [];
+    footprint.totalEvents = events.length;
+
+    if (events.length === 0) {
+      return footprint;
+    }
+
+    // Get unique venueIds
+    const venueIds = [...new Set(events.map(e => e.venueId).filter(Boolean))];
+
+    // Fetch venues for regions (with cache to avoid N+1 across candidates)
+    for (const venueId of venueIds) {
+      let region = cache.get(venueId);
+
+      if (!region) {
+        try {
+          const venueResult = await dynamodb.get({
+            TableName: 'bndy-venues',
+            Key: { id: venueId },
+            ProjectionExpression: 'id, city, #region',
+            ExpressionAttributeNames: { '#region': 'region' }
+          }).promise();
+
+          if (venueResult.Item) {
+            region = venueResult.Item.region || venueResult.Item.city || 'unknown';
+            cache.set(venueId, region);
+          }
+        } catch (err) {
+          console.warn(`[footprint] Failed to fetch venue ${venueId}:`, err.message);
+        }
+      }
+
+      if (region) {
+        const currentWeight = footprint.regions.get(region) || 0;
+        // Count events at this venue's region
+        const eventsAtVenue = events.filter(e => e.venueId === venueId).length;
+        footprint.regions.set(region, currentWeight + eventsAtVenue);
+      }
+    }
+  } catch (err) {
+    console.warn(`[footprint] Failed to query events for artist ${artistId}:`, err.message);
+  }
+
+  return footprint;
+}
+
+/**
+ * Score how well a venue region matches an artist's footprint.
+ * Returns 0-100 score.
+ *
+ * Per ADR-021: "Score the listing's venueRegion by containment/proximity to that set:
+ * same locality ≈ 1.0; same county/metro ≈ 0.7; adjacent region ≈ 0.4; far ≈ 0.0"
+ *
+ * @param {string} venueRegion - The listing's venue region
+ * @param {{regions: Map<string, number>, totalEvents: number}} footprint - Artist footprint
+ * @returns {number} Score 0-100
+ */
+function scoreFootprintMatch(venueRegion, footprint) {
+  if (!venueRegion || footprint.totalEvents === 0) {
+    return 0; // No footprint → score 0 (cannot win on footprint, which is correct)
+  }
+
+  const normalised = venueRegion.toLowerCase().trim();
+
+  // Check for exact region match
+  for (const [region, weight] of footprint.regions) {
+    if (region.toLowerCase() === normalised) {
+      // Same region = high score (proportional to how dominant this region is)
+      const dominance = weight / footprint.totalEvents;
+      return Math.round(100 * dominance); // 100 if all events in this region
+    }
+  }
+
+  // Check for partial/adjacent region match
+  // Simple heuristic: if the region name contains or is contained by a footprint region
+  for (const [region] of footprint.regions) {
+    const regionLower = region.toLowerCase();
+    if (regionLower.includes(normalised) || normalised.includes(regionLower)) {
+      return 70; // Adjacent/overlapping region
+    }
+  }
+
+  // TODO: Add proper geo-proximity scoring (distance between regions)
+  // For now, any footprint with no match scores 0
+  return 0;
+}
+
+/**
+ * Calculate composite score for an artist candidate.
+ * Weighted per ADR-021 spec:
+ * - Footprint: 45%
+ * - Social: 25% (when present)
+ * - Locality: 15%
+ * - Co-acts: 10% (not implemented yet)
+ * - Genre: 5% (not implemented yet)
+ *
+ * Note: Name similarity is NOT a scored signal - only for candidate fetch.
+ */
+function calculateCompositeScore(candidate, venueRegion, footprint) {
+  // Target weights per ADR-021 spec (when all signals are implemented):
+  // - Footprint: 45%, Social: 25%, Locality: 15%, Co-acts: 10%, Genre: 5%
+  //
+  // Currently implemented: footprint + locality = 60%
+  // To make scoring meaningful now, scale up to 100% proportionally.
+  // This maintains relative weights (footprint:locality = 3:1) while filling the gap.
+  //
+  // Scale factor = 100 / (45 + 15) = 1.667
+  // Effective weights: footprint = 75%, locality = 25%
+
+  const SCALE_FACTOR = 100 / (45 + 15); // = 1.667
+  const weights = {
+    footprint: 0.45 * SCALE_FACTOR, // ~0.75
+    locality: 0.15 * SCALE_FACTOR,  // ~0.25
+  };
+
+  let score = 0;
+
+  // Footprint score (scaled to ~75%)
+  const footprintScore = scoreFootprintMatch(venueRegion, footprint);
+  score += footprintScore * weights.footprint;
+
+  // Locality score (scaled to ~25%) - candidate's stored location vs venue region
+  if (candidate.location && venueRegion) {
+    const locLower = candidate.location.toLowerCase();
+    const venueLower = venueRegion.toLowerCase();
+    if (locLower.includes(venueLower) || venueLower.includes(locLower)) {
+      score += 100 * weights.locality;
+    }
+  }
+
+  // TODO: When social/co-acts/genre are implemented, remove SCALE_FACTOR
+  // and use the original ADR-021 weights.
+
+  return Math.round(score);
+}
+
+// Scoring thresholds
+// Note: With only footprint (75%) + locality (25%) implemented, a perfect footprint
+// match gives 75 points. Thresholds are calibrated to this partial implementation.
+// When social/co-acts/genre are added, recalibrate to ADR-021 spec (90/70).
+const SCORE_THRESHOLD_HIGH = 75; // ≥75 = MATCH (perfect footprint match)
+const SCORE_THRESHOLD_LOW = 50;  // 50-75 = REVIEW
+const MARGIN_THRESHOLD = 10;     // If #2 within 10pts of #1 → REVIEW
+
+async function handleFindOrCreateArtist(event) {
+  console.log(' Artists Lambda: find-or-create artist');
+  const body = JSON.parse(event.body || '{}');
+  // canCreate defaults true (Cowork path); runner passes false
+  // venueRegion is the listing's venue region for footprint scoring (Batch 3)
+  const { name, canCreate = true, venueRegion } = body;
+
+  if (!name || name.trim().length === 0) {
+    return {
+      statusCode: 400,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({ error: 'Artist name is required' })
+    };
+  }
+
+  // ADR-023: Extract act qualifier if present (e.g., "The Vanz Acoustic Duo" → act: "Acoustic Duo")
+  // The act is NOT part of artist identity - resolve the core, return act separately
+  const { core: artistCore, act: extractedAct } = extractActQualifier(name);
+
+  const querySlug = artistSlugNormalise(name);
+  const queryTokens = significantTokens(name);
+
+  // Compute prefixes to search: original + article-stripped + suffix-stripped (bare core)
+  // "The Magnetic Jellyfish" → search "th" AND "ma"
+  // "8Ts Band" → search "8t" (finds "8Ts")
+  // "The Vanz Duo" → search "th" AND "va" (finds "The Vanz" or "Vanz")
+  const prefixes = new Set();
+  const originalPrefix = name.toLowerCase().trim().substring(0, 2);
+  prefixes.add(originalPrefix);
+
+  // Article-stripped: "The X" → search "x" prefix too
+  const strippedArticle = stripLeadingArticle(name);
+  if (strippedArticle !== name && strippedArticle.length >= 2) {
+    prefixes.add(strippedArticle.toLowerCase().substring(0, 2));
+  }
+
+  // Bare-core (suffix-stripped): "X Band" → search core "X" prefix too
+  // Per ADR-021 spec: strip Band/Duo/Trio/Acoustic/Live/Music and search the core
+  const bareCore = stripTrailingSuffix(name);
+  if (bareCore !== name && bareCore.length >= 2) {
+    prefixes.add(bareCore.toLowerCase().substring(0, 2));
+  }
+
+  // Combined: article + suffix stripped ("The X Band" → "X")
+  const bareCoreOfStripped = stripTrailingSuffix(strippedArticle);
+  if (bareCoreOfStripped !== strippedArticle && bareCoreOfStripped.length >= 2) {
+    prefixes.add(bareCoreOfStripped.toLowerCase().substring(0, 2));
+  }
+
+  // Fetch candidates from all prefix partitions, then score with slug-strength
+  // normalisation (catches "Circa81" == "Circa 81" AND "The X" == "X").
+  // NOTE: caps at 500 per prefix; a dedicated slug GSI is the long-term fix for very
+  // high-cardinality prefixes (e.g. "th"). Misses fall through to create + needs_review.
+  let candidates = [];
+  const seenIds = new Set();
+
+  for (const prefix of prefixes) {
+    try {
+      const res = await dynamodb.query({
+        TableName: 'bndy-artists',
+        IndexName: 'name-search-index',
+        KeyConditionExpression: 'name_prefix = :prefix',
+        ExpressionAttributeValues: { ':prefix': prefix },
+        ProjectionExpression: 'id, #name, #location',
+        ExpressionAttributeNames: { '#name': 'name', '#location': 'location' },
+        Limit: 500
+      }).promise();
+
+      // Deduplicate by ID (in case same artist appears in multiple prefixes)
+      for (const item of (res.Items || [])) {
+        if (!seenIds.has(item.id)) {
+          seenIds.add(item.id);
+          candidates.push(item);
+        }
+      }
+    } catch (err) {
+      console.error(`[find-or-create artist] candidate query failed for prefix "${prefix}":`, err.message);
+    }
+  }
+
+  console.log(`[find-or-create artist] Searched ${prefixes.size} prefix(es): ${[...prefixes].join(', ')} -> ${candidates.length} candidates`);
+
+  // Phase 1: Score candidates by name similarity (for candidate filtering)
+  const simScored = candidates
+    .map(a => {
+      const slug = artistSlugNormalise(a.name);
+      const slugEqual = slug === querySlug && querySlug.length > 0;
+      const sim = slugEqual ? 100 : similarityPct(slug, querySlug);
+      const aTokens = significantTokens(a.name);
+      const sharedToken = queryTokens.some(t => aTokens.includes(t));
+      return { id: a.id, name: a.name, location: a.location || '', sim, sharedToken, slugEqual };
+    })
+    .filter(s => s.sim >= 60 || s.slugEqual) // Only consider plausible candidates
+    .sort((x, y) => y.sim - x.sim)
+    .slice(0, 10); // Limit to top 10 for footprint queries
+
+  // Phase 2: If venueRegion provided, use footprint scoring to break ties (ADR-021 Batch 3)
+  let scored = simScored;
+  let usedFootprintScoring = false;
+
+  if (venueRegion && simScored.length > 1) {
+    console.log(`[find-or-create artist] Using footprint scoring with venueRegion="${venueRegion}"`);
+    usedFootprintScoring = true;
+
+    // Shared venue→region cache across candidates (N+1 fix: same venue across artists is only fetched once)
+    const venueRegionCache = new Map();
+
+    // Fetch footprints for top candidates
+    const scoredWithFootprint = [];
+    for (const candidate of simScored) {
+      const footprint = await getArtistFootprint(candidate.id, venueRegionCache);
+      const compositeScore = calculateCompositeScore(candidate, venueRegion, footprint);
+
+      scoredWithFootprint.push({
+        ...candidate,
+        footprintScore: compositeScore,
+        footprintRegions: footprint.totalEvents > 0
+          ? [...footprint.regions.entries()].map(([r, w]) => `${r}(${w})`)
+          : [],
+        totalEvents: footprint.totalEvents
+      });
+    }
+
+    // Re-sort by composite score (footprint-weighted)
+    scored = scoredWithFootprint.sort((x, y) => y.footprintScore - x.footprintScore);
+
+    // Margin guard (ADR-021): if #2 within 10pts of #1 → REVIEW (ambiguous collision)
+    if (scored.length >= 2) {
+      const margin = scored[0].footprintScore - scored[1].footprintScore;
+      if (margin < MARGIN_THRESHOLD) {
+        console.log(`[find-or-create artist] REVIEW "${name}" - margin guard triggered (${margin}pt margin)`);
+        return {
+          statusCode: 200,
+          headers: getCommunityHeaders(),
+          body: JSON.stringify({
+            action: 'review',
+            reason: `Near-tie margin guard: top 2 candidates within ${MARGIN_THRESHOLD}pt (margin=${margin})`,
+            candidates: scored.slice(0, 5).map(s => ({
+              id: s.id, name: s.name, location: s.location,
+              confidence: Math.round(s.footprintScore) / 100,
+              footprintScore: s.footprintScore,
+              footprintRegions: s.footprintRegions,
+              totalEvents: s.totalEvents
+            }))
+          })
+        };
+      }
+    }
+  }
+
+  const best = scored[0];
+
+  // Decision: Confident match using similarity OR footprint score
+  // - With venueRegion (footprint scoring): composite score >= threshold (already past margin guard)
+  // - Without venueRegion: identical slug, OR >=90% similarity AND shared token
+  // KEY: When footprint scoring is used, it SUPERSEDES the slugEqual fast-path.
+  // This ensures same-name bands in different regions don't auto-merge.
+  let isConfidentMatch = false;
+  let matchMethod = '';
+  let matchScore = 0;
+
+  if (usedFootprintScoring && best) {
+    // Footprint scoring supersedes name-based matching
+    // Use footprint score threshold, not slugEqual
+    if (best.footprintScore >= SCORE_THRESHOLD_HIGH) {
+      isConfidentMatch = true;
+      matchMethod = 'footprint';
+      matchScore = best.footprintScore;
+    }
+    // If footprint score is below threshold, fall through to review/no-match
+  } else if (best) {
+    // No footprint scoring - use name-based matching
+    // ADR-021 fallback: Apply margin guard even without venueRegion to prevent
+    // arbitrary matches on same-name collisions (e.g., 3× "Ant Hill Mob").
+    // If multiple candidates have high similarity, REVIEW instead of arbitrary match.
+    if (scored.length >= 2 && best.sim >= 60) {
+      const simMargin = best.sim - scored[1].sim;
+      if (simMargin < MARGIN_THRESHOLD) {
+        // Near-tie on similarity alone - this is likely a same-name collision
+        // Route to REVIEW rather than picking arbitrarily
+        console.log(`[find-or-create artist] REVIEW "${name}" - similarity margin guard (no venueRegion, ${simMargin}pt margin)`);
+        return {
+          statusCode: 200,
+          headers: getCommunityHeaders(),
+          body: JSON.stringify({
+            action: 'review',
+            reason: `Same-name collision detected: top ${scored.length >= 2 ? 2 : 1} candidates within ${MARGIN_THRESHOLD}pt (margin=${simMargin}). Provide venueRegion for footprint disambiguation.`,
+            candidates: scored.slice(0, 5).map(s => ({
+              id: s.id, name: s.name, location: s.location,
+              confidence: Math.round(s.sim) / 100,
+              sharedToken: s.sharedToken
+            }))
+          })
+        };
+      }
+    }
+
+    // Clear winner (sufficient margin over #2) - safe to match
+    if (best.slugEqual) {
+      isConfidentMatch = true;
+      matchMethod = 'normalised_name';
+      matchScore = best.sim;
+    } else if (best.sim >= 90 && best.sharedToken) {
+      isConfidentMatch = true;
+      matchMethod = 'fuzzy_token';
+      matchScore = best.sim;
+    }
+  }
+
+  if (isConfidentMatch) {
+    console.log(`[find-or-create artist] MATCH "${name}" -> "${best.name}" (${matchScore.toFixed(0)}% via ${matchMethod})${extractedAct ? ` + act "${extractedAct}"` : ''}`);
+    return {
+      statusCode: 200,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({
+        action: 'matched',
+        artist: { id: best.id, name: best.name, location: best.location },
+        confidence: Math.round(matchScore) / 100,
+        matchedBy: matchMethod,
+        // ADR-023: If billing string had an act qualifier, return it separately
+        // e.g., "The Vanz Acoustic Duo" → artist: "The Vanz", act: "Acoustic Duo"
+        ...(extractedAct ? { act: extractedAct } : {}),
+        ...(usedFootprintScoring ? { footprintScore: best.footprintScore, footprintRegions: best.footprintRegions } : {})
+      })
+    };
+  }
+
+  // Ambiguous middle: candidates exist but no clear winner
+  // - Without venueRegion: >=60% similarity
+  // - With venueRegion: footprint score 70-90 (SCORE_THRESHOLD_LOW to HIGH)
+  const plausible = usedFootprintScoring
+    ? scored.filter(s => s.footprintScore >= SCORE_THRESHOLD_LOW).slice(0, 5)
+    : scored.filter(s => s.sim >= 60).slice(0, 5);
+
+  if (plausible.length > 0) {
+    const topScore = usedFootprintScoring ? plausible[0].footprintScore : plausible[0].sim;
+    console.log(`[find-or-create artist] REVIEW "${name}" (${plausible.length} candidate(s), top ${topScore.toFixed(0)}%)`);
+    return {
+      statusCode: 200,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({
+        action: 'review',
+        reason: 'Ambiguous artist match - needs human review (ADR-014/ADR-021)',
+        candidates: plausible.map(s => ({
+          id: s.id, name: s.name, location: s.location,
+          confidence: Math.round(usedFootprintScoring ? s.footprintScore : s.sim) / 100,
+          sharedToken: s.sharedToken,
+          ...(usedFootprintScoring ? { footprintScore: s.footprintScore, footprintRegions: s.footprintRegions } : {})
+        }))
+      })
+    };
+  }
+
+  // Genuine no-hit: create OR review based on canCreate flag.
+  // Per ADR-021 spec: runner passes canCreate:false → review (never auto-create).
+  // Cowork/MCP keeps canCreate:true (default) until cutover.
+  if (!canCreate) {
+    console.log(`[find-or-create artist] REVIEW "${name}" (likely-new, canCreate=false)`);
+    return {
+      statusCode: 200,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({
+        action: 'review',
+        reason: 'likely-new',
+        queryName: name,
+        candidates: [] // No plausible candidates
+      })
+    };
+  }
+
+  console.log(`[find-or-create artist] CREATE "${name}" (no plausible match, canCreate=true)`);
+  const created = await handleCreateCommunityArtist(event);
+  try {
+    const parsed = JSON.parse(created.body);
+    return {
+      statusCode: created.statusCode,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({ action: created.statusCode === 201 ? 'created' : 'create_failed', ...parsed })
+    };
+  } catch (e) {
+    return created;
+  }
+}
+
+// ============================================================================
+// ACTS CRUD HANDLERS - #60 Acts Model
+// ============================================================================
+
+/**
+ * Generate a simple unique ID for acts
+ */
+function generateActId() {
+  return 'act_' + crypto.randomBytes(8).toString('hex');
+}
+
+/**
+ * Create a new act for an artist
+ * POST /api/artists/:id/acts
+ */
+async function handleCreateAct(event) {
+  const artistId = event.pathParameters.id;
+
+  console.log(`[ACTS] Creating act for artist: ${artistId}`);
+
+  // Require platform admin auth
+  const authResult = await requirePlatformAdmin(event);
+  if (authResult.error) {
+    return {
+      statusCode: authResult.statusCode || 401,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: authResult.error })
+    };
+  }
+
+  // Parse and validate body
+  let body;
+  try {
+    body = JSON.parse(event.body);
+  } catch (e) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Invalid JSON body' })
+    };
+  }
+
+  if (!body.name || !body.name.trim()) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Act name is required' })
+    };
+  }
+
+  try {
+    // Get current artist
+    const artistResult = await dynamodb.get({
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
+    }).promise();
+
+    if (!artistResult.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Artist not found' })
+      };
+    }
+
+    const currentActs = artistResult.Item.acts || [];
+
+    // Create new act
+    const newAct = {
+      id: generateActId(),
+      name: body.name.trim(),
+      description: body.description?.trim() || null,
+      isDefault: currentActs.length === 0 ? true : (body.isDefault || false)
+    };
+
+    // If this act is default, unset others
+    const updatedActs = newAct.isDefault
+      ? currentActs.map(a => ({ ...a, isDefault: false }))
+      : currentActs;
+
+    updatedActs.push(newAct);
+
+    // Update artist
+    const result = await dynamodb.update({
+      TableName: 'bndy-artists',
+      Key: { id: artistId },
+      UpdateExpression: 'SET acts = :acts, updated_at = :updated_at',
+      ExpressionAttributeValues: {
+        ':acts': updatedActs,
+        ':updated_at': new Date().toISOString()
+      },
+      ReturnValues: 'ALL_NEW'
+    }).promise();
+
+    console.log(`[ACTS] Created act "${newAct.name}" (${newAct.id}) for artist ${artistId}`);
+
+    return {
+      statusCode: 201,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ act: newAct, acts: result.Attributes.acts })
+    };
+  } catch (error) {
+    console.error('[ACTS] Create act error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+}
+
+/**
+ * Update an existing act
+ * PUT /api/artists/:id/acts/:actId
+ */
+async function handleUpdateAct(event) {
+  const artistId = event.pathParameters.id;
+  const actId = event.pathParameters.actId;
+
+  console.log(`[ACTS] Updating act ${actId} for artist ${artistId}`);
+
+  // Require platform admin auth
+  const authResult = await requirePlatformAdmin(event);
+  if (authResult.error) {
+    return {
+      statusCode: authResult.statusCode || 401,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: authResult.error })
+    };
+  }
+
+  // Parse body
+  let body;
+  try {
+    body = JSON.parse(event.body);
+  } catch (e) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Invalid JSON body' })
+    };
+  }
+
+  try {
+    // Get current artist
+    const artistResult = await dynamodb.get({
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
+    }).promise();
+
+    if (!artistResult.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Artist not found' })
+      };
+    }
+
+    const currentActs = artistResult.Item.acts || [];
+    const actIndex = currentActs.findIndex(a => a.id === actId);
+
+    if (actIndex === -1) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Act not found' })
+      };
+    }
+
+    // Update act fields
+    const updatedAct = {
+      ...currentActs[actIndex],
+      name: body.name?.trim() || currentActs[actIndex].name,
+      description: body.description !== undefined ? (body.description?.trim() || null) : currentActs[actIndex].description
+    };
+
+    const updatedActs = [...currentActs];
+    updatedActs[actIndex] = updatedAct;
+
+    // Update artist
+    const result = await dynamodb.update({
+      TableName: 'bndy-artists',
+      Key: { id: artistId },
+      UpdateExpression: 'SET acts = :acts, updated_at = :updated_at',
+      ExpressionAttributeValues: {
+        ':acts': updatedActs,
+        ':updated_at': new Date().toISOString()
+      },
+      ReturnValues: 'ALL_NEW'
+    }).promise();
+
+    console.log(`[ACTS] Updated act ${actId} for artist ${artistId}`);
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ act: updatedAct, acts: result.Attributes.acts })
+    };
+  } catch (error) {
+    console.error('[ACTS] Update act error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+}
+
+/**
+ * Delete an act
+ * DELETE /api/artists/:id/acts/:actId
+ * Blocked if any events reference this actId
+ */
+async function handleDeleteAct(event) {
+  const artistId = event.pathParameters.id;
+  const actId = event.pathParameters.actId;
+
+  console.log(`[ACTS] Deleting act ${actId} for artist ${artistId}`);
+
+  // Require platform admin auth
+  const authResult = await requirePlatformAdmin(event);
+  if (authResult.error) {
+    return {
+      statusCode: authResult.statusCode || 401,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: authResult.error })
+    };
+  }
+
+  try {
+    // Get current artist
+    const artistResult = await dynamodb.get({
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
+    }).promise();
+
+    if (!artistResult.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Artist not found' })
+      };
+    }
+
+    const currentActs = artistResult.Item.acts || [];
+    const actIndex = currentActs.findIndex(a => a.id === actId);
+
+    if (actIndex === -1) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Act not found' })
+      };
+    }
+
+    // Check if any events reference this actId
+    const eventsResult = await dynamodb.query({
+      TableName: 'bndy-events',
+      IndexName: 'artist_id-index',
+      KeyConditionExpression: 'artist_id = :artistId',
+      FilterExpression: 'actId = :actId',
+      ExpressionAttributeValues: {
+        ':artistId': artistId,
+        ':actId': actId
+      },
+      Limit: 1
+    }).promise();
+
+    if (eventsResult.Items && eventsResult.Items.length > 0) {
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'Cannot delete act: events reference this actId',
+          eventCount: eventsResult.Count
+        })
+      };
+    }
+
+    // Remove act from array
+    const updatedActs = currentActs.filter(a => a.id !== actId);
+
+    // If we removed the default act, make the first remaining act default
+    if (currentActs[actIndex].isDefault && updatedActs.length > 0) {
+      updatedActs[0].isDefault = true;
+    }
+
+    // Update artist
+    const result = await dynamodb.update({
+      TableName: 'bndy-artists',
+      Key: { id: artistId },
+      UpdateExpression: 'SET acts = :acts, updated_at = :updated_at',
+      ExpressionAttributeValues: {
+        ':acts': updatedActs,
+        ':updated_at': new Date().toISOString()
+      },
+      ReturnValues: 'ALL_NEW'
+    }).promise();
+
+    console.log(`[ACTS] Deleted act ${actId} for artist ${artistId}`);
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ deleted: true, acts: result.Attributes.acts })
+    };
+  } catch (error) {
+    console.error('[ACTS] Delete act error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+}
+
+/**
+ * Set an act as default
+ * PUT /api/artists/:id/acts/:actId/default
+ */
+async function handleSetDefaultAct(event) {
+  const artistId = event.pathParameters.id;
+  // Extract actId from path - path looks like /api/artists/{id}/acts/{actId}/default
+  const pathParts = (event.requestContext?.http?.path || event.path).split('/');
+  const actIdIndex = pathParts.indexOf('acts') + 1;
+  const actId = pathParts[actIdIndex];
+
+  console.log(`[ACTS] Setting default act ${actId} for artist ${artistId}`);
+
+  // Require platform admin auth
+  const authResult = await requirePlatformAdmin(event);
+  if (authResult.error) {
+    return {
+      statusCode: authResult.statusCode || 401,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: authResult.error })
+    };
+  }
+
+  try {
+    // Get current artist
+    const artistResult = await dynamodb.get({
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
+    }).promise();
+
+    if (!artistResult.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Artist not found' })
+      };
+    }
+
+    const currentActs = artistResult.Item.acts || [];
+    const actIndex = currentActs.findIndex(a => a.id === actId);
+
+    if (actIndex === -1) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Act not found' })
+      };
+    }
+
+    // Update all acts - set the target as default, others as not default
+    const updatedActs = currentActs.map(a => ({
+      ...a,
+      isDefault: a.id === actId
+    }));
+
+    // Update artist
+    const result = await dynamodb.update({
+      TableName: 'bndy-artists',
+      Key: { id: artistId },
+      UpdateExpression: 'SET acts = :acts, updated_at = :updated_at',
+      ExpressionAttributeValues: {
+        ':acts': updatedActs,
+        ':updated_at': new Date().toISOString()
+      },
+      ReturnValues: 'ALL_NEW'
+    }).promise();
+
+    console.log(`[ACTS] Set act ${actId} as default for artist ${artistId}`);
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ acts: result.Attributes.acts })
+    };
+  } catch (error) {
+    console.error('[ACTS] Set default act error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
       body: JSON.stringify({ error: 'Internal server error' })
     };
   }

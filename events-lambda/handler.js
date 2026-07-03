@@ -21,7 +21,11 @@
  */
 
 const AWS = require('aws-sdk');
-const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
+const https = require('https');
+// Keep-alive agent: SDK v2 opens a new TLS connection per DynamoDB call by
+// default; reusing connections saves ~10-50ms per call on busy handlers.
+const keepAliveAgent = new https.Agent({ keepAlive: true });
+const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2', httpOptions: { agent: keepAliveAgent } });
 const ssm = new AWS.SSM({ region: 'eu-west-2' });
 const lambda = new AWS.Lambda({ region: 'eu-west-2' });
 

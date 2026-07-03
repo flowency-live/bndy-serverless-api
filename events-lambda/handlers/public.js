@@ -12,6 +12,9 @@ const { stripPrivateFields, EVENTS_TABLE, VENUES_TABLE, getVenue, checkForDuplic
 const { computeGeohashFields } = require('../lib/geohash');
 const { verifyMembership } = require('../lib/auth');
 const { triggerNotification } = require('../lib/notifications');
+const { jsonResponse } = require('../lib/http-response');
+const { batchGetByIds } = require('../lib/batch-get');
+const { scanAll } = require('../lib/scan-all');
 
 // Table constants
 const ARTISTS_TABLE = 'bndy-artists';
@@ -215,11 +218,10 @@ async function handleGetPublicEventsGeo(deps, event) {
     geoLng: e.geoLng
   }));
 
-  return {
-    statusCode: 200,
-    headers: getCorsHeaders(event),
-    body: JSON.stringify({ events: lightweightEvents })
-  };
+  return jsonResponse(event, 200, { events: lightweightEvents }, {
+    corsHeaders: getCorsHeaders(event),
+    cacheControl: 'public, max-age=60'
+  });
 }
 
 /**
@@ -249,16 +251,9 @@ async function handleBatchEventsWithJoins(deps, event) {
 
   console.log('BATCH_EVENTS: Fetching events', { count: eventIds.length });
 
-  // Batch get events
-  const eventPromises = eventIds.map(id =>
-    dynamodb.get({
-      TableName: EVENTS_TABLE,
-      Key: { id }
-    }).promise()
-  );
-
-  const eventResults = await Promise.all(eventPromises);
-  const events = eventResults.map(r => r.Item).filter(Boolean);
+  // Batch get events (BatchGetItem, chunks of 25)
+  const eventsById = await batchGetByIds(dynamodb, EVENTS_TABLE, eventIds);
+  const events = eventIds.map(id => eventsById[id]).filter(Boolean);
 
   // Collect unique artistIds and venueIds
   const artistIds = [...new Set(events.map(e => e.artistId).filter(Boolean))];
@@ -266,41 +261,11 @@ async function handleBatchEventsWithJoins(deps, event) {
 
   console.log('BATCH_EVENTS: Fetching joins', { artistIds: artistIds.length, venueIds: venueIds.length });
 
-  // Batch get artists
-  const artistPromises = artistIds.map(id =>
-    dynamodb.get({
-      TableName: ARTISTS_TABLE,
-      Key: { id }
-    }).promise()
-  );
-
-  // Batch get venues
-  const venuePromises = venueIds.map(id =>
-    dynamodb.get({
-      TableName: VENUES_TABLE,
-      Key: { id }
-    }).promise()
-  );
-
-  const [artistResults, venueResults] = await Promise.all([
-    Promise.all(artistPromises),
-    Promise.all(venuePromises)
+  // Batch get artists and venues (BatchGetItem, chunks of 25)
+  const [artistMap, venueMap] = await Promise.all([
+    batchGetByIds(dynamodb, ARTISTS_TABLE, artistIds),
+    batchGetByIds(dynamodb, VENUES_TABLE, venueIds)
   ]);
-
-  // Build lookup maps
-  const artistMap = {};
-  artistResults.forEach((result, idx) => {
-    if (result.Item) {
-      artistMap[artistIds[idx]] = result.Item;
-    }
-  });
-
-  const venueMap = {};
-  venueResults.forEach((result, idx) => {
-    if (result.Item) {
-      venueMap[venueIds[idx]] = result.Item;
-    }
-  });
 
   // Join events with artist and venue data
   const enrichedEvents = events.map(e => ({
@@ -323,11 +288,9 @@ async function handleBatchEventsWithJoins(deps, event) {
 
   console.log('BATCH_EVENTS: Returning enriched events', { count: enrichedEvents.length });
 
-  return {
-    statusCode: 200,
-    headers: getCorsHeaders(event),
-    body: JSON.stringify({ events: enrichedEvents })
-  };
+  return jsonResponse(event, 200, { events: enrichedEvents }, {
+    corsHeaders: getCorsHeaders(event)
+  });
 }
 
 /**
@@ -372,23 +335,8 @@ async function handleGetVenueEvents(deps, event) {
   // Collect unique artistIds
   const artistIds = [...new Set(events.map(e => e.artistId).filter(Boolean))];
 
-  // Batch get artists
-  const artistPromises = artistIds.map(id =>
-    dynamodb.get({
-      TableName: ARTISTS_TABLE,
-      Key: { id }
-    }).promise()
-  );
-
-  const artistResults = await Promise.all(artistPromises);
-
-  // Build artist lookup map
-  const artistMap = {};
-  artistResults.forEach((result, idx) => {
-    if (result.Item) {
-      artistMap[artistIds[idx]] = result.Item;
-    }
-  });
+  // Batch get artists (BatchGetItem, chunks of 25)
+  const artistMap = await batchGetByIds(dynamodb, ARTISTS_TABLE, artistIds);
 
   // Join events with artist data
   const enrichedEvents = events.map(e => ({
@@ -401,11 +349,10 @@ async function handleGetVenueEvents(deps, event) {
     } : null
   }));
 
-  return {
-    statusCode: 200,
-    headers: getCorsHeaders(event),
-    body: JSON.stringify({ events: enrichedEvents })
-  };
+  return jsonResponse(event, 200, { events: enrichedEvents }, {
+    corsHeaders: getCorsHeaders(event),
+    cacheControl: 'public, max-age=60'
+  });
 }
 
 /**
@@ -464,21 +411,11 @@ async function handleGetAllPublicEvents(deps, event) {
     const artistIds = [...allArtistIds];
     const venueIds = [...new Set(allEvents.map(e => e.venueId).filter(Boolean))];
 
-    const [artistResults, venueResults] = await Promise.all([
-      Promise.all(artistIds.map(id => dynamodb.get({ TableName: ARTISTS_TABLE, Key: { id } }).promise())),
-      Promise.all(venueIds.map(id => dynamodb.get({ TableName: VENUES_TABLE, Key: { id } }).promise()))
+    // Batch get artists and venues (BatchGetItem, chunks of 25)
+    const [artistMap, venueMap] = await Promise.all([
+      batchGetByIds(dynamodb, ARTISTS_TABLE, artistIds),
+      batchGetByIds(dynamodb, VENUES_TABLE, venueIds)
     ]);
-
-    // Build lookup maps
-    const artistMap = {};
-    artistResults.forEach((result, idx) => {
-      if (result.Item) artistMap[artistIds[idx]] = result.Item;
-    });
-
-    const venueMap = {};
-    venueResults.forEach((result, idx) => {
-      if (result.Item) venueMap[venueIds[idx]] = result.Item;
-    });
 
     // Join events with artist and venue data, including multi-artist arrays
     // Strip private fee fields for public endpoint
@@ -507,11 +444,10 @@ async function handleGetAllPublicEvents(deps, event) {
     console.log('PUBLIC_ALL: Enriched events with artist and venue data');
 
     // Return full event data (clustering on client will handle display)
-    return {
-      statusCode: 200,
-      headers: getCorsHeaders(event),
-      body: JSON.stringify({ events: enrichedEvents })
-    };
+    return jsonResponse(event, 200, { events: enrichedEvents }, {
+      corsHeaders: getCorsHeaders(event),
+      cacheControl: 'public, max-age=60'
+    });
   } catch (error) {
     console.error('PUBLIC_ALL: Error:', error);
     return {
@@ -571,7 +507,7 @@ async function handleGetArtistPublicEvents(deps, event) {
     console.log('ARTIST_PUBLIC_EVENTS: Found primary events', { artistId, count: primaryEvents.length });
 
     // Scan for events where this artist is COLLABORATING (multi-artist support)
-    const collaboratingResult = await dynamodb.scan({
+    const collaboratingEvents = await scanAll(dynamodb, {
       TableName: EVENTS_TABLE,
       FilterExpression: 'isPublic = :true AND #date BETWEEN :start AND :end AND contains(collaboratingArtistIds, :artistId)',
       ExpressionAttributeNames: { '#date': 'date' },
@@ -581,9 +517,7 @@ async function handleGetArtistPublicEvents(deps, event) {
         ':end': end,
         ':true': true
       }
-    }).promise();
-
-    const collaboratingEvents = collaboratingResult.Items || [];
+    });
     console.log('ARTIST_PUBLIC_EVENTS: Found collaborating events', { artistId, count: collaboratingEvents.length });
 
     // Combine and deduplicate events
@@ -597,24 +531,9 @@ async function handleGetArtistPublicEvents(deps, event) {
 
     console.log('ARTIST_PUBLIC_EVENTS: Total unique events', { artistId, count: events.length });
 
-    // Enrich events with venue data
+    // Enrich events with venue data (BatchGetItem, chunks of 25)
     const venueIds = [...new Set(events.map(e => e.venueId).filter(Boolean))];
-    const venuePromises = venueIds.map(id =>
-      dynamodb.get({
-        TableName: VENUES_TABLE,
-        Key: { id }
-      }).promise()
-    );
-
-    const venueResults = await Promise.all(venuePromises);
-
-    // Build venue lookup map
-    const venueMap = {};
-    venueResults.forEach((result, idx) => {
-      if (result.Item) {
-        venueMap[venueIds[idx]] = result.Item;
-      }
-    });
+    const venueMap = await batchGetByIds(dynamodb, VENUES_TABLE, venueIds);
 
     // Join events with venue data
     // Strip private fee fields for public endpoint
@@ -628,11 +547,10 @@ async function handleGetArtistPublicEvents(deps, event) {
       };
     });
 
-    return {
-      statusCode: 200,
-      headers: getCorsHeaders(event),
-      body: JSON.stringify({ events: enrichedEvents })
-    };
+    return jsonResponse(event, 200, { events: enrichedEvents }, {
+      corsHeaders: getCorsHeaders(event),
+      cacheControl: 'public, max-age=60'
+    });
   } catch (error) {
     console.error('ARTIST_PUBLIC_EVENTS: Error:', error);
     return {

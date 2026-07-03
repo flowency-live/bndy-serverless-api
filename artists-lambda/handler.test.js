@@ -11,7 +11,8 @@ const mockDynamoDB = {
   query: jest.fn(),
   put: jest.fn(),
   scan: jest.fn(),
-  get: jest.fn()
+  get: jest.fn(),
+  update: jest.fn()
 };
 
 jest.mock('aws-sdk', () => ({
@@ -20,7 +21,8 @@ jest.mock('aws-sdk', () => ({
       query: (params) => ({ promise: () => mockDynamoDB.query(params) }),
       put: (params) => ({ promise: () => mockDynamoDB.put(params) }),
       scan: (params) => ({ promise: () => mockDynamoDB.scan(params) }),
-      get: (params) => ({ promise: () => mockDynamoDB.get(params) })
+      get: (params) => ({ promise: () => mockDynamoDB.get(params) }),
+      update: (params) => ({ promise: () => mockDynamoDB.update(params) })
     }))
   },
   SSM: jest.fn(() => ({
@@ -129,6 +131,336 @@ describe('GET /api/artists - Performance', () => {
       expect(result.statusCode).toBe(200);
       const artists = JSON.parse(result.body);
       expect(artists).toEqual([]);
+    });
+  });
+});
+
+/**
+ * Acts CRUD Tests - #60 Acts Model
+ *
+ * Tests for artist acts management:
+ * - GET /api/artists/:id returns actsEnabled and acts[]
+ * - PUT /api/artists/:id can toggle actsEnabled
+ * - POST /api/artists/:id/acts creates an act
+ * - PUT /api/artists/:id/acts/:actId updates an act
+ * - DELETE /api/artists/:id/acts/:actId deletes an act
+ * - DELETE blocked if events reference the act
+ * - PUT /api/artists/:id/acts/:actId/default sets default act
+ */
+describe('Acts CRUD - #60 Acts Model', () => {
+  // Store mock artist data per test
+  let mockArtistData = {};
+
+  const mockArtistWithActs = {
+    id: 'artist-1',
+    name: 'Vanz Roxx',
+    location: 'Bristol',
+    genres: ['rock'],
+    actsEnabled: true,
+    acts: [
+      { id: 'act-1', name: 'Acoustic Duo', description: 'Stripped back performance', isDefault: true },
+      { id: 'act-2', name: 'Full Band', description: 'The full 5-piece experience', isDefault: false }
+    ]
+  };
+
+  const mockArtistNoActs = {
+    id: 'artist-2',
+    name: 'Solo Singer',
+    location: 'Manchester',
+    genres: ['pop'],
+    actsEnabled: false,
+    acts: []
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockArtistData = {};
+
+    // Universal mock that handles both users and artists tables
+    mockDynamoDB.get.mockImplementation((params) => {
+      if (params.TableName === 'bndy-users') {
+        return Promise.resolve({
+          Item: { cognito_id: 'admin-1', platformAdmin: true }
+        });
+      }
+      if (params.TableName === 'bndy-artists' && mockArtistData[params.Key.id]) {
+        return Promise.resolve({ Item: mockArtistData[params.Key.id] });
+      }
+      return Promise.resolve({ Item: null });
+    });
+  });
+
+  // Helper: create session cookie for platform admin
+  const createAdminSessionCookie = () => {
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign(
+      { userId: 'admin-1' },
+      'test-secret',
+      { expiresIn: '1h' }
+    );
+    return `bndy_session=${token}`;
+  };
+
+  // Helper: set mock artist data for a test
+  const setMockArtist = (artist) => {
+    mockArtistData[artist.id] = artist;
+  };
+
+  describe('GET /api/artists/:id - returns actsEnabled and acts[]', () => {
+    it('should return artist with actsEnabled and acts array', async () => {
+      setMockArtist(mockArtistWithActs);
+
+      const event = {
+        requestContext: { http: { method: 'GET', path: '/api/artists/artist-1' } },
+        pathParameters: { id: 'artist-1' },
+        headers: { origin: 'https://backstage.bndy.co.uk' }
+      };
+
+      const result = await handler(event, {});
+
+      expect(result.statusCode).toBe(200);
+      const artist = JSON.parse(result.body);
+      expect(artist.actsEnabled).toBe(true);
+      expect(artist.acts).toHaveLength(2);
+      expect(artist.acts[0]).toMatchObject({ id: 'act-1', name: 'Acoustic Duo', isDefault: true });
+    });
+
+    it('should return empty acts array for artist without acts', async () => {
+      setMockArtist(mockArtistNoActs);
+
+      const event = {
+        requestContext: { http: { method: 'GET', path: '/api/artists/artist-2' } },
+        pathParameters: { id: 'artist-2' },
+        headers: { origin: 'https://backstage.bndy.co.uk' }
+      };
+
+      const result = await handler(event, {});
+
+      expect(result.statusCode).toBe(200);
+      const artist = JSON.parse(result.body);
+      expect(artist.actsEnabled).toBe(false);
+      expect(artist.acts).toEqual([]);
+    });
+  });
+
+  describe('PUT /api/artists/:id - toggle actsEnabled', () => {
+    it('should allow platform admin to enable acts', async () => {
+      setMockArtist(mockArtistNoActs);
+      mockDynamoDB.query.mockResolvedValue({ Items: [] }); // No membership needed - admin
+      mockDynamoDB.update.mockResolvedValue({ Attributes: { ...mockArtistNoActs, actsEnabled: true } });
+
+      const event = {
+        requestContext: { http: { method: 'PUT', path: '/api/artists/artist-2' } },
+        pathParameters: { id: 'artist-2' },
+        headers: {
+          origin: 'https://backstage.bndy.co.uk',
+          Cookie: createAdminSessionCookie()
+        },
+        body: JSON.stringify({ actsEnabled: true })
+      };
+
+      const result = await handler(event, {});
+
+      expect(result.statusCode).toBe(200);
+      expect(mockDynamoDB.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          TableName: 'bndy-artists',
+          Key: { id: 'artist-2' },
+          UpdateExpression: expect.stringContaining('actsEnabled')
+        })
+      );
+    });
+  });
+
+  describe('POST /api/artists/:id/acts - create act', () => {
+    it('should create a new act for an artist', async () => {
+      setMockArtist({ ...mockArtistNoActs, actsEnabled: true, acts: [] });
+      mockDynamoDB.update.mockResolvedValue({
+        Attributes: {
+          ...mockArtistNoActs,
+          actsEnabled: true,
+          acts: [{ id: 'new-act-id', name: 'DJ Set', description: null, isDefault: true }]
+        }
+      });
+
+      const event = {
+        requestContext: { http: { method: 'POST', path: '/api/artists/artist-2/acts' } },
+        pathParameters: { id: 'artist-2' },
+        headers: {
+          origin: 'https://backstage.bndy.co.uk',
+          Cookie: createAdminSessionCookie()
+        },
+        body: JSON.stringify({ name: 'DJ Set' })
+      };
+
+      const result = await handler(event, {});
+
+      expect(result.statusCode).toBe(201);
+      const body = JSON.parse(result.body);
+      expect(body.act).toMatchObject({ name: 'DJ Set' });
+      expect(body.act.id).toBeDefined();
+    });
+
+    it('should return 400 if act name is missing', async () => {
+      const event = {
+        requestContext: { http: { method: 'POST', path: '/api/artists/artist-2/acts' } },
+        pathParameters: { id: 'artist-2' },
+        headers: {
+          origin: 'https://backstage.bndy.co.uk',
+          Cookie: createAdminSessionCookie()
+        },
+        body: JSON.stringify({})
+      };
+
+      const result = await handler(event, {});
+
+      expect(result.statusCode).toBe(400);
+      const body = JSON.parse(result.body);
+      expect(body.error).toContain('name');
+    });
+
+    it('should return 401 without auth', async () => {
+      const event = {
+        requestContext: { http: { method: 'POST', path: '/api/artists/artist-2/acts' } },
+        pathParameters: { id: 'artist-2' },
+        headers: { origin: 'https://backstage.bndy.co.uk' },
+        body: JSON.stringify({ name: 'DJ Set' })
+      };
+
+      const result = await handler(event, {});
+
+      expect(result.statusCode).toBe(401);
+    });
+  });
+
+  describe('PUT /api/artists/:id/acts/:actId - update act', () => {
+    it('should update an existing act', async () => {
+      setMockArtist(mockArtistWithActs);
+      mockDynamoDB.update.mockResolvedValue({
+        Attributes: {
+          ...mockArtistWithActs,
+          acts: [
+            { id: 'act-1', name: 'Acoustic Duo Updated', description: 'New description', isDefault: true },
+            mockArtistWithActs.acts[1]
+          ]
+        }
+      });
+
+      const event = {
+        requestContext: { http: { method: 'PUT', path: '/api/artists/artist-1/acts/act-1' } },
+        pathParameters: { id: 'artist-1', actId: 'act-1' },
+        headers: {
+          origin: 'https://backstage.bndy.co.uk',
+          Cookie: createAdminSessionCookie()
+        },
+        body: JSON.stringify({ name: 'Acoustic Duo Updated', description: 'New description' })
+      };
+
+      const result = await handler(event, {});
+
+      expect(result.statusCode).toBe(200);
+      const body = JSON.parse(result.body);
+      expect(body.act.name).toBe('Acoustic Duo Updated');
+    });
+
+    it('should return 404 if act not found', async () => {
+      setMockArtist(mockArtistWithActs);
+
+      const event = {
+        requestContext: { http: { method: 'PUT', path: '/api/artists/artist-1/acts/nonexistent' } },
+        pathParameters: { id: 'artist-1', actId: 'nonexistent' },
+        headers: {
+          origin: 'https://backstage.bndy.co.uk',
+          Cookie: createAdminSessionCookie()
+        },
+        body: JSON.stringify({ name: 'Updated Name' })
+      };
+
+      const result = await handler(event, {});
+
+      expect(result.statusCode).toBe(404);
+    });
+  });
+
+  describe('DELETE /api/artists/:id/acts/:actId - delete act', () => {
+    it('should delete an act when no events reference it', async () => {
+      setMockArtist(mockArtistWithActs);
+      // No events reference this act
+      mockDynamoDB.query.mockResolvedValue({ Items: [], Count: 0 });
+      mockDynamoDB.update.mockResolvedValue({
+        Attributes: {
+          ...mockArtistWithActs,
+          acts: [mockArtistWithActs.acts[1]] // Only act-2 remains
+        }
+      });
+
+      const event = {
+        requestContext: { http: { method: 'DELETE', path: '/api/artists/artist-1/acts/act-1' } },
+        pathParameters: { id: 'artist-1', actId: 'act-1' },
+        headers: {
+          origin: 'https://backstage.bndy.co.uk',
+          Cookie: createAdminSessionCookie()
+        }
+      };
+
+      const result = await handler(event, {});
+
+      expect(result.statusCode).toBe(200);
+    });
+
+    it('should return 409 if events reference the act', async () => {
+      setMockArtist(mockArtistWithActs);
+      // Events reference this act
+      mockDynamoDB.query.mockResolvedValue({
+        Items: [{ id: 'event-1', actId: 'act-1' }],
+        Count: 1
+      });
+
+      const event = {
+        requestContext: { http: { method: 'DELETE', path: '/api/artists/artist-1/acts/act-1' } },
+        pathParameters: { id: 'artist-1', actId: 'act-1' },
+        headers: {
+          origin: 'https://backstage.bndy.co.uk',
+          Cookie: createAdminSessionCookie()
+        }
+      };
+
+      const result = await handler(event, {});
+
+      expect(result.statusCode).toBe(409);
+      const body = JSON.parse(result.body);
+      expect(body.error).toContain('event');
+    });
+  });
+
+  describe('PUT /api/artists/:id/acts/:actId/default - set default act', () => {
+    it('should set an act as default and unset others', async () => {
+      setMockArtist(mockArtistWithActs);
+      mockDynamoDB.update.mockResolvedValue({
+        Attributes: {
+          ...mockArtistWithActs,
+          acts: [
+            { id: 'act-1', name: 'Acoustic Duo', description: 'Stripped back performance', isDefault: false },
+            { id: 'act-2', name: 'Full Band', description: 'The full 5-piece experience', isDefault: true }
+          ]
+        }
+      });
+
+      const event = {
+        requestContext: { http: { method: 'PUT', path: '/api/artists/artist-1/acts/act-2/default' } },
+        pathParameters: { id: 'artist-1', actId: 'act-2' },
+        headers: {
+          origin: 'https://backstage.bndy.co.uk',
+          Cookie: createAdminSessionCookie()
+        }
+      };
+
+      const result = await handler(event, {});
+
+      expect(result.statusCode).toBe(200);
+      const body = JSON.parse(result.body);
+      expect(body.acts.find(a => a.id === 'act-2').isDefault).toBe(true);
+      expect(body.acts.find(a => a.id === 'act-1').isDefault).toBe(false);
     });
   });
 });
