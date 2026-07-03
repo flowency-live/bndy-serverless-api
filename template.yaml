@@ -484,6 +484,53 @@ Resources:
             Path: /api/integration/venues
             Method: POST
 
+  # Festivals Lambda (Phase 1a - festival-mcp-write-api-spec §1)
+  FestivalsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: BNDY Festivals API - handles /api/festivals endpoints
+      CodeUri: ./festivals-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+      Events:
+        # Festival CRUD
+        CreateFestival:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /festivals
+            Method: POST
+        UpdateFestival:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /festivals/{id}
+            Method: PATCH
+        SearchFestivals:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /festivals
+            Method: GET
+        # Public endpoints
+        GetPublicFestivals:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/festivals/public
+            Method: GET
+        GetFestivalBySlug:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/festivals/slug/{slug}
+            Method: GET
+
   # Auth Lambda
   AuthFunction:
     Type: AWS::Serverless::Function

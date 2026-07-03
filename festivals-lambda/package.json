@@ -1,0 +1,16 @@
+{
+  "name": "bndy-festivals-lambda",
+  "version": "1.0.0",
+  "description": "BNDY Festivals Lambda Function - Phase 1a festival-mcp-write-api-spec",
+  "main": "handler.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1450.0"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2"
+  }
+}
