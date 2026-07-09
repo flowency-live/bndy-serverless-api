@@ -144,6 +144,45 @@ function processLineup(lineup) {
 }
 
 /**
+ * Strip internal Dynamo attributes before returning a festival (#97c)
+ */
+function sanitizeFestival(festival) {
+  if (!festival) return festival;
+  const { PK, SK, ...rest } = festival;
+  return rest;
+}
+
+/**
+ * Union of primaryVenueId + venueIds for summary payloads (#97d)
+ */
+function allVenueIds(festival) {
+  return [...new Set([festival.primaryVenueId, ...(festival.venueIds || [])].filter(Boolean))];
+}
+
+/**
+ * Lineup slot dedup key: (displayName lowercased, day, stageId) per spec 2.4
+ */
+function slotDedupKey(slot) {
+  return `${(slot.displayName || '').toLowerCase().trim()}|${slot.day || ''}|${slot.stageId || ''}`;
+}
+
+/**
+ * Validate one lineup slot input. Returns error string or null.
+ */
+function validateSlotInput(slot) {
+  if (!slot.displayName || typeof slot.displayName !== 'string') {
+    return 'displayName is required on every lineup slot';
+  }
+  if (slot.billing && !VALID_BILLING_TIERS.includes(slot.billing)) {
+    return `Invalid billing tier: ${slot.billing}. Must be one of: ${VALID_BILLING_TIERS.join(', ')}`;
+  }
+  if (slot.billingOrder !== undefined && (typeof slot.billingOrder !== 'number' || slot.billingOrder < 0)) {
+    return 'billingOrder must be a non-negative integer';
+  }
+  return null;
+}
+
+/**
  * POST /festivals - Create a new festival
  */
 async function handleCreateFestival(deps, event) {
@@ -230,55 +269,135 @@ async function handleCreateFestival(deps, event) {
 }
 
 /**
- * PATCH /festivals/{id} - Update a festival
+ * PATCH /festivals/{id} - Update a festival.
+ * #97a: the bndy-events table uses a SIMPLE key `id` (see every other lambda:
+ * Key: { id }). The original PK/SK composite Key threw ValidationException on
+ * every get/update -> 500. PK/SK remain as plain attributes on old items; they
+ * are never used as keys.
+ * Also implements the lineup operations the MCP tools send:
+ *   { addLineupSlots: [...] }              <- add_lineup_slot (batch, server dedup)
+ *   { resolveSlot: { slotId, artistId?, eventId? } } <- resolve_lineup_slot
+ *   { removeSlotId: "..." }                <- resolve_lineup_slot(remove: true)
+ * Any other body = plain partial field update.
  */
 async function handleUpdateFestival(deps, event) {
   const { dynamodb, getCorsHeaders } = deps;
   const { id } = event.pathParameters || {};
+  const respond = (statusCode, payload) => ({
+    statusCode,
+    headers: getCorsHeaders(event),
+    body: JSON.stringify(payload)
+  });
 
   if (!id) {
-    return {
-      statusCode: 400,
-      headers: getCorsHeaders(event),
-      body: JSON.stringify({ error: 'Festival ID is required' })
-    };
+    return respond(400, { error: 'Festival ID is required' });
   }
 
   let body;
   try {
     body = JSON.parse(event.body || '{}');
   } catch (e) {
-    return {
-      statusCode: 400,
-      headers: getCorsHeaders(event),
-      body: JSON.stringify({ error: 'Invalid JSON body' })
-    };
+    return respond(400, { error: 'Invalid JSON body' });
   }
 
-  // Validate
+  // Validate plain-update fields (slug immutability, dates, lineup tiers)
   const validation = validateFestival(body, false);
   if (!validation.valid) {
-    return {
-      statusCode: 400,
-      headers: getCorsHeaders(event),
-      body: JSON.stringify({ error: validation.error })
-    };
+    return respond(400, { error: validation.error });
   }
 
-  // Fetch existing festival
+  // Fetch existing festival (table key is `id`)
   const existing = await dynamodb.get({
     TableName: FESTIVALS_TABLE,
-    Key: { PK: `FESTIVAL#${id}`, SK: 'META' }
+    Key: { id }
   }).promise();
 
   if (!existing.Item) {
-    return {
-      statusCode: 404,
-      headers: getCorsHeaders(event),
-      body: JSON.stringify({ error: 'Festival not found' })
-    };
+    return respond(404, { error: 'Festival not found' });
   }
 
+  const now = new Date().toISOString();
+  const putLineup = async (lineup) => {
+    await dynamodb.update({
+      TableName: FESTIVALS_TABLE,
+      Key: { id },
+      UpdateExpression: 'SET lineup = :lineup, updatedAt = :now',
+      ExpressionAttributeValues: { ':lineup': lineup, ':now': now }
+    }).promise();
+  };
+
+  // --- Lineup op: add slots (batch, dedup on displayName+day+stageId) ---
+  if (body.addLineupSlots !== undefined) {
+    if (!Array.isArray(body.addLineupSlots) || body.addLineupSlots.length === 0) {
+      return respond(400, { error: 'addLineupSlots must be a non-empty array' });
+    }
+    for (const slot of body.addLineupSlots) {
+      const err = validateSlotInput(slot);
+      if (err) return respond(400, { error: err });
+    }
+
+    const lineup = [...(existing.Item.lineup || [])];
+    const byKey = new Map(lineup.map(sl => [slotDedupKey(sl), sl]));
+    const resultSlots = [];
+    let added = 0;
+
+    for (const input of body.addLineupSlots) {
+      const key = slotDedupKey(input);
+      const match = byKey.get(key);
+      if (match) {
+        // Dedup hit: return the existing slot so re-runs still yield slot ids
+        resultSlots.push(match);
+        continue;
+      }
+      const slot = { id: crypto.randomUUID(), ...input };
+      lineup.push(slot);
+      byKey.set(key, slot);
+      resultSlots.push(slot);
+      added++;
+    }
+
+    await putLineup(lineup);
+    return respond(200, {
+      slots: resultSlots,
+      added,
+      deduped: resultSlots.length - added,
+      message: `${added} slot(s) added, ${resultSlots.length - added} already existed`
+    });
+  }
+
+  // --- Lineup op: resolve a slot to artist and/or event ---
+  if (body.resolveSlot !== undefined) {
+    const { slotId, artistId, eventId } = body.resolveSlot || {};
+    if (!slotId) {
+      return respond(400, { error: 'resolveSlot.slotId is required' });
+    }
+    const lineup = [...(existing.Item.lineup || [])];
+    const idx = lineup.findIndex(sl => sl.id === slotId);
+    if (idx === -1) {
+      return respond(404, { error: `Lineup slot ${slotId} not found` });
+    }
+    const slot = { ...lineup[idx] };
+    if (artistId !== undefined) slot.artistId = artistId;
+    if (eventId !== undefined) slot.eventId = eventId;
+    slot.resolved = Boolean(slot.artistId && slot.eventId);
+    lineup[idx] = slot;
+
+    await putLineup(lineup);
+    return respond(200, { slot, message: 'Lineup slot updated' });
+  }
+
+  // --- Lineup op: remove a slot (act dropped from the bill) ---
+  if (body.removeSlotId !== undefined) {
+    const before = existing.Item.lineup || [];
+    const lineup = before.filter(sl => sl.id !== body.removeSlotId);
+    if (lineup.length === before.length) {
+      return respond(404, { error: `Lineup slot ${body.removeSlotId} not found` });
+    }
+    await putLineup(lineup);
+    return respond(200, { removed: true, slotId: body.removeSlotId, message: 'Lineup slot removed' });
+  }
+
+  // --- Plain partial field update ---
   // Handle externalIds merge
   let externalIds = existing.Item.externalIds || [];
   if (body.externalIds) {
@@ -299,8 +418,9 @@ async function handleUpdateFestival(deps, event) {
   }
 
   // Build update expression
-  const updateFields = { ...body, externalIds, updatedAt: new Date().toISOString() };
-  delete updateFields.slug; // Immutable
+  const updateFields = { ...body, externalIds, updatedAt: now };
+  // Immutable / internal fields must never be SET
+  ['slug', 'id', 'PK', 'SK', 'entityType', 'createdAt', 'festivalId'].forEach(k => delete updateFields[k]);
 
   const updateExpressions = [];
   const expressionAttributeNames = {};
@@ -317,30 +437,22 @@ async function handleUpdateFestival(deps, event) {
   });
 
   if (updateExpressions.length === 0) {
-    return {
-      statusCode: 400,
-      headers: getCorsHeaders(event),
-      body: JSON.stringify({ error: 'No fields to update' })
-    };
+    return respond(400, { error: 'No fields to update' });
   }
 
   const result = await dynamodb.update({
     TableName: FESTIVALS_TABLE,
-    Key: { PK: `FESTIVAL#${id}`, SK: 'META' },
+    Key: { id },
     UpdateExpression: `SET ${updateExpressions.join(', ')}`,
     ExpressionAttributeNames: expressionAttributeNames,
     ExpressionAttributeValues: expressionAttributeValues,
     ReturnValues: 'ALL_NEW'
   }).promise();
 
-  return {
-    statusCode: 200,
-    headers: getCorsHeaders(event),
-    body: JSON.stringify({
-      festival: result.Attributes,
-      message: 'Festival updated successfully'
-    })
-  };
+  return respond(200, {
+    festival: sanitizeFestival(result.Attributes),
+    message: 'Festival updated successfully'
+  });
 }
 
 /**
@@ -423,7 +535,7 @@ async function handleSearchFestivals(deps, event) {
         startDate: f.startDate,
         endDate: f.endDate,
         town: f.town,
-        venueIds: f.venueIds,
+        venueIds: allVenueIds(f),
         actCount: (f.lineup || []).length
       }))
     })
@@ -477,7 +589,7 @@ async function handleGetPublicFestivals(deps, event) {
     startDate: f.startDate,
     endDate: f.endDate,
     town: f.town,
-    venueIds: f.venueIds,
+    venueIds: allVenueIds(f),
     posterImageUrl: f.posterImageUrl,
     price: f.price,
     actCount: (f.lineup || []).length
@@ -577,8 +689,72 @@ async function handleGetFestivalBySlug(deps, event) {
       'Cache-Control': 'public, max-age=60'
     },
     body: JSON.stringify({
-      festival,
+      festival: sanitizeFestival(festival),
       childEvents
+    })
+  };
+}
+
+/**
+ * GET /api/festivals/by-external-id?source=&id= (#97b)
+ * Idempotent-import lookup; response shape matches the other by-external-id
+ * endpoints ({ found, festival }).
+ */
+async function handleGetFestivalByExternalId(deps, event) {
+  const { dynamodb, getCorsHeaders } = deps;
+  const { source, id } = event.queryStringParameters || {};
+
+  if (!source || !id) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'source and id query parameters are required' })
+    };
+  }
+
+  // Paginated scan over festival items (small entity count; same MVP pattern as search)
+  let festivals = [];
+  let lastEvaluatedKey = undefined;
+  do {
+    const params = {
+      TableName: FESTIVALS_TABLE,
+      FilterExpression: 'entityType = :festival',
+      ExpressionAttributeValues: { ':festival': 'festival' }
+    };
+    if (lastEvaluatedKey) params.ExclusiveStartKey = lastEvaluatedKey;
+    const result = await dynamodb.scan(params).promise();
+    if (result.Items && result.Items.length > 0) festivals = festivals.concat(result.Items);
+    lastEvaluatedKey = result.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  const match = festivals.find(f =>
+    (f.externalIds || []).some(e => e.source === source && String(e.id) === String(id))
+  );
+
+  if (!match) {
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ found: false })
+    };
+  }
+
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(event),
+    body: JSON.stringify({
+      found: true,
+      festival: {
+        id: match.id,
+        name: match.name,
+        slug: match.slug,
+        startDate: match.startDate,
+        endDate: match.endDate,
+        town: match.town,
+        venueIds: allVenueIds(match),
+        isPublic: match.isPublic,
+        externalIds: match.externalIds || []
+      }
     })
   };
 }
@@ -586,6 +762,7 @@ async function handleGetFestivalBySlug(deps, event) {
 module.exports = {
   handleCreateFestival,
   handleUpdateFestival,
+  handleGetFestivalByExternalId,
   handleSearchFestivals,
   handleGetPublicFestivals,
   handleGetFestivalBySlug,

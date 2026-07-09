@@ -119,6 +119,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{id}/mcp
             Method: PUT
+        DeleteArtistMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}/mcp
+            Method: DELETE
         DeleteArtist:
           Type: HttpApi
           Properties:
@@ -222,6 +228,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/events/{id}/mcp
             Method: GET
+        DeleteEventMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/{id}/mcp
+            Method: DELETE
         DeleteEvent:
           Type: HttpApi
           Properties:
@@ -529,6 +541,12 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/festivals/slug/{slug}
+            Method: GET
+        GetFestivalByExternalId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/festivals/by-external-id
             Method: GET
 
   # Auth Lambda

@@ -8,7 +8,8 @@ const {
   handleUpdateFestival,
   handleSearchFestivals,
   handleGetPublicFestivals,
-  handleGetFestivalBySlug
+  handleGetFestivalBySlug,
+  handleGetFestivalByExternalId
 } = require('./handlers/crud');
 
 const getCorsHeaders = () => ({ 'Access-Control-Allow-Origin': 'https://live.bndy.co.uk' });
@@ -606,3 +607,210 @@ describe('handleGetFestivalBySlug', () => {
     expect(headlinerSlot.artistName).toBe('The Headliners');
   });
 });
+
+// ---------------------------------------------------------------------------
+// #97 regression tests — the mocks below assert the REAL table key `id`
+// (bndy-events is a simple-key table; PK/SK composite keys 500'd in prod)
+// ---------------------------------------------------------------------------
+describe('#97a — PATCH uses the real table key { id }', () => {
+  const existingFestival = {
+    id: 'fest-97',
+    name: 'Key Fix Fest',
+    slug: 'key-fix-fest',
+    startDate: '2026-07-11',
+    endDate: '2026-07-11',
+    lineup: [],
+    externalIds: []
+  };
+
+  it('get + update are called with Key { id }, never PK/SK', async () => {
+    const dynamodb = mockDynamo({
+      get: jest.fn(() => ({ promise: () => Promise.resolve({ Item: existingFestival }) })),
+      update: jest.fn(() => ({ promise: () => Promise.resolve({ Attributes: existingFestival }) }))
+    });
+    const event = {
+      pathParameters: { id: 'fest-97' },
+      body: JSON.stringify({ price: 'FREE' }),
+      headers: {}
+    };
+    const res = await handleUpdateFestival({ dynamodb, getCorsHeaders }, event);
+    expect(res.statusCode).toBe(200);
+    expect(dynamodb.get).toHaveBeenCalledWith(expect.objectContaining({ Key: { id: 'fest-97' } }));
+    expect(dynamodb.update).toHaveBeenCalledWith(expect.objectContaining({ Key: { id: 'fest-97' } }));
+    const updateArg = dynamodb.update.mock.calls[0][0];
+    expect(JSON.stringify(updateArg.Key)).not.toMatch(/FESTIVAL#|META/);
+  });
+
+  it('strips internal/immutable fields (id, PK, SK, festivalId) from SET', async () => {
+    const dynamodb = mockDynamo({
+      get: jest.fn(() => ({ promise: () => Promise.resolve({ Item: existingFestival }) })),
+      update: jest.fn(() => ({ promise: () => Promise.resolve({ Attributes: existingFestival }) }))
+    });
+    const event = {
+      pathParameters: { id: 'fest-97' },
+      body: JSON.stringify({ price: 'FREE', id: 'evil', PK: 'x', SK: 'y', festivalId: 'fest-97' }),
+      headers: {}
+    };
+    const res = await handleUpdateFestival({ dynamodb, getCorsHeaders }, event);
+    expect(res.statusCode).toBe(200);
+    const expr = dynamodb.update.mock.calls[0][0].UpdateExpression;
+    expect(expr).not.toMatch(/#id|#PK|#SK|#festivalId/);
+  });
+});
+
+describe('#97a — lineup operations (add_lineup_slot / resolve_lineup_slot)', () => {
+  const withLineup = (lineup) => ({
+    id: 'fest-97',
+    name: 'Lineup Fest',
+    slug: 'lineup-fest',
+    startDate: '2026-07-11',
+    lineup,
+    externalIds: []
+  });
+
+  it('addLineupSlots assigns ids, appends, and reports added count', async () => {
+    const dynamodb = mockDynamo({
+      get: jest.fn(() => ({ promise: () => Promise.resolve({ Item: withLineup([]) }) })),
+      update: jest.fn(() => ({ promise: () => Promise.resolve({}) }))
+    });
+    const event = {
+      pathParameters: { id: 'fest-97' },
+      body: JSON.stringify({ addLineupSlots: [
+        { displayName: 'Fine Lines', day: '2026-07-11', stageId: 'stage-1' },
+        { displayName: 'These Towns', day: '2026-07-11', billing: 'headline', billingOrder: 0 }
+      ] }),
+      headers: {}
+    };
+    const res = await handleUpdateFestival({ dynamodb, getCorsHeaders }, event);
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.added).toBe(2);
+    expect(body.slots).toHaveLength(2);
+    expect(body.slots[0].id).toBeDefined();
+    const savedLineup = dynamodb.update.mock.calls[0][0].ExpressionAttributeValues[':lineup'];
+    expect(savedLineup).toHaveLength(2);
+  });
+
+  it('addLineupSlots dedups on (displayName lowercased, day, stageId) and returns existing slot', async () => {
+    const existingSlot = { id: 'slot-1', displayName: 'Fine Lines', day: '2026-07-11', stageId: 'stage-1' };
+    const dynamodb = mockDynamo({
+      get: jest.fn(() => ({ promise: () => Promise.resolve({ Item: withLineup([existingSlot]) }) })),
+      update: jest.fn(() => ({ promise: () => Promise.resolve({}) }))
+    });
+    const event = {
+      pathParameters: { id: 'fest-97' },
+      body: JSON.stringify({ addLineupSlots: [
+        { displayName: 'FINE LINES', day: '2026-07-11', stageId: 'stage-1' }, // dup (case-insensitive)
+        { displayName: 'New Act', day: '2026-07-11' }
+      ] }),
+      headers: {}
+    };
+    const res = await handleUpdateFestival({ dynamodb, getCorsHeaders }, event);
+    const body = JSON.parse(res.body);
+    expect(body.added).toBe(1);
+    expect(body.deduped).toBe(1);
+    expect(body.slots[0].id).toBe('slot-1'); // existing slot returned for re-runs
+    const savedLineup = dynamodb.update.mock.calls[0][0].ExpressionAttributeValues[':lineup'];
+    expect(savedLineup).toHaveLength(2);
+  });
+
+  it('resolveSlot sets artistId/eventId and computes resolved', async () => {
+    const dynamodb = mockDynamo({
+      get: jest.fn(() => ({ promise: () => Promise.resolve({ Item: withLineup([
+        { id: 'slot-1', displayName: 'Fine Lines' }
+      ]) }) })),
+      update: jest.fn(() => ({ promise: () => Promise.resolve({}) }))
+    });
+    const event = {
+      pathParameters: { id: 'fest-97' },
+      body: JSON.stringify({ resolveSlot: { slotId: 'slot-1', artistId: 'artist-9', eventId: 'event-9' } }),
+      headers: {}
+    };
+    const res = await handleUpdateFestival({ dynamodb, getCorsHeaders }, event);
+    const body = JSON.parse(res.body);
+    expect(res.statusCode).toBe(200);
+    expect(body.slot.resolved).toBe(true);
+    expect(body.slot.artistId).toBe('artist-9');
+  });
+
+  it('removeSlotId removes the slot; unknown slot -> 404', async () => {
+    const dynamodb = mockDynamo({
+      get: jest.fn(() => ({ promise: () => Promise.resolve({ Item: withLineup([
+        { id: 'slot-1', displayName: 'Dropped Act' }
+      ]) }) })),
+      update: jest.fn(() => ({ promise: () => Promise.resolve({}) }))
+    });
+    const okEvent = {
+      pathParameters: { id: 'fest-97' },
+      body: JSON.stringify({ removeSlotId: 'slot-1' }),
+      headers: {}
+    };
+    const res = await handleUpdateFestival({ dynamodb, getCorsHeaders }, okEvent);
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).removed).toBe(true);
+
+    const missEvent = {
+      pathParameters: { id: 'fest-97' },
+      body: JSON.stringify({ removeSlotId: 'nope' }),
+      headers: {}
+    };
+    const res2 = await handleUpdateFestival({ dynamodb, getCorsHeaders }, missEvent);
+    expect(res2.statusCode).toBe(404);
+  });
+});
+
+describe('#97b — GET /api/festivals/by-external-id', () => {
+  const festivalItem = {
+    id: 'fest-ext',
+    entityType: 'festival',
+    name: 'Ext Fest',
+    slug: 'ext-fest',
+    startDate: '2026-07-11',
+    endDate: '2026-07-12',
+    primaryVenueId: 'venue-1',
+    venueIds: [],
+    isPublic: true,
+    externalIds: [{ source: 'skiddle', id: '41230076' }]
+  };
+
+  it('finds a festival by stored externalId', async () => {
+    const dynamodb = mockDynamo({
+      scan: jest.fn(() => ({ promise: () => Promise.resolve({ Items: [festivalItem] }) }))
+    });
+    const event = { queryStringParameters: { source: 'skiddle', id: '41230076' }, headers: {} };
+    const res = await handleGetFestivalByExternalId({ dynamodb, getCorsHeaders }, event);
+    const body = JSON.parse(res.body);
+    expect(body.found).toBe(true);
+    expect(body.festival.id).toBe('fest-ext');
+    expect(body.festival.venueIds).toEqual(['venue-1']); // #97d primaryVenueId counted
+  });
+
+  it('returns found:false for unknown external id', async () => {
+    const dynamodb = mockDynamo({
+      scan: jest.fn(() => ({ promise: () => Promise.resolve({ Items: [festivalItem] }) }))
+    });
+    const event = { queryStringParameters: { source: 'skiddle', id: 'other' }, headers: {} };
+    const res = await handleGetFestivalByExternalId({ dynamodb, getCorsHeaders }, event);
+    expect(JSON.parse(res.body).found).toBe(false);
+  });
+});
+
+describe('#97c — internal attributes stripped from public payloads', () => {
+  it('slug response contains no PK/SK', async () => {
+    const dynamodb = mockDynamo({
+      query: jest.fn()
+        .mockReturnValueOnce({ promise: () => Promise.resolve({ Items: [{
+          id: 'fest-1', PK: 'FESTIVAL#fest-1', SK: 'META', entityType: 'festival',
+          name: 'Strip Fest', slug: 'strip-fest', startDate: '2026-07-11', lineup: []
+        }] }) })
+        .mockReturnValueOnce({ promise: () => Promise.resolve({ Items: [] }) })
+    });
+    const event = { pathParameters: { slug: 'strip-fest' }, headers: {} };
+    const res = await handleGetFestivalBySlug({ dynamodb, getCorsHeaders }, event);
+    const body = JSON.parse(res.body);
+    expect(body.festival.PK).toBeUndefined();
+    expect(body.festival.SK).toBeUndefined();
+    expect(body.festival.name).toBe('Strip Fest');
+  });
+});
+

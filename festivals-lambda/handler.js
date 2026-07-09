@@ -8,7 +8,8 @@ const {
   handleUpdateFestival,
   handleSearchFestivals,
   handleGetPublicFestivals,
-  handleGetFestivalBySlug
+  handleGetFestivalBySlug,
+  handleGetFestivalByExternalId
 } = require('./handlers/crud');
 
 const AWS = require('aws-sdk');
@@ -73,6 +74,11 @@ exports.handler = async (event) => {
     // GET /api/festivals/public - Public festivals list
     if (routeKey.match(/GET \/api\/festivals\/public$/)) {
       return await handleGetPublicFestivals(deps, event);
+    }
+
+    // GET /api/festivals/by-external-id - idempotent import lookup (#97b)
+    if (routeKey.match(/GET \/api\/festivals\/by-external-id/)) {
+      return await handleGetFestivalByExternalId(deps, event);
     }
 
     // GET /api/festivals/slug/{slug} - Get by slug
