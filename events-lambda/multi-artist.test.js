@@ -115,7 +115,10 @@ describe('Multi-Artist Events', () => {
     const mockArtist4 = { id: 'artist-4', name: 'Rock Band' };
 
     beforeEach(() => {
-      // Mock venue lookup
+      // Track created events for verification read-back
+      let createdEvents = {};
+
+      // Mock venue, artist, and event lookups
       mockDynamoDB.get.mockImplementation((params) => {
         if (params.TableName === 'bndy-venues') {
           return Promise.resolve({ Item: mockVenue });
@@ -129,9 +132,18 @@ describe('Multi-Artist Events', () => {
           };
           return Promise.resolve({ Item: artists[params.Key.id] });
         }
+        if (params.TableName === 'bndy-events') {
+          // Return created event for verification read-back
+          return Promise.resolve({ Item: createdEvents[params.Key.id] });
+        }
         return Promise.resolve({});
       });
-      mockDynamoDB.put.mockResolvedValue({});
+      mockDynamoDB.put.mockImplementation((params) => {
+        if (params.TableName === 'bndy-events') {
+          createdEvents[params.Item.id] = params.Item;
+        }
+        return Promise.resolve({});
+      });
     });
 
     it('should store collaboratingArtistIds when multiple artists provided', async () => {
