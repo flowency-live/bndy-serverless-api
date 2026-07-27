@@ -1,0 +1,55 @@
+# Agent Charter - bndy-serverless-api
+#
+# BNDY serverless backend with 19 Lambda functions organized by domain.
+# Uses CDK for infrastructure and shared Lambda layers.
+#
+# Pattern: broad owns + narrow cannot_touch. cannot_touch wins.
+#
+# Enforced by: C:\VSProjects\.claude\hooks\pre-write-guardian.js (registered in .claude/settings.json).
+# Blocked writes are logged to .claude/inventory.md for human review.
+
+role: bndy-serverless-api
+
+owns:
+  # Lambda function code (except auth and critical handlers)
+  - lambda/**
+  - scripts/**
+  - docs/**
+  - tests/**
+  - README.md
+  - package.json
+  - tsconfig.json
+  - .gitignore
+
+cannot_touch:
+  # Authentication Lambda - security-critical, human-only
+  - auth-lambda/**
+
+  # CDK infrastructure definitions - human-only to prevent deployment issues
+  - cdk/**
+
+  # Lambda layers - shared across all functions, changes require version bump
+  - lambda-layers/**
+
+  # Charter, settings, ADRs - human-only
+  - .claude/**
+  - docs/adr/**
+
+must_preserve:
+  # JWT verification uses explicit algorithm
+  - All jwt.verify calls use { algorithms: ['HS256'] } or equivalent explicit algorithm
+
+  # No secrets in code
+  - All secrets retrieved from AWS Secrets Manager or environment variables
+
+  # Lambda handlers follow standard signature
+  - All handlers export async function handler(event, context)
+
+  # Layer version consistency
+  - Lambda layer versions match across all function configurations in CDK
+
+how_violations_caught:
+  - Pre-write guardian hook (this charter) - hard block at the agent's tool boundary
+  - npm test - Jest unit and integration tests
+  - cdk diff - human review before deploy
+  - Manual code review for auth-lambda changes
