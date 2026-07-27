@@ -1025,6 +1025,14 @@ async function extractVenues(event) {
 async function handleBulkImport(event) {
   console.log('BULK_IMPORT: Starting bulk import');
 
+  // AUDIT FIX F6 (2026-07-27): this was the ONLY handler in this lambda with
+  // no auth — an anonymous, unlimited bulk-write path into bndy-artists,
+  // bndy-venues and bndy-events. Same gate as every sibling handler.
+  const authResult = requireAuth(event);
+  if (authResult.error) {
+    return createResponse(401, { error: authResult.error });
+  }
+
   const body = event.body ? JSON.parse(event.body) : null;
   if (!body) {
     return createResponse(400, { error: 'Request body required' });

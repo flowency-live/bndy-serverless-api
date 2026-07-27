@@ -14,6 +14,26 @@ const ssm = new AWS.SSM({ region: 'eu-west-2' });
 const s3 = new AWS.S3({ region: 'eu-west-2' });
 const { jsonResponse } = require('./lib/http-response');
 const { scanAll } = require('./lib/scan-all');
+const { artistIdentityKey, artistUniqueKey, facebookKey } = require('./lib/identity');
+const { gatedPut, releaseUniqueKeys, duplicateResponseBody, gateMode } = require('./lib/unique-gate');
+
+/**
+ * Sentinel keys for an artist record (2026-07-27 gate plan):
+ *  - identity key: normalise(name) + '#' + regionBucket(location) — Jason's
+ *    ruling that name + performing location IS the artist UID
+ *  - facebook key: exact FB URL is the strongest identity signal — two
+ *    records may never share one
+ * Returns { keys, resolvable } — resolvable=false means the location can't be
+ * bucketed; in enforce mode such artists must NOT be created (review instead).
+ */
+function buildArtistUniqueKeys(name, location, facebookUrl) {
+  const identity = artistIdentityKey(name, location);
+  const keys = [];
+  if (identity.resolvable) keys.push(`artist#${identity.key}`);
+  const fbKey = facebookKey(facebookUrl);
+  if (fbKey) keys.push(`artist#fb#${fbKey}`);
+  return { keys, resolvable: identity.resolvable, identity };
+}
 
 // Configuration
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
@@ -852,11 +872,38 @@ async function handleCreateArtist(event) {
   };
 
   try {
-    // Create artist record
-    await dynamodb.put({
-      TableName: 'bndy-artists',
-      Item: artist
-    }).promise();
+    // HARD GATE (2026-07-27): same rule as every other create path — the
+    // authenticated Backstage route was previously a zero-dedup blind put.
+    const { keys: uniqueKeys, resolvable } = buildArtistUniqueKeys(
+      artist.name, artist.location, artist.facebookUrl
+    );
+    if (!resolvable && gateMode() === 'enforce') {
+      return {
+        statusCode: 422,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'A resolvable location (town/county) is required to create an artist — it is part of the artist\'s identity.',
+          code: 'LOCATION_UNRESOLVABLE'
+        })
+      };
+    }
+    const gateResult = await gatedPut(dynamodb, {
+      tableName: 'bndy-artists',
+      item: artist,
+      keys: uniqueKeys,
+      entityType: 'artist',
+      source: 'backstage'
+    });
+    if (!gateResult.written) {
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          ...duplicateResponseBody('artist', gateResult.existing),
+          message: 'An artist with this name already exists in this region. Claim or edit the existing record instead.'
+        })
+      };
+    }
 
     // Create owner membership automatically
     const membershipId = crypto.randomUUID();
@@ -1305,13 +1352,19 @@ async function handleDeleteArtist(artistId) {
       console.log(` Deleted membership: ${membership.membership_id} for user: ${membership.user_id}`);
     }
 
-    // Step 3: Delete the artist record
+    // Step 3: Delete the artist record (fetch first so the uniqueness
+    // sentinels can be released — gate plan 2026-07-27)
     const artistParams = {
       TableName: 'bndy-artists',
       Key: { id: artistId }
     };
 
+    const artistRecord = await dynamodb.get(artistParams).promise();
     await dynamodb.delete(artistParams).promise();
+    if (artistRecord.Item) {
+      const { keys } = buildArtistUniqueKeys(artistRecord.Item.name, artistRecord.Item.location, artistRecord.Item.facebookUrl);
+      await releaseUniqueKeys(dynamodb, keys, artistId);
+    }
     console.log(` Artist deleted successfully with ${membershipsResult.Items.length} cascaded membership deletions`);
 
     return {
@@ -1365,11 +1418,17 @@ async function handleMCPDeleteArtist(artistId) {
       }).promise();
     }
 
-    // Step 4: Delete the artist record
+    // Step 4: Delete the artist record + release uniqueness sentinels
+    // (artistResult.Item was fetched in Step 1)
     await dynamodb.delete({
       TableName: 'bndy-artists',
       Key: { id: artistId }
     }).promise();
+
+    if (artistResult.Item) {
+      const { keys } = buildArtistUniqueKeys(artistResult.Item.name, artistResult.Item.location, artistResult.Item.facebookUrl);
+      await releaseUniqueKeys(dynamodb, keys, artistId);
+    }
 
     console.log(` MCP: Artist ${artistId} deleted successfully`);
 
@@ -1650,12 +1709,52 @@ async function handleCreateCommunityArtist(event) {
       updated_at: now
     };
 
-    await dynamodb.put({
-      TableName: 'bndy-artists',
-      Item: newArtist
-    }).promise();
+    // HARD GATE (2026-07-27): artist UID = normalise(name) + region bucket.
+    // Even when a caller's "this is a new artist" logic is wrong, the
+    // sentinel transaction bounces the write.
+    const { keys: uniqueKeys, resolvable } = buildArtistUniqueKeys(name, location, facebookUrl);
 
-    console.log(` Community artist created: ${artistId} (${name}) with ${locationType || 'unknown'} location`);
+    if (!resolvable && gateMode() === 'enforce') {
+      // A location that can't be bucketed can't participate in identity —
+      // creating would make an unmatchable record (the 331-blank-location
+      // problem). Route to review instead of creating.
+      return {
+        statusCode: 422,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          error: `Location "${location}" cannot be resolved to a region. Artist identity requires a resolvable performing location — supply a town/county (e.g. "Stoke-on-Trent"), not "${location}".`,
+          code: 'LOCATION_UNRESOLVABLE',
+          action: 'review'
+        })
+      };
+    }
+    if (!resolvable) {
+      console.warn(`UNIQUE-GATE: artist "${name}" location "${location}" unresolvable — creating UNGATED (log mode)`);
+    }
+
+    const gateResult = await gatedPut(dynamodb, {
+      tableName: 'bndy-artists',
+      item: newArtist,
+      keys: uniqueKeys,
+      entityType: 'artist',
+      source: newArtist.source
+    });
+
+    if (!gateResult.written) {
+      const existingId = gateResult.existing && gateResult.existing.refId;
+      console.log(`[Artists] Gate bounced community create of "${name}" — duplicate of ${existingId}`);
+      return {
+        statusCode: 409,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          ...duplicateResponseBody('artist', gateResult.existing),
+          message: `An artist with this name already exists in this region (or shares this Facebook page). Use the existing record.`,
+          existingArtistId: existingId
+        })
+      };
+    }
+
+    console.log(` Community artist created: ${artistId} (${name}) with ${locationType || 'unknown'} location [gate: ${gateResult.gate}]`);
 
     return {
       statusCode: 201,

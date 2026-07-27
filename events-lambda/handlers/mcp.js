@@ -6,6 +6,8 @@
  */
 
 const { createCancellationRecord } = require('../calendar-cancellations');
+const { checkForDuplicateEvent, releaseEventSentinels } = require('../lib/event-data');
+const { gateMode } = require('../lib/unique-gate');
 
 // Table constants
 const EVENTS_TABLE = 'bndy-events';
@@ -164,7 +166,13 @@ async function handleUpdateEventMcp(deps, event) {
     'date': 'date',
     'startTime': 'startTime',
     'endTime': 'endTime',
-    'artist_id': 'artist_id',  // Reassign event to different artist (for merging duplicates)
+    // AUDIT FIX F5 (2026-07-27): this map previously read 'artist_id': 'artist_id'
+    // while the actual attribute (and GSI hash key) is 'artistId'. Result:
+    // callers sending artistId were silently DROPPED (fake-success no-op that
+    // orphaned 97+ events during dedup); callers sending artist_id wrote a
+    // useless orphan attribute. Both spellings now map to the real attribute.
+    'artistId': 'artistId',    // Reassign event to different artist (for merging duplicates)
+    'artist_id': 'artistId',   // back-compat alias — same target attribute
     'venueId': 'venueId',
     'description': 'description',
     'isPublic': 'isPublic',
@@ -184,8 +192,10 @@ async function handleUpdateEventMcp(deps, event) {
     'billingOrder': 'billingOrder'
   };
 
+  const mappedDbFields = new Set();
   Object.entries(allowedFields).forEach(([apiField, dbField]) => {
-    if (updates[apiField] !== undefined) {
+    if (updates[apiField] !== undefined && !mappedDbFields.has(dbField)) {
+      mappedDbFields.add(dbField); // guard: artistId + artist_id both target 'artistId' — first wins
       const placeholder = `#${dbField}`;
       const valuePlaceholder = `:${dbField}`;
       attributeNames[placeholder] = dbField;
@@ -193,6 +203,40 @@ async function handleUpdateEventMcp(deps, event) {
       updateExpressions.push(`${placeholder} = ${valuePlaceholder}`);
     }
   });
+
+  // AUDIT FIX F4 (2026-07-27): updates could previously edit an event INTO
+  // being a duplicate with no check. If this update changes any identity
+  // field (artist, venue, date) on a public gig, re-run the duplicate check
+  // excluding this event.
+  const effArtistId = updates.artistId !== undefined ? updates.artistId
+    : (updates.artist_id !== undefined ? updates.artist_id : existing.Item.artistId);
+  const effVenueId = updates.venueId !== undefined ? updates.venueId : existing.Item.venueId;
+  const effDate = updates.date !== undefined ? updates.date : existing.Item.date;
+  const identityChanged = effArtistId !== existing.Item.artistId
+    || effVenueId !== existing.Item.venueId
+    || effDate !== existing.Item.date;
+  const isPublicGig = existing.Item.isPublic === true || existing.Item.type === 'gig' || existing.Item.type === 'public_gig';
+
+  if (identityChanged && isPublicGig && effVenueId && effArtistId) {
+    const dup = await checkForDuplicateEvent(dynamodb, effVenueId, effDate, [effArtistId]);
+    if (dup && dup.id !== id) {
+      const detail = { eventId: id, conflictsWith: dup.id, effArtistId, effVenueId, effDate };
+      if (gateMode() === 'enforce') {
+        console.warn('[MCP] UPDATE BOUNCED: would create duplicate event', JSON.stringify(detail));
+        return {
+          statusCode: 409,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({
+            error: 'Duplicate event',
+            code: 'DUPLICATE',
+            message: 'This update would make the event a duplicate of an existing event (same artist, venue, date). Merge/delete instead.',
+            existingEventId: dup.id
+          })
+        };
+      }
+      console.warn('[MCP] UPDATE WOULD_BOUNCE (log mode): duplicate event', JSON.stringify(detail));
+    }
+  }
 
   // Always update updatedAt
   attributeNames['#updatedAt'] = 'updatedAt';
@@ -279,6 +323,9 @@ async function handleDeleteEventMcp(deps, event) {
     TableName: EVENTS_TABLE,
     Key: { id }
   }).promise();
+
+  // Release uniqueness sentinels so the (venue|artist|date) key is claimable again
+  await releaseEventSentinels(dynamodb, existingEvent);
 
   // Best-effort calendar cancellation record so calendar subscribers remove it (non-fatal)
   try {

@@ -11,6 +11,13 @@ const mockDynamoDB = {
   put: jest.fn(),
   get: jest.fn(),
   scan: jest.fn(),
+  // Hard uniqueness gate (2026-07-27): community creates now write via
+  // TransactWriteItems (event + sentinel items). Default: success.
+  // Simulate a gate bounce with:
+  //   mockDynamoDB.transactWrite.mockRejectedValueOnce(
+  //     Object.assign(new Error('cancelled'), { code: 'TransactionCanceledException' }))
+  transactWrite: jest.fn().mockResolvedValue({}),
+  delete: jest.fn().mockResolvedValue({}),
 };
 
 jest.mock('aws-sdk', () => ({
@@ -20,6 +27,8 @@ jest.mock('aws-sdk', () => ({
       put: (params) => ({ promise: () => mockDynamoDB.put(params) }),
       get: (params) => ({ promise: () => mockDynamoDB.get(params) }),
       scan: (params) => ({ promise: () => mockDynamoDB.scan(params) }),
+      transactWrite: (params) => ({ promise: () => mockDynamoDB.transactWrite(params) }),
+      delete: (params) => ({ promise: () => mockDynamoDB.delete(params) }),
     })),
   },
   SSM: jest.fn(() => ({

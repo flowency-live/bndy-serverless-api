@@ -14,7 +14,8 @@ const mockDynamoDB = {
   scan: jest.fn(),
   get: jest.fn(),
   update: jest.fn(),
-  delete: jest.fn()
+  delete: jest.fn(),
+  transactWrite: jest.fn().mockResolvedValue({})
 };
 
 const mockPlacesClient = {
@@ -29,7 +30,8 @@ jest.mock('aws-sdk', () => ({
       scan: (params) => ({ promise: () => mockDynamoDB.scan(params) }),
       get: (params) => ({ promise: () => mockDynamoDB.get(params) }),
       update: (params) => ({ promise: () => mockDynamoDB.update(params) }),
-      delete: (params) => ({ promise: () => mockDynamoDB.delete(params) })
+      delete: (params) => ({ promise: () => mockDynamoDB.delete(params) }),
+      transactWrite: (params) => ({ promise: () => mockDynamoDB.transactWrite(params) })
     }))
   },
   Lambda: jest.fn(() => ({

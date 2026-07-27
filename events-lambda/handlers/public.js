@@ -8,7 +8,8 @@
 
 const crypto = require('crypto');
 const ngeohash = require('ngeohash');
-const { stripPrivateFields, EVENTS_TABLE, VENUES_TABLE, getVenue, checkForDuplicateEvent, checkForDuplicateByExternalId, ensureVenueRelationship } = require('../lib/event-data');
+const { stripPrivateFields, EVENTS_TABLE, VENUES_TABLE, getVenue, checkForDuplicateEvent, checkForDuplicateByExternalId, ensureVenueRelationship, putEventGated } = require('../lib/event-data');
+const { duplicateResponseBody } = require('../lib/unique-gate');
 const { computeGeohashFields } = require('../lib/geohash');
 const { parseBbox, validateDateWindow, planBboxQuery, GH6_INDEX } = require('../lib/geo-query');
 const { verifyMembership } = require('../lib/auth');
@@ -725,11 +726,19 @@ async function handleCreatePublicGig(deps, event, user) {
   // Auto-create venue relationship before creating the event
   await ensureVenueRelationship(dynamodb, artistId, gigData.venueId, gigData.date);
 
-  // Create the event
-  await dynamodb.put({
-    TableName: EVENTS_TABLE,
-    Item: newEvent
-  }).promise();
+  // Create the event — HARD GATE on (venue|artist|date), 2026-07-27 plan
+  const gateResult = await putEventGated(dynamodb, newEvent, 'public-gig');
+  if (!gateResult.written) {
+    return {
+      statusCode: 409,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        ...duplicateResponseBody('event', gateResult.existing),
+        message: `An event with this artist at this venue on ${gigData.date} already exists`,
+        existingEventId: gateResult.existing ? gateResult.existing.refId : null
+      })
+    };
+  }
 
   console.log('PUBLIC_GIG: Created successfully', {
     eventId,
@@ -961,11 +970,21 @@ async function handleCreateCommunityEvent(deps, event) {
       updatedAt: now
     };
 
-    // Write to DynamoDB
-    await dynamodb.put({
-      TableName: EVENTS_TABLE,
-      Item: newEvent
-    }).promise();
+    // Write to DynamoDB — HARD GATE on (venue|artist|date), 2026-07-27 plan.
+    // The OPENMIC key inside the gate also closes the old skip-hole where
+    // artist-less events (isOpenMic) had zero duplicate protection.
+    const gateResult = await putEventGated(dynamodb, newEvent, source || 'community');
+    if (!gateResult.written) {
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({
+          ...duplicateResponseBody('event', gateResult.existing),
+          message: 'Duplicate event: this artist/venue/date combination already exists',
+          existingEventId: gateResult.existing ? gateResult.existing.refId : null
+        })
+      };
+    }
 
     // DEFENSIVE: Read back to verify persistence (prevents silent data loss bug)
     // Addresses issue where put returns success but record not persisted (~1-3% incidence)

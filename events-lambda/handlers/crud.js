@@ -7,7 +7,8 @@
 
 const crypto = require('crypto');
 const { verifyMembership } = require('../lib/auth');
-const { checkForDuplicateEvent, ensureVenueRelationship, validateRecurring, clearAvailabilityForDates, EVENTS_TABLE } = require('../lib/event-data');
+const { checkForDuplicateEvent, ensureVenueRelationship, validateRecurring, clearAvailabilityForDates, putEventGated, EVENTS_TABLE } = require('../lib/event-data');
+const { duplicateResponseBody } = require('../lib/unique-gate');
 const { triggerNotification } = require('../lib/notifications');
 const { createCancellationRecord } = require('../calendar-cancellations');
 
@@ -147,10 +148,21 @@ async function handleCreateArtistEvent(deps, event, user) {
     newEvent.venueId = eventData.venueId;
   }
 
-  await dynamodb.put({
-    TableName: EVENTS_TABLE,
-    Item: newEvent
-  }).promise();
+  // HARD GATE (2026-07-27): sentinel transaction on (venue|artist|date).
+  // The advisory checkForDuplicateEvent above stays for the friendly 409;
+  // this is the race-proof backstop no client can skip.
+  const gateResult = await putEventGated(dynamodb, newEvent, 'backstage');
+  if (!gateResult.written) {
+    return {
+      statusCode: 409,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        ...duplicateResponseBody('event', gateResult.existing),
+        message: `An event with this artist at this venue on ${eventData.date} already exists`,
+        existingEventId: gateResult.existing ? gateResult.existing.refId : null
+      })
+    };
+  }
 
   console.log('EVENT: Created artist event', { eventId, artistId, type: eventData.type });
 

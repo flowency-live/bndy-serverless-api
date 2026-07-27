@@ -11,6 +11,8 @@ const { findPlaceFromGoogle } = require('../lib/google-places');
 const { formatVenueResponse, triggerVenueEnrichment } = require('../lib/venue-deduplication');
 const { jsonResponse } = require('../lib/http-response');
 const { scanAll } = require('../lib/scan-all');
+const { venuePlaceKey } = require('../lib/identity');
+const { gatedPut, releaseUniqueKeys, duplicateResponseBody } = require('../lib/unique-gate');
 
 /**
  * GET /api/venues - Get all venues with optional search
@@ -476,13 +478,51 @@ async function handleCreateVenue(deps, venueData, event) {
     updated_at: now
   };
 
-  const params = {
-    TableName: 'bndy-venues',
-    Item: venue
-  };
-
   try {
-    await dynamodb.put(params).promise();
+    // AUDIT FIX F2 (2026-07-27): this route required a place_id but never
+    // checked whether it already existed — the cleanest venue-duplication
+    // path in the codebase. Advisory pre-check for a friendly response:
+    const existing = (await scanAll(dynamodb, {
+      TableName: 'bndy-venues',
+      FilterExpression: 'google_place_id = :pid',
+      ExpressionAttributeValues: { ':pid': venue.google_place_id }
+    }))[0];
+    if (existing) {
+      console.log(`[Venues] handleCreateVenue: place_id already exists on venue ${existing.id} — returning existing (no create)`);
+      return {
+        statusCode: 200,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ ...formatVenueResponse(existing), matchConfidence: 100, matchMethod: 'google_place_id' })
+      };
+    }
+
+    // HARD GATE: sentinel transaction on the place_id — the backstop the
+    // advisory check above cannot provide (races, truncated scans).
+    const gateResult = await gatedPut(dynamodb, {
+      tableName: 'bndy-venues',
+      item: venue,
+      keys: [venuePlaceKey(venue.google_place_id)],
+      entityType: 'venue',
+      source: venue.created_source || 'raw-create'
+    });
+    if (!gateResult.written) {
+      const existingId = gateResult.existing && gateResult.existing.refId;
+      const existingRes = existingId
+        ? await dynamodb.get({ TableName: 'bndy-venues', Key: { id: existingId } }).promise()
+        : { Item: null };
+      if (existingRes.Item) {
+        return {
+          statusCode: 200,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({ ...formatVenueResponse(existingRes.Item), matchConfidence: 100, matchMethod: 'google_place_id_gate' })
+        };
+      }
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify(duplicateResponseBody('venue', gateResult.existing))
+      };
+    }
 
     // Trigger enrichment in background (async, non-blocking)
     await triggerVenueEnrichment(lambda, venue.id);
@@ -684,7 +724,12 @@ async function handleDeleteVenue(deps, venueId, event) {
   };
 
   try {
+    // Release the place_id sentinel so the key is claimable again (gate plan)
+    const existingRes = await dynamodb.get({ TableName: 'bndy-venues', Key: { id: venueId } }).promise();
     await dynamodb.delete(params).promise();
+    if (existingRes.Item && existingRes.Item.google_place_id) {
+      await releaseUniqueKeys(dynamodb, [venuePlaceKey(existingRes.Item.google_place_id)], venueId);
+    }
     return {
       statusCode: 204,
       headers: getCorsHeaders(event),
@@ -724,6 +769,11 @@ async function handleMCPDeleteVenue(deps, venueId, event) {
       TableName: 'bndy-venues',
       Key: { id: venueId }
     }).promise();
+
+    // Release the place_id sentinel so the key is claimable again (gate plan)
+    if (venueResult.Item.google_place_id) {
+      await releaseUniqueKeys(dynamodb, [venuePlaceKey(venueResult.Item.google_place_id)], venueId);
+    }
 
     console.log(`[Venues] MCP: Venue ${venueId} deleted successfully`);
 

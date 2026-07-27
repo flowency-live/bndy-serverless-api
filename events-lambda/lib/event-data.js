@@ -6,6 +6,8 @@
  */
 
 const crypto = require('crypto');
+const { eventUniqueKeys, eventNaturalKeys } = require('./identity');
+const { gatedPut, releaseUniqueKeys, duplicateResponseBody } = require('./unique-gate');
 
 // Configuration
 const EVENTS_TABLE = 'bndy-events';
@@ -33,6 +35,62 @@ const subtractDays = (dateStr, days) => {
  * @returns {string|null} Error message or null if valid
  */
 function validateRecurring(recurring) {
+  return validateRecurringInner(recurring);
+}
+
+/**
+ * Sentinel keys for an event, or [] when the event class isn't gated.
+ * Gated: any event with a venueId that is a public-facing gig
+ * (type gig/public_gig, or isPublic) — the classes automated importers
+ * create. Private calendar entries (practice, availability, unavailability)
+ * are NOT gated: two practices at one venue on one day are legitimate.
+ * Artist-less public events (open-mic class) get the OPENMIC key — closes
+ * the community-route skip-hole from the 2026-07-27 audit.
+ */
+function eventGateKeys(ev) {
+  if (!ev || !ev.venueId) return [];
+  const isGig = ev.type === 'gig' || ev.type === 'public_gig' || ev.isPublic === true;
+  if (!isGig) return [];
+  try {
+    return eventUniqueKeys({
+      venueId: ev.venueId,
+      date: ev.date,
+      startTime: ev.startTime,
+      artistId: ev.artistId,
+      artistIds: ev.artistIds,
+      collaboratingArtistIds: ev.collaboratingArtistIds,
+    });
+  } catch (err) {
+    // Unparseable date — surface loudly; silent string-drift is exactly how
+    // the old advisory check was bypassed.
+    throw new Error(`Event uniqueness key failed: ${err.message}`);
+  }
+}
+
+/**
+ * HARD GATE (2026-07-27): write an event + its (venue|artist|date) sentinels
+ * in one transaction. Returns the gatedPut result; when .written is false the
+ * caller must return 409 using duplicateResponseBody('event', result.existing).
+ */
+async function putEventGated(dynamodb, newEvent, source) {
+  return gatedPut(dynamodb, {
+    tableName: EVENTS_TABLE,
+    item: newEvent,
+    keys: eventGateKeys(newEvent),
+    entityType: 'event',
+    source: source || newEvent.source || 'events-lambda',
+  });
+}
+
+/** Best-effort sentinel release for delete/merge paths. */
+async function releaseEventSentinels(dynamodb, eventItem) {
+  try {
+    const keys = eventGateKeys(eventItem);
+    if (keys.length) await releaseUniqueKeys(dynamodb, keys, eventItem.id);
+  } catch (e) { /* never block a delete on sentinel cleanup */ }
+}
+
+function validateRecurringInner(recurring) {
   if (!recurring) return null;
 
   const validTypes = ['day', 'week', 'month', 'year'];
@@ -417,6 +475,10 @@ module.exports = {
   addDays,
   subtractDays,
   validateRecurring,
+  // Hard uniqueness gate (2026-07-27 plan)
+  putEventGated,
+  releaseEventSentinels,
+  eventGateKeys,
   // Venue operations
   getVenue,
   ensureVenueRelationship,

@@ -14,7 +14,8 @@ const mockDynamoDB = {
   scan: jest.fn(),
   get: jest.fn(),
   update: jest.fn(),
-  delete: jest.fn()
+  delete: jest.fn(),
+  transactWrite: jest.fn().mockResolvedValue({})
 };
 
 // Mock jsonwebtoken for authenticated routes
@@ -44,7 +45,8 @@ jest.mock('aws-sdk', () => ({
         }
       }),
       update: (params) => ({ promise: () => mockDynamoDB.update(params) }),
-      delete: (params) => ({ promise: () => mockDynamoDB.delete(params) })
+      delete: (params) => ({ promise: () => mockDynamoDB.delete(params) }),
+      transactWrite: (params) => ({ promise: () => mockDynamoDB.transactWrite(params) })
     }))
   },
   SSM: jest.fn(() => ({
@@ -64,6 +66,10 @@ const { handler } = require('./handler');
 describe('Multi-Artist Events', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Mock get to return created item (for verification after transactWrite)
+    mockDynamoDB.get.mockResolvedValue({
+      Item: { id: 'test-event-id', artistId: 'artist-1', venueId: 'venue-123' }
+    });
   });
 
   const createCommunityEvent = (body) => ({
@@ -144,6 +150,17 @@ describe('Multi-Artist Events', () => {
         }
         return Promise.resolve({});
       });
+      mockDynamoDB.transactWrite.mockImplementation((params) => {
+        // Extract and store items from transactWrite for defensive verification
+        if (params.TransactItems) {
+          params.TransactItems.forEach(item => {
+            if (item.Put && item.Put.TableName === 'bndy-events') {
+              createdEvents[item.Put.Item.id] = item.Put.Item;
+            }
+          });
+        }
+        return Promise.resolve({});
+      });
     });
 
     it('should store collaboratingArtistIds when multiple artists provided', async () => {
@@ -159,14 +176,20 @@ describe('Multi-Artist Events', () => {
 
       expect(result.statusCode).toBe(201);
 
-      // Verify DynamoDB put was called with collaboratingArtistIds
-      expect(mockDynamoDB.put).toHaveBeenCalledWith(
+      // Verify DynamoDB transactWrite was called with collaboratingArtistIds
+      expect(mockDynamoDB.transactWrite).toHaveBeenCalledWith(
         expect.objectContaining({
-          Item: expect.objectContaining({
-            artistId: 'artist-1', // Primary artist
-            collaboratingArtistIds: ['artist-2', 'artist-3', 'artist-4'], // Collaborators
-            source: 'frontstage'
-          })
+          TransactItems: expect.arrayContaining([
+            expect.objectContaining({
+              Put: expect.objectContaining({
+                Item: expect.objectContaining({
+                  artistId: 'artist-1', // Primary artist
+                  collaboratingArtistIds: ['artist-2', 'artist-3', 'artist-4'], // Collaborators
+                  source: 'frontstage'
+                })
+              })
+            })
+          ])
         })
       );
     });
@@ -211,11 +234,17 @@ describe('Multi-Artist Events', () => {
 
       const result = await handler(event, {});
 
-      expect(mockDynamoDB.put).toHaveBeenCalledWith(
+      expect(mockDynamoDB.transactWrite).toHaveBeenCalledWith(
         expect.objectContaining({
-          Item: expect.objectContaining({
-            title: 'Not Guilty + 3 more @ The Music Hall'
-          })
+          TransactItems: expect.arrayContaining([
+            expect.objectContaining({
+              Put: expect.objectContaining({
+                Item: expect.objectContaining({
+                  title: 'Not Guilty + 3 more @ The Music Hall'
+                })
+              })
+            })
+          ])
         })
       );
     });
@@ -232,12 +261,18 @@ describe('Multi-Artist Events', () => {
       const body = JSON.parse(result.body);
 
       expect(result.statusCode).toBe(201);
-      expect(mockDynamoDB.put).toHaveBeenCalledWith(
+      expect(mockDynamoDB.transactWrite).toHaveBeenCalledWith(
         expect.objectContaining({
-          Item: expect.objectContaining({
-            artistId: 'artist-1',
-            collaboratingArtistIds: [] // Empty array for single artist
-          })
+          TransactItems: expect.arrayContaining([
+            expect.objectContaining({
+              Put: expect.objectContaining({
+                Item: expect.objectContaining({
+                  artistId: 'artist-1',
+                  collaboratingArtistIds: [] // Empty array for single artist
+                })
+              })
+            })
+          ])
         })
       );
       expect(body.event.artistIds).toEqual(['artist-1']);

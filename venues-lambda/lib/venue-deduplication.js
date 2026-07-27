@@ -20,6 +20,9 @@ const {
   calculateSimilarity,
   calculateAddressOverlap
 } = require('./fuzzy-matcher');
+const { scanAll } = require('./scan-all');
+const { venuePlaceKey } = require('./identity');
+const { gatedPut, duplicateResponseBody } = require('./unique-gate');
 
 /**
  * Format venue response consistently
@@ -85,14 +88,11 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
     canCreate
   });
 
-  // Scan all venues for matching
-  const scanParams = {
-    TableName: 'bndy-venues'
-  };
-
   try {
-    const result = await dynamodb.scan(scanParams).promise();
-    const existingVenues = result.Items;
+    // Scan all venues for matching — MUST be paginated: a bare scan caps at
+    // 1MB and silently truncates the candidate set, which lets duplicates
+    // through the ladder (2026-07-27 audit finding F2).
+    const existingVenues = await scanAll(dynamodb, { TableName: 'bndy-venues' });
 
     console.log(`[Venues] Scanning ${existingVenues.length} existing venues for matches`);
 
@@ -435,10 +435,40 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
       created_source: venueData.created_source || venueData.source || 'backstage_wizard'
     };
 
-    await dynamodb.put({
-      TableName: 'bndy-venues',
-      Item: newVenue
-    }).promise();
+    // HARD GATE (2026-07-27): venue UID = google_place_id. The sentinel
+    // transaction makes a second venue with the same place_id impossible at
+    // the database level, regardless of which client got here or what the
+    // (advisory) ladder above concluded.
+    const gateResult = await gatedPut(dynamodb, {
+      tableName: 'bndy-venues',
+      item: newVenue,
+      keys: [venuePlaceKey(newVenue.google_place_id)],
+      entityType: 'venue',
+      source: newVenue.created_source || 'find-or-create'
+    });
+
+    if (!gateResult.written) {
+      // Enforce mode caught a place_id collision the ladder missed (race or
+      // truncated candidate set). Return the EXISTING venue — find-or-create
+      // semantics — rather than a bare 409.
+      const existingId = gateResult.existing && gateResult.existing.refId;
+      if (existingId) {
+        const existingRes = await dynamodb.get({ TableName: 'bndy-venues', Key: { id: existingId } }).promise();
+        if (existingRes.Item) {
+          console.log(`[Venues] Gate bounced create; returning existing venue ${existingId}`);
+          return {
+            statusCode: 200,
+            headers: getCorsHeaders(event),
+            body: JSON.stringify({ ...formatVenueResponse(existingRes.Item), matchConfidence: 100, matchMethod: 'google_place_id_gate' })
+          };
+        }
+      }
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify(duplicateResponseBody('venue', gateResult.existing))
+      };
+    }
 
     // Trigger enrichment in background (async, non-blocking)
     await triggerVenueEnrichment(lambda, newVenue.id);
@@ -507,8 +537,8 @@ async function handleIntegrationCreateVenue(deps, body, event) {
   try {
     // 3. BNDY-FIRST: Search existing venues before calling Google (cost optimization)
     console.log(`[Integration] Searching BNDY database for: "${name}" in "${city}"`);
-    const scanResult = await dynamodb.scan({ TableName: 'bndy-venues' }).promise();
-    const existingVenues = scanResult.Items || [];
+    // Paginated — see audit finding F2 (bare scan silently truncates at 1MB)
+    const existingVenues = await scanAll(dynamodb, { TableName: 'bndy-venues' });
 
     // Filter by city (case-insensitive) and find best name match
     const normalizedCity = city.toLowerCase().trim();

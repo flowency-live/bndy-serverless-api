@@ -12,7 +12,9 @@ const mockDynamoDB = {
   query: jest.fn(),
   put: jest.fn(),
   scan: jest.fn(),
-  get: jest.fn()
+  get: jest.fn(),
+  transactWrite: jest.fn().mockResolvedValue({}),
+  delete: jest.fn().mockResolvedValue({})
 };
 
 jest.mock('aws-sdk', () => ({
@@ -21,7 +23,9 @@ jest.mock('aws-sdk', () => ({
       query: (params) => ({ promise: () => mockDynamoDB.query(params) }),
       put: (params) => ({ promise: () => mockDynamoDB.put(params) }),
       scan: (params) => ({ promise: () => mockDynamoDB.scan(params) }),
-      get: (params) => ({ promise: () => mockDynamoDB.get(params) })
+      get: (params) => ({ promise: () => mockDynamoDB.get(params) }),
+      transactWrite: (params) => ({ promise: () => mockDynamoDB.transactWrite(params) }),
+      delete: (params) => ({ promise: () => mockDynamoDB.delete(params) })
     }))
   },
   SSM: jest.fn(() => ({
