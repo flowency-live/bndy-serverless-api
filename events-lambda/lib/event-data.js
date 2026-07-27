@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const EVENTS_TABLE = 'bndy-events';
 const VENUES_TABLE = 'bndy-venues';
 const ARTIST_VENUES_TABLE = 'bndy-artist-venues';
+const ARTISTS_TABLE = 'bndy-artists';
 
 // Private fee fields to strip from public endpoints
 const PRIVATE_FEE_FIELDS = ['agreedFee', 'actualFee', 'datePaid', 'paymentMethod', 'splitBetweenMembers', 'noFee', 'distributed'];
@@ -302,6 +303,51 @@ async function ensureVenueRelationship(dynamodb, artistId, venueId, gigDate) {
 }
 
 /**
+ * Update event count for one or more artists (non-blocking side effect)
+ * Uses atomic ADD operation for thread safety
+ * @param {Object} dynamodb - DynamoDB DocumentClient
+ * @param {Array<string>} artistIds - Artist IDs to update
+ * @param {number} delta - Change amount (+1 for create, -1 for delete)
+ * @param {string} eventDate - Event date (YYYY-MM-DD) to determine future/past
+ */
+async function updateArtistEventCounts(dynamodb, artistIds, delta, eventDate) {
+  if (!artistIds || artistIds.length === 0) return;
+
+  const uniqueArtistIds = [...new Set(artistIds.filter(Boolean))];
+  const today = new Date().toISOString().split('T')[0];
+  const isFuture = eventDate >= today;
+  const countField = isFuture ? 'futureEventCount' : 'pastEventCount';
+
+  for (const artistId of uniqueArtistIds) {
+    try {
+      const params = {
+        TableName: ARTISTS_TABLE,
+        Key: { id: artistId },
+        UpdateExpression: `ADD ${countField} :delta`,
+        ConditionExpression: 'attribute_exists(id)'
+      };
+
+      if (delta > 0) {
+        params.ExpressionAttributeValues = { ':delta': delta };
+      } else {
+        // Prevent negative counts
+        params.ConditionExpression = `attribute_exists(id) AND (attribute_not_exists(${countField}) OR ${countField} >= :min)`;
+        params.ExpressionAttributeValues = { ':delta': delta, ':min': 1 };
+      }
+
+      await dynamodb.update(params).promise();
+      console.log('EVENT_COUNT: Updated', { artistId, delta, countField, eventDate });
+    } catch (error) {
+      if (error.code === 'ConditionalCheckFailedException') {
+        console.log('EVENT_COUNT: Skipped (artist not found or count already zero)', { artistId, delta, countField });
+      } else {
+        console.error('EVENT_COUNT: Failed (non-blocking)', { artistId, delta, countField, error: error.message });
+      }
+    }
+  }
+}
+
+/**
  * Strip private fee fields from events for public endpoints
  * @param {Object} event - Event object
  * @returns {Object} Sanitized event
@@ -374,6 +420,8 @@ module.exports = {
   // Venue operations
   getVenue,
   ensureVenueRelationship,
+  // Artist event counts
+  updateArtistEventCounts,
   // Duplicate detection
   checkForDuplicateByExternalId,
   checkForDuplicateEvent,
