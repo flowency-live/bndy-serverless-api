@@ -19,7 +19,7 @@ Parameters:
 
 Globals:
   Function:
-    Runtime: nodejs20.x
+    Runtime: nodejs24.x
     MemorySize: 512
     Timeout: 30
     Tracing: Active
@@ -27,6 +27,11 @@ Globals:
       Variables:
         NODE_ENV: production
         # JWT_SECRET is retrieved from Secrets Manager - see individual functions
+        # Hard uniqueness gate (2026-07-27 plan): off | log | enforce.
+        # 'log' = collision telemetry only (rollout Phase 4); flip to
+        # 'enforce' after sentinel backfill (Phase 5).
+        GATE_MODE: log
+        UNIQUE_KEYS_TABLE: bndy-unique-keys
 
 Resources:
   # =============================================================================
@@ -95,6 +100,16 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists
+            Method: POST
+        # AUDIT FIX F1 (2026-07-27): this route existed in handler.js (the
+        # full ADR-014/021/023 resolution ladder) but was NEVER declared here,
+        # so API Gateway 404'd it and every client fell back to the no-dedup
+        # community route. This 6-line block is the artist-duplication fix.
+        FindOrCreateArtist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/find-or-create
             Method: POST
         CreateCommunityArtist:
           Type: HttpApi
@@ -1629,6 +1644,24 @@ Resources:
 # =============================================================================
 # Outputs
 # =============================================================================
+  # Uniqueness sentinel table (2026-07-27 gate plan). Sentinels live in their
+  # own table — NOT in the entity tables — because several read paths
+  # full-scan those tables. Retained on stack delete: losing sentinels would
+  # re-open every uniqueness hole.
+  UniqueKeysTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: bndy-unique-keys
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: key
+          KeyType: HASH
+
 Outputs:
   BndyHttpApiUrl:
     Description: HTTP API Gateway endpoint URL
