@@ -16,6 +16,7 @@ const { jsonResponse } = require('./lib/http-response');
 const { scanAll } = require('./lib/scan-all');
 const { artistIdentityKey, artistUniqueKey, facebookKey } = require('./lib/identity');
 const { gatedPut, releaseUniqueKeys, duplicateResponseBody, gateMode } = require('./lib/unique-gate');
+const { validateArtistData } = require('./lib/data-quality');
 
 /**
  * Sentinel keys for an artist record (2026-07-27 gate plan):
@@ -814,6 +815,20 @@ async function handleCreateArtist(event) {
 
   const { user } = authResult;
   const artistData = JSON.parse(event.body);
+
+  // Data quality validation (2026-07-27 audit follow-up)
+  const validation = validateArtistData(artistData);
+  if (!validation.valid) {
+    console.log(`DATA_QUALITY_REJECT: Artist creation blocked - ${validation.errors.join('; ')}`);
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        error: 'data_quality_validation_failed',
+        details: validation.errors
+      })
+    };
+  }
 
   const now = new Date().toISOString();
   const artistId = crypto.randomUUID();
@@ -2091,6 +2106,20 @@ async function handleFindOrCreateArtist(event) {
       statusCode: 400,
       headers: getCommunityHeaders(),
       body: JSON.stringify({ error: 'Artist name is required' })
+    };
+  }
+
+  // Data quality validation (2026-07-27 audit follow-up)
+  const validation = validateArtistData({ name });
+  if (!validation.valid) {
+    console.log(`DATA_QUALITY_REJECT: Artist creation blocked - ${validation.errors.join('; ')}`);
+    return {
+      statusCode: 400,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({
+        error: 'data_quality_validation_failed',
+        details: validation.errors
+      })
     };
   }
 
