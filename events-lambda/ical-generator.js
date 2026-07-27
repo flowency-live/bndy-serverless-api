@@ -124,7 +124,17 @@ function eventToVEvent(event) {
 
     if (event.endTime) {
       const endTime = parseTime(event.endTime);
-      vevent.end = [year, month, day, endTime.hours, endTime.minutes];
+      const startMinutes = startTime.hours * 60 + startTime.minutes;
+      const endMinutes = endTime.hours * 60 + endTime.minutes;
+
+      // Handle events that cross midnight (e.g., 21:00 to 00:30)
+      // These are still single-day events visually - cap at 23:59 to avoid 2-day display
+      if (endMinutes <= startMinutes) {
+        // End time is technically next day, but show as same day ending at 23:59
+        vevent.end = [year, month, day, 23, 59];
+      } else {
+        vevent.end = [year, month, day, endTime.hours, endTime.minutes];
+      }
     } else {
       // Default to 1 hour duration if no end time
       vevent.duration = { hours: 1 };

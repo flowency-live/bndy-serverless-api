@@ -75,3 +75,25 @@ This manual deployment process should be migrated to CDK for:
 - Atomic deployments with rollback
 
 See plan file for CDK migration details.
+
+---
+
+## Geo endpoint upgrade — deploy handoff (2026-07-11, audit A1)
+
+Design: `Projects/bndy/GEO-EVENTS-ENDPOINT-PLAN.md` (v2 addendum). Code changes (committed by Claude/Cowork, tests green: `npx jest lib/geo-query.test.js handlers/public.geo.test.js handlers/public-perf.test.js`):
+- `lib/geo-query.js` (+tests) — bbox parsing, adaptive precision planning, capped fan-out
+- `handlers/public.js` — `GET /api/events/public/geo` now accepts `bbox=west,south,east,north` (legacy `geohash` param kept); country-scale falls back to whole-window scan with `truncated:true`
+- `backfill-geohash.js` — dry-run default
+
+Deploy order (each step gates the next):
+1. Create the viewport GSI (online, no downtime):
+   ```bash
+   aws dynamodb update-table --table-name bndy-events --region eu-west-2 \
+     --attribute-definitions AttributeName=geohash4,AttributeType=S AttributeName=date,AttributeType=S \
+     --global-secondary-index-updates '[{"Create":{"IndexName":"geohash4-date-index","KeySchema":[{"AttributeName":"geohash4","KeyType":"HASH"},{"AttributeName":"date","KeyType":"RANGE"}],"Projection":{"ProjectionType":"INCLUDE","NonKeyAttributes":["artistId","venueId","startTime","geoLat","geoLng","isPublic"]}}}]'
+   ```
+   Wait until `IndexStatus: ACTIVE` (describe-table). NB `id` is the table PK — projected automatically.
+2. `node backfill-geohash.js` (dry run) → review counts + `geo-backfill-report.json` → `node backfill-geohash.js --execute`. The `missingCoords` list = venues needing geocoding.
+3. `npm run validate` + `node scripts/verify-routes.js` → deploy EventsFunction.
+4. Smoke: city bbox `?bbox=-2.4,52.9,-2.0,53.15&startDate=<today>&endDate=<+14d>` returns events with `truncated:false`; UK bbox returns `truncated:true`.
+5. Existing `geohash6-date-index` GSI exists in prod but not in IaC — record it alongside this one.

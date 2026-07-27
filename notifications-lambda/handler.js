@@ -8,12 +8,28 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const GROUPING_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 const TTL_DAYS = 30;
 
+const ALLOWED_ORIGINS = [
+  'https://www.bndy.co.uk',       // Primary domain
+  'https://backstage.bndy.co.uk', // Legacy domain
+  'https://bndy.co.uk',            // Apex domain
+  'https://live.bndy.co.uk',      // Frontstage
+  'https://gigmap.bndy.co.uk',    // GigMap
+  'http://localhost:3000'          // Local development
+];
+
+let currentEvent = null;
+
+const getAllowedOrigin = () => {
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
+
 function buildResponse(statusCode, body) {
   return {
     statusCode,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': getAllowedOrigin(),
       'Access-Control-Allow-Credentials': true,
     },
     body: JSON.stringify(body),
@@ -308,6 +324,7 @@ function buildMessage(type, performedByName, metadata) {
 }
 
 exports.handler = async (event) => {
+  currentEvent = event;
   try {
     if (event.action === 'create') {
       return await createNotification(event);

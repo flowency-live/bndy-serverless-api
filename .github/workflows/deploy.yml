@@ -76,10 +76,14 @@ jobs:
           # The runtime will be upgraded to nodejs24.x when the bndy-jwt layer is updated
           aws cloudformation validate-template --template-body file://template.yaml --region ${{ env.AWS_REGION }}
 
-      - name: Verify Critical Routes
+      - name: Run Pre-Deployment Validation
         run: |
           cd scripts
           npm install
+          echo "=== Pre-Deployment Validation ==="
+          node validate-deployment.js
+          echo ""
+          echo "=== Critical Route Verification ==="
           node verify-routes.js
 
   deploy:

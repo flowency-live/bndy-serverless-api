@@ -175,7 +175,13 @@ async function handleUpdateEventMcp(deps, event) {
     'imageUrl': 'imageUrl',
     'eventUrl': 'eventUrl',
     'notes': 'notes',
-    'externalIds': 'external_ids'
+    'externalIds': 'external_ids',
+    // Festival fields (Phase 1a)
+    'festivalId': 'festivalId',
+    'festivalName': 'festivalName',
+    'stageId': 'stageId',
+    'billing': 'billing',
+    'billingOrder': 'billingOrder'
   };
 
   Object.entries(allowedFields).forEach(([apiField, dbField]) => {

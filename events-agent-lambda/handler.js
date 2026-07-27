@@ -27,6 +27,22 @@ const BNDY_API_BASE = 'https://api.bndy.co.uk';
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
+const ALLOWED_ORIGINS = [
+  'https://www.bndy.co.uk',       // Primary domain
+  'https://backstage.bndy.co.uk', // Legacy domain
+  'https://bndy.co.uk',            // Apex domain
+  'https://live.bndy.co.uk',      // Frontstage
+  'https://gigmap.bndy.co.uk',    // GigMap
+  'http://localhost:3000'          // Local development
+];
+
+let currentEvent = null;
+
+const getAllowedOrigin = () => {
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
+
 // Zod schema for event extraction
 const EventSchema = z.object({
   venueName: z.string().min(1).max(100),
@@ -46,7 +62,7 @@ function createResponse(statusCode, body, additionalHeaders = {}) {
     statusCode,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': getAllowedOrigin(),
       'Access-Control-Allow-Credentials': 'true',
       ...additionalHeaders
     },
@@ -985,7 +1001,363 @@ async function extractVenues(event) {
   }
 }
 
+/**
+ * POST /api/ingest/bulk-import
+ *
+ * Bulk import structured data (artists, venues, events) with deduplication.
+ * Uses resolveVenue() for Google Places lookup + duplicate checking.
+ * Uses resolveArtist() for artist name matching.
+ *
+ * Body: {
+ *   artists: { [localId]: { name, act_type, genres, location, urls, bio } },
+ *   venues: { [localId]: { name, location: { town, region }, urls } },
+ *   events: { [localId]: { artist_id, venue_id, date, time, title } },
+ *   options?: { locationContext?: string, dryRun?: boolean }
+ * }
+ *
+ * Returns: {
+ *   success: true,
+ *   artistIdMap: { [localId]: bndyUuid },
+ *   venueIdMap: { [localId]: bndyUuid },
+ *   results: { artists: {...}, venues: {...}, events: {...} }
+ * }
+ */
+async function handleBulkImport(event) {
+  console.log('BULK_IMPORT: Starting bulk import');
+
+  const body = event.body ? JSON.parse(event.body) : null;
+  if (!body) {
+    return createResponse(400, { error: 'Request body required' });
+  }
+
+  const { artists = {}, venues = {}, events = {}, options = {} } = body;
+  const locationContext = options.locationContext || 'Greater Manchester, UK';
+  const dryRun = options.dryRun || false;
+
+  // Support pre-computed ID maps from chunked imports
+  const precomputedArtistIdMap = options.artistIdMap || {};
+  const precomputedVenueIdMap = options.venueIdMap || {};
+
+  console.log(`BULK_IMPORT: Processing ${Object.keys(artists).length} artists, ${Object.keys(venues).length} venues, ${Object.keys(events).length} events`);
+  console.log(`BULK_IMPORT: Location context: ${locationContext}, Dry run: ${dryRun}`);
+  if (Object.keys(precomputedArtistIdMap).length > 0 || Object.keys(precomputedVenueIdMap).length > 0) {
+    console.log(`BULK_IMPORT: Using precomputed ID maps (${Object.keys(precomputedArtistIdMap).length} artists, ${Object.keys(precomputedVenueIdMap).length} venues)`);
+  }
+
+  const results = {
+    artists: { created: [], matched: [], failed: [] },
+    venues: { created: [], matched: [], failed: [] },
+    events: { created: [], skipped: [], failed: [] }
+  };
+
+  // Merge precomputed ID maps with any new ones from this batch
+  const artistIdMap = { ...precomputedArtistIdMap };  // localId -> bndyUuid
+  const venueIdMap = { ...precomputedVenueIdMap };   // localId -> bndyUuid
+
+  // ========== PHASE 1: Process Artists ==========
+  console.log('BULK_IMPORT: Phase 1 - Processing artists');
+
+  for (const [localId, artistData] of Object.entries(artists)) {
+    try {
+      console.log(`  Artist: ${artistData.name} (${localId})`);
+
+      const resolution = await resolveArtist(artistData.name, null);
+
+      if (resolution.action === 'MATCH_EXISTING') {
+        artistIdMap[localId] = resolution.artist_id;
+        results.artists.matched.push({
+          localId,
+          bndyId: resolution.artist_id,
+          name: artistData.name,
+          matchedName: resolution.matched_artist?.name
+        });
+        console.log(`    -> MATCHED: ${resolution.artist_id}`);
+
+      } else if (resolution.action === 'SKIP') {
+        results.artists.failed.push({
+          localId,
+          name: artistData.name,
+          reason: `Theme event: ${resolution.theme}`
+        });
+        console.log(`    -> SKIPPED: ${resolution.theme}`);
+
+      } else if (resolution.action === 'CREATE_NEW' || resolution.action === 'OPEN_MIC') {
+        if (dryRun) {
+          artistIdMap[localId] = `DRY_RUN_${localId}`;
+          results.artists.created.push({ localId, name: artistData.name, dryRun: true });
+          console.log(`    -> WOULD CREATE (dry run)`);
+        } else {
+          const artistId = uuidv4();
+          const newArtist = {
+            id: artistId,
+            name: artistData.name,
+            artist_type: (artistData.act_type || 'band').toLowerCase(),
+            genres: artistData.genres || [],
+            bio: artistData.bio || '',
+            location: artistData.location?.city || artistData.location?.region || null,
+            isVerified: false,
+            source: 'bulk_import',
+            ai_created: true,
+            createdAt: new Date().toISOString()
+          };
+
+          // Extract URLs
+          if (artistData.urls && Array.isArray(artistData.urls)) {
+            for (const urlObj of artistData.urls) {
+              if (urlObj.kind === 'facebook') newArtist.facebookUrl = urlObj.url;
+              if (urlObj.kind === 'instagram') newArtist.instagramUrl = urlObj.url;
+              if (urlObj.kind === 'spotify') newArtist.spotifyUrl = urlObj.url;
+              if (urlObj.kind === 'website') newArtist.websiteUrl = urlObj.url;
+            }
+          }
+
+          await dynamodb.send(new PutCommand({
+            TableName: ARTISTS_TABLE,
+            Item: newArtist
+          }));
+
+          artistIdMap[localId] = artistId;
+          results.artists.created.push({ localId, bndyId: artistId, name: artistData.name });
+          console.log(`    -> CREATED: ${artistId}`);
+        }
+      }
+    } catch (error) {
+      console.error(`    -> ERROR: ${error.message}`);
+      results.artists.failed.push({ localId, name: artistData.name, error: error.message });
+    }
+  }
+
+  // ========== PHASE 2: Process Venues ==========
+  console.log('BULK_IMPORT: Phase 2 - Processing venues');
+
+  for (const [localId, venueData] of Object.entries(venues)) {
+    try {
+      const city = venueData.location?.town || venueData.location?.region || 'UK';
+      console.log(`  Venue: ${venueData.name}, ${city} (${localId})`);
+
+      const resolution = await resolveVenue(venueData.name, `${city}, UK`);
+
+      if (resolution.action === 'MATCH_EXISTING') {
+        venueIdMap[localId] = resolution.venue_id;
+        results.venues.matched.push({
+          localId,
+          bndyId: resolution.venue_id,
+          name: venueData.name,
+          matchedName: resolution.matched_venue?.name,
+          confidence: resolution.confidence
+        });
+        console.log(`    -> MATCHED: ${resolution.venue_id} (${resolution.confidence})`);
+
+      } else if (resolution.action === 'CREATE_NEW') {
+        if (!resolution.enrichments?.googlePlaceId) {
+          results.venues.failed.push({
+            localId,
+            name: venueData.name,
+            reason: 'No Google Place found'
+          });
+          console.log(`    -> FAILED: No Google Place found`);
+          continue;
+        }
+
+        if (dryRun) {
+          venueIdMap[localId] = `DRY_RUN_${localId}`;
+          results.venues.created.push({
+            localId,
+            name: venueData.name,
+            googlePlaceId: resolution.enrichments.googlePlaceId,
+            dryRun: true
+          });
+          console.log(`    -> WOULD CREATE (dry run)`);
+        } else {
+          const venueId = uuidv4();
+          const newVenue = {
+            id: venueId,
+            name: venueData.name,
+            validated: false,
+            source: 'bulk_import',
+            ai_created: true,
+            needs_review: true,
+            createdAt: new Date().toISOString(),
+            ...resolution.enrichments,
+            latitude: resolution.location?.lat || 0,
+            longitude: resolution.location?.lng || 0,
+            location: {
+              lat: resolution.location?.lat || 0,
+              lng: resolution.location?.lng || 0
+            }
+          };
+
+          // Extract Facebook URL if provided
+          if (venueData.urls && Array.isArray(venueData.urls)) {
+            const fbUrl = venueData.urls.find(u => u.kind === 'facebook');
+            if (fbUrl) {
+              newVenue.social_media_urls = [{ platform: 'facebook', url: fbUrl.url }];
+            }
+          }
+
+          await dynamodb.send(new PutCommand({
+            TableName: VENUES_TABLE,
+            Item: newVenue
+          }));
+
+          venueIdMap[localId] = venueId;
+          results.venues.created.push({
+            localId,
+            bndyId: venueId,
+            name: venueData.name,
+            googlePlaceId: resolution.enrichments.googlePlaceId
+          });
+          console.log(`    -> CREATED: ${venueId}`);
+        }
+      }
+    } catch (error) {
+      console.error(`    -> ERROR: ${error.message}`);
+      results.venues.failed.push({ localId, name: venueData.name, error: error.message });
+    }
+  }
+
+  // ========== PHASE 3: Process Events ==========
+  console.log('BULK_IMPORT: Phase 3 - Processing events');
+
+  for (const [localId, eventData] of Object.entries(events)) {
+    try {
+      const artistBndyId = artistIdMap[eventData.artist_id];
+      const venueBndyId = venueIdMap[eventData.venue_id];
+
+      console.log(`  Event: ${eventData.date} - artist:${eventData.artist_id} @ venue:${eventData.venue_id} (${localId})`);
+
+      if (!artistBndyId) {
+        results.events.skipped.push({
+          localId,
+          reason: `Artist not imported: ${eventData.artist_id}`
+        });
+        console.log(`    -> SKIPPED: Artist not imported`);
+        continue;
+      }
+
+      if (!venueBndyId) {
+        results.events.skipped.push({
+          localId,
+          reason: `Venue not imported: ${eventData.venue_id}`
+        });
+        console.log(`    -> SKIPPED: Venue not imported`);
+        continue;
+      }
+
+      if (dryRun) {
+        results.events.created.push({
+          localId,
+          artistId: artistBndyId,
+          venueId: venueBndyId,
+          date: eventData.date,
+          dryRun: true
+        });
+        console.log(`    -> WOULD CREATE (dry run)`);
+        continue;
+      }
+
+      // Get venue for geohash
+      const venueResult = await dynamodb.send(new GetCommand({
+        TableName: VENUES_TABLE,
+        Key: { id: venueBndyId }
+      }));
+      const venue = venueResult.Item;
+
+      // Get artist for title
+      const artistResult = await dynamodb.send(new GetCommand({
+        TableName: ARTISTS_TABLE,
+        Key: { id: artistBndyId }
+      }));
+      const artist = artistResult.Item;
+
+      const eventId = uuidv4();
+      const eventDate = eventData.date;
+      const eventTime = eventData.time || '20:00';
+
+      // Compute geohash
+      const lat = venue?.latitude || venue?.location?.lat || 0;
+      const lng = venue?.longitude || venue?.location?.lng || 0;
+      const geohash6 = (lat && lng) ? ngeohash.encode(lat, lng, 6) : null;
+      const geohash4 = (lat && lng) ? ngeohash.encode(lat, lng, 4) : null;
+
+      const naturalKey = generateNaturalKey(venueBndyId, artistBndyId, eventDate);
+
+      const newEvent = {
+        id: eventId,
+        naturalKey,
+        venueId: venueBndyId,
+        artistId: artistBndyId,
+        date: eventDate,
+        startTime: eventTime,
+        endTime: '23:00',
+        title: eventData.title || `${artist?.name || 'Artist'} @ ${venue?.name || 'Venue'}`,
+        type: 'gig',
+        isPublic: true,
+        source: 'bulk_import',
+        geoLat: lat,
+        geoLng: lng,
+        geohash6,
+        geohash4,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await dynamodb.send(new PutCommand({
+        TableName: EVENTS_TABLE,
+        Item: newEvent
+      }));
+
+      results.events.created.push({
+        localId,
+        bndyId: eventId,
+        date: eventDate,
+        title: newEvent.title
+      });
+      console.log(`    -> CREATED: ${eventId}`);
+
+    } catch (error) {
+      console.error(`    -> ERROR: ${error.message}`);
+      results.events.failed.push({ localId, error: error.message });
+    }
+  }
+
+  // ========== Summary ==========
+  console.log('BULK_IMPORT: Complete');
+  console.log(`  Artists: ${results.artists.created.length} created, ${results.artists.matched.length} matched, ${results.artists.failed.length} failed`);
+  console.log(`  Venues: ${results.venues.created.length} created, ${results.venues.matched.length} matched, ${results.venues.failed.length} failed`);
+  console.log(`  Events: ${results.events.created.length} created, ${results.events.skipped.length} skipped, ${results.events.failed.length} failed`);
+
+  return createResponse(200, {
+    success: true,
+    dryRun,
+    artistIdMap,
+    venueIdMap,
+    results,
+    summary: {
+      artists: {
+        total: Object.keys(artists).length,
+        created: results.artists.created.length,
+        matched: results.artists.matched.length,
+        failed: results.artists.failed.length
+      },
+      venues: {
+        total: Object.keys(venues).length,
+        created: results.venues.created.length,
+        matched: results.venues.matched.length,
+        failed: results.venues.failed.length
+      },
+      events: {
+        total: Object.keys(events).length,
+        created: results.events.created.length,
+        skipped: results.events.skipped.length,
+        failed: results.events.failed.length
+      }
+    }
+  });
+}
+
 exports.handler = async (event) => {
+  currentEvent = event;
   console.log('EventsAgent Lambda invoked:', JSON.stringify(event, null, 2));
 
   const method = event.requestContext?.http?.method || event.httpMethod;
@@ -1029,6 +1401,10 @@ exports.handler = async (event) => {
 
     if (routeKey === 'POST /api/ingest/update-venue-placeid') {
       return await updateVenuePlaceId(event);
+    }
+
+    if (routeKey === 'POST /api/ingest/bulk-import') {
+      return await handleBulkImport(event);
     }
 
     return createResponse(404, { error: 'Route not found' });

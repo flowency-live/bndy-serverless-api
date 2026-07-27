@@ -24,6 +24,18 @@ Thumbs.db
 *-deployed/
 *-deployed-temp/
 *-current-check/
+backup-*/
+backups/
+
+# Backup files
+*.backup
+*.backup-*
+*.broken-*
+*-FAILED.js
+backup-url.txt
+
+# Archived backups
+_archived_backups/
 
 # Test files
 test.json

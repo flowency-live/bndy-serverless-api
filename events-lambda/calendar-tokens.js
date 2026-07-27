@@ -13,7 +13,8 @@ const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 const TOKENS_TABLE = 'bndy-calendar-tokens';
 const API_BASE_URL = 'https://api.bndy.co.uk';
 
-const VALID_SCOPES = ['full', 'public', 'personal'];
+// Single scope: shows public gigs and rehearsals only
+const VALID_SCOPES = ['default'];
 
 /**
  * Generate a new calendar token with cal_ prefix.
