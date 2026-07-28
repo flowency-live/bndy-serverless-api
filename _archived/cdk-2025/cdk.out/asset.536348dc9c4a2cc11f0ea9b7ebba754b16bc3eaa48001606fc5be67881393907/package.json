@@ -1,0 +1,14 @@
+{
+  "name": "venue-crm-lambda",
+  "version": "1.0.0",
+  "description": "BNDY Venue CRM Lambda - Artist-venue relationship management",
+  "main": "handler.js",
+  "scripts": {
+    "test": "echo \"No tests specified\""
+  },
+  "dependencies": {
+    "uuid": "^9.0.0"
+  },
+  "author": "BNDY",
+  "license": "UNLICENSED"
+}

@@ -30,7 +30,7 @@ Globals:
         # Hard uniqueness gate (2026-07-27 plan): off | log | enforce.
         # 'log' = collision telemetry only (rollout Phase 4); flip to
         # 'enforce' after sentinel backfill (Phase 5).
-        GATE_MODE: log
+        GATE_MODE: enforce
         UNIQUE_KEYS_TABLE: bndy-unique-keys
 
 Resources:

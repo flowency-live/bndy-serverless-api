@@ -1,0 +1,12 @@
+{
+  "name": "bndy-venues-lambda",
+  "version": "1.0.0",
+  "description": "BNDY Venues Lambda Function - DynamoDB Version",
+  "main": "handler.js",
+  "dependencies": {
+    "aws-sdk": "^2.1692.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

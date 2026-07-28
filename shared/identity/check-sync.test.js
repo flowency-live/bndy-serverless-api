@@ -7,7 +7,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const CANONICAL_FILES = ['identity.js', 'unique-gate.js'];
+const CANONICAL_FILES = ['identity.js', 'unique-gate.js', 'data-quality.js'];
 const LAMBDAS = ['artists-lambda', 'events-lambda', 'venues-lambda'];
 let bad = 0;
 for (const file of CANONICAL_FILES) {

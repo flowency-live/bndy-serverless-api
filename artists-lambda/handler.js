@@ -14,8 +14,8 @@ const ssm = new AWS.SSM({ region: 'eu-west-2' });
 const s3 = new AWS.S3({ region: 'eu-west-2' });
 const { jsonResponse } = require('./lib/http-response');
 const { scanAll } = require('./lib/scan-all');
-const { artistIdentityKey, artistUniqueKey, facebookKey } = require('./lib/identity');
-const { gatedPut, releaseUniqueKeys, duplicateResponseBody, gateMode } = require('./lib/unique-gate');
+const { artistIdentityKey, artistUniqueKey, facebookKey, normaliseKey, regionBucket } = require('./lib/identity');
+const { gatedPut, rekeyUniqueKeys, releaseUniqueKeys, duplicateResponseBody, gateMode } = require('./lib/unique-gate');
 const { validateArtistData } = require('./lib/data-quality');
 const { deleteArtistEvents } = require('./lib/cascade-delete-events');
 
@@ -1188,6 +1188,37 @@ async function handleUpdateArtist(event) {
   };
 
   try {
+    // GATE FIX 2026-07-28: renames/relocations must re-key sentinels — a name/
+    // location/FB change alters the artist's identity keys. Claim new + release
+    // old atomically; enforce-mode collision = this update would create a
+    // duplicate identity → 409, update NOT performed.
+    if (artistData.name !== undefined || artistData.location !== undefined || artistData.facebookUrl !== undefined) {
+      const existingRes = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();
+      if (existingRes.Item) {
+        const cur = existingRes.Item;
+        const effName = artistData.name !== undefined ? artistData.name : cur.name;
+        const effLocation = artistData.location !== undefined ? artistData.location : cur.location;
+        const effFb = artistData.facebookUrl !== undefined ? artistData.facebookUrl : cur.facebookUrl;
+        const rekey = await rekeyUniqueKeys(dynamodb, {
+          oldKeys: buildArtistUniqueKeys(cur.name, cur.location, cur.facebookUrl).keys,
+          newKeys: buildArtistUniqueKeys(effName, effLocation, effFb).keys,
+          refId: artistId,
+          entityType: 'artist',
+          source: 'backstage-update'
+        });
+        if (rekey.changed && rekey.ok === false) {
+          return {
+            statusCode: 409,
+            headers: getCorsHeaders(),
+            body: JSON.stringify({
+              ...duplicateResponseBody('artist', rekey.existing),
+              message: 'This rename/relocation would make the artist a duplicate of an existing record. Merge instead.'
+            })
+          };
+        }
+      }
+    }
+
     const result = await dynamodb.update(params).promise();
 
     // Transform response to match frontend expectations (snake_case -> camelCase)
@@ -1643,6 +1674,24 @@ async function handleCreateCommunityArtist(event) {
         statusCode: 400,
         headers: getCommunityHeaders(),
         body: JSON.stringify({ error: 'Location is required to prevent duplicates' })
+      };
+    }
+
+    // GATE VERIFICATION FIX 2026-07-28: this unauthenticated route was the ONLY
+    // create path not running data-quality validation — lineup names ("A + B"),
+    // placeholders ("TBC") and listing-copy names could still be created here.
+    // Same check as handleCreateArtist (:821) and find-or-create (:2123).
+    const dataQualityCheck = validateArtistData({ name });
+    if (!dataQualityCheck.valid) {
+      console.warn(`[Artists] Community create rejected by data-quality gate: ${JSON.stringify(dataQualityCheck.errors)}`);
+      return {
+        statusCode: 422,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          error: 'Artist name failed data-quality validation',
+          code: 'DATA_QUALITY',
+          errors: dataQualityCheck.errors
+        })
       };
     }
 
@@ -2133,6 +2182,39 @@ async function handleFindOrCreateArtist(event) {
     };
   }
 
+  // GATE FIX 2026-07-28 (verification finding c): FB-FIRST MATCH.
+  // Exact facebook_key match = same artist regardless of name spelling
+  // (runbook §1A.2 Step 0 — the strongest identity signal). O(1) via the
+  // sentinel table, which covers every artist with an FB URL post-backfill.
+  const inputFbUrl = body.facebookUrl || '';
+  const inputFbKey = facebookKey(inputFbUrl);
+  if (inputFbKey) {
+    try {
+      const fbSentinel = await dynamodb.get({
+        TableName: process.env.UNIQUE_KEYS_TABLE || 'bndy-unique-keys',
+        Key: { key: `artist#fb#${inputFbKey}` }
+      }).promise();
+      if (fbSentinel.Item && fbSentinel.Item.refId) {
+        const fbMatch = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: fbSentinel.Item.refId } }).promise();
+        if (fbMatch.Item) {
+          console.log(`[find-or-create artist] FB-FIRST MATCH: "${name}" → ${fbMatch.Item.id} (${fbMatch.Item.name}) via facebook key`);
+          return {
+            statusCode: 200,
+            headers: getCommunityHeaders(),
+            body: JSON.stringify({
+              action: 'matched',
+              artist: { id: fbMatch.Item.id, name: fbMatch.Item.name, location: fbMatch.Item.location },
+              confidence: 1,
+              matchedBy: 'facebook'
+            })
+          };
+        }
+      }
+    } catch (fbErr) {
+      console.warn(`[find-or-create artist] FB-first lookup failed (non-fatal): ${fbErr.code || fbErr.message}`);
+    }
+  }
+
   // ADR-023: Extract act qualifier if present (e.g., "The Vanz Acoustic Duo" → act: "Acoustic Duo")
   // The act is NOT part of artist identity - resolve the core, return act separately
   const { core: artistCore, act: extractedAct } = extractActQualifier(name);
@@ -2386,6 +2468,45 @@ async function handleFindOrCreateArtist(event) {
         candidates: [] // No plausible candidates
       })
     };
+  }
+
+  // GATE FIX 2026-07-28 (verification finding d): CONTAINMENT CHECK.
+  // Billing-string class ("Not Guilty - 5pc..." vs "Not Guilty", "Cyril Blake
+  // 60s & 70s Band" vs "Cyril Blake"): if the incoming normalised key starts
+  // with an existing candidate's key (or vice versa, ≥6 chars) in the SAME
+  // region, this is almost certainly the same act under listing copy →
+  // review, never create. Runs over ALL fetched candidates (not just
+  // similarity-filtered ones — containment pairs often score low on
+  // Levenshtein).
+  {
+    const incomingKey = normaliseKey(name);
+    const incomingRegion = regionBucket(body.location || venueRegion || '');
+    const containment = [];
+    if (incomingKey.length >= 6) {
+      for (const c of candidates) {
+        const cKey = normaliseKey(c.name);
+        if (cKey.length >= 6 && cKey !== incomingKey
+            && (incomingKey.startsWith(cKey) || cKey.startsWith(incomingKey))) {
+          const cRegion = regionBucket(c.location || '');
+          if (incomingRegion === 'unknown' || cRegion === 'unknown' || incomingRegion === cRegion) {
+            containment.push({ id: c.id, name: c.name, location: c.location || '', reason: 'name-containment' });
+          }
+        }
+      }
+    }
+    if (containment.length > 0) {
+      console.log(`[find-or-create artist] REVIEW "${name}" - containment match: ${containment.map(c => c.name).join(', ')}`);
+      return {
+        statusCode: 200,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          action: 'review',
+          reason: 'name-containment: incoming name contains (or is contained by) an existing artist name in the same region — likely the same act with listing copy/description attached. Strip the description and reuse the existing id, or confirm genuinely distinct.',
+          queryName: name,
+          candidates: containment.slice(0, 5)
+        })
+      };
+    }
   }
 
   console.log(`[find-or-create artist] CREATE "${name}" (no plausible match, canCreate=true)`);
@@ -2929,6 +3050,33 @@ async function handleMCPUpdateArtist(event) {
     // Only add ExpressionAttributeNames if we have reserved word mappings
     if (Object.keys(expressionAttributeNames).length > 0) {
       params.ExpressionAttributeNames = expressionAttributeNames;
+    }
+
+    // GATE FIX 2026-07-28: MCP renames/relocations must re-key sentinels
+    // (existingArtist.Item was fetched above). Enforce-mode collision → 409,
+    // update NOT performed.
+    if (artistData.name !== undefined || artistData.location !== undefined || artistData.facebookUrl !== undefined) {
+      const cur = existingArtist.Item;
+      const effName = artistData.name !== undefined ? artistData.name : cur.name;
+      const effLocation = artistData.location !== undefined ? artistData.location : cur.location;
+      const effFb = artistData.facebookUrl !== undefined ? artistData.facebookUrl : cur.facebookUrl;
+      const rekey = await rekeyUniqueKeys(dynamodb, {
+        oldKeys: buildArtistUniqueKeys(cur.name, cur.location, cur.facebookUrl).keys,
+        newKeys: buildArtistUniqueKeys(effName, effLocation, effFb).keys,
+        refId: artistId,
+        entityType: 'artist',
+        source: 'mcp-update'
+      });
+      if (rekey.changed && rekey.ok === false) {
+        return {
+          statusCode: 409,
+          headers: getCommunityHeaders(),
+          body: JSON.stringify({
+            ...duplicateResponseBody('artist', rekey.existing),
+            message: 'This rename/relocation would make the artist a duplicate of an existing record. Merge instead (do not vary the name to get around this).'
+          })
+        };
+      }
     }
 
     const result = await dynamodb.update(params).promise();

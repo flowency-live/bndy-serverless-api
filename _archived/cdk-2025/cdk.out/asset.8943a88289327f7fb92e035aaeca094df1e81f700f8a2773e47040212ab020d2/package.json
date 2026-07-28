@@ -1,0 +1,12 @@
+{
+  "name": "bndy-songs-lambda",
+  "version": "1.0.0",
+  "description": "BNDY Songs Lambda Function - DynamoDB Version",
+  "main": "handler.js",
+  "dependencies": {
+    "aws-sdk": "^2.1467.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

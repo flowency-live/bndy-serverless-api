@@ -118,6 +118,80 @@ async function gatedPut(dynamodb, { tableName, item, keys, entityType, source })
 }
 
 /**
+ * Re-key sentinels when an entity's identity fields CHANGE (rename, relocate,
+ * FB change, event artist/venue/date edit). Verification finding 2026-07-28:
+ * updates previously bypassed the gate entirely — a rename could create an
+ * unguarded duplicate identity AND permanently strand the old key.
+ *
+ * Atomically (one TransactWriteItems): claims every NEW key with
+ * attribute_not_exists + releases every no-longer-used OLD key that this
+ * entity actually owns (refId check via pre-read; sentinels owned by another
+ * record, or absent, are left alone).
+ *
+ * Returns:
+ *   {changed:false}                       — keys identical, nothing to do
+ *   {changed:true, ok:true}               — re-keyed (or mode off / table missing)
+ *   {changed:true, ok:false, existing}    — ENFORCE mode: new key already owned
+ *       by another record. Caller must 409 and NOT perform the update.
+ *   In log mode a conflict logs WOULD_BOUNCE and returns ok:true WITHOUT
+ *   touching sentinels (update proceeds; integrity check reconciles later).
+ */
+async function rekeyUniqueKeys(dynamodb, { oldKeys, newKeys, refId, entityType, source }) {
+  const mode = gateMode();
+  const oldSet = new Set((oldKeys || []).filter(Boolean));
+  const newSet = new Set((newKeys || []).filter(Boolean));
+  const toClaim = [...newSet].filter((k) => !oldSet.has(k));
+  const toRelease = [...oldSet].filter((k) => !newSet.has(k));
+
+  if (toClaim.length === 0 && toRelease.length === 0) return { changed: false };
+  if (mode === 'off') return { changed: true, ok: true, gate: 'off' };
+
+  try {
+    // Only release old sentinels this record actually owns.
+    const ownedReleases = [];
+    for (const key of toRelease) {
+      const res = await dynamodb.get({ TableName: UNIQUE_KEYS_TABLE, Key: { key } }).promise();
+      if (res.Item && res.Item.refId === refId) ownedReleases.push(key);
+    }
+
+    const now = new Date().toISOString();
+    const transactItems = [
+      ...toClaim.map((key) => ({
+        Put: {
+          TableName: UNIQUE_KEYS_TABLE,
+          Item: { key, refId, entityType, source: source || 'rekey', createdAt: now },
+          ConditionExpression: 'attribute_not_exists(#k)',
+          ExpressionAttributeNames: { '#k': 'key' },
+        },
+      })),
+      ...ownedReleases.map((key) => ({
+        Delete: { TableName: UNIQUE_KEYS_TABLE, Key: { key } },
+      })),
+    ];
+    if (transactItems.length === 0) return { changed: true, ok: true, gate: 'noop' };
+
+    await dynamodb.transactWrite({ TransactItems: transactItems }).promise();
+    return { changed: true, ok: true, gate: 'rekeyed' };
+  } catch (err) {
+    if (err.code === 'ResourceNotFoundException') {
+      console.error(`UNIQUE-GATE UNAVAILABLE (rekey): table ${UNIQUE_KEYS_TABLE} missing`);
+      return { changed: true, ok: true, gate: 'unavailable' };
+    }
+    if (err.code === 'TransactionCanceledException') {
+      const existing = await findExistingKey(dynamodb, toClaim);
+      const detail = { entityType, mode, refId, conflictKey: existing ? existing.key : '(unresolved)', existingRefId: existing ? existing.refId : null };
+      if (mode === 'enforce') {
+        console.warn('UNIQUE-GATE REKEY BOUNCED', JSON.stringify(detail));
+        return { changed: true, ok: false, gate: 'duplicate', existing: existing || undefined };
+      }
+      console.warn('UNIQUE-GATE REKEY WOULD_BOUNCE (log mode)', JSON.stringify(detail));
+      return { changed: true, ok: true, gate: 'logged-duplicate', existing: existing || undefined };
+    }
+    throw err;
+  }
+}
+
+/**
  * Best-effort sentinel release — call from delete/merge paths so a deleted
  * entity's business key becomes claimable again. Never throws.
  */
@@ -149,4 +223,4 @@ function duplicateResponseBody(entityType, existing) {
   };
 }
 
-module.exports = { gatedPut, releaseUniqueKeys, duplicateResponseBody, gateMode, UNIQUE_KEYS_TABLE };
+module.exports = { gatedPut, rekeyUniqueKeys, releaseUniqueKeys, duplicateResponseBody, gateMode, UNIQUE_KEYS_TABLE };

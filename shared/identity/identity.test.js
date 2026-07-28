@@ -54,6 +54,13 @@ d('normalise', () => {
     eq(normalise('Duo') !== '', true, 'bare token survives');
     eq(normalise('The Band'), 'band', 'the+token survives as token');
   });
+  t('unicode fold (v2 Gate 3): diacritics + confusables normalise the KEY, never reject', () => {
+    eq(normaliseKey('Motörhead'), normaliseKey('Motorhead'), 'umlaut folds');
+    eq(normaliseKey('Beyoncé'), 'beyonce', 'acute folds');
+    eq(normaliseKey('Blue Öyster Cult'), normaliseKey('Blue Oyster Cult'), 'O-umlaut folds');
+    eq(normaliseKey('ÜL†RᛟɣᛨɸLE†').length > 0, true, 'stylized folds to something searchable');
+    eq(normaliseKey('Wham!'), 'wham', 'trailing bang is punctuation, not leet');
+  });
   t('key form collapses spacing', () => {
     eq(normaliseKey('Star Breaker'), normaliseKey('Starbreaker'), 'spacing variant SAME key');
     eq(normaliseKey('Sound Bar'), normaliseKey('Soundbar'), 'spacing variant 2');
@@ -68,20 +75,23 @@ d('normalise', () => {
   });
 });
 
-// --- regionBucket ---
+// --- regionBucket (updated 2026-07-28: canonical 13 regions) ---
 d('regionBucket', () => {
-  t('staffs cluster collapses', () => {
-    eq(regionBucket('Stoke-on-Trent'), 'staffs', 'stoke');
-    eq(regionBucket('Staffordshire'), 'staffs', 'staffordshire');
-    eq(regionBucket('Newcastle-under-Lyme'), 'staffs', 'NUL is staffs');
-    eq(regionBucket('Hanley, Stoke-on-Trent, UK'), 'staffs', 'compound');
+  t('west-midlands cluster (includes Staffordshire)', () => {
+    eq(regionBucket('Stoke-on-Trent'), 'west-midlands', 'stoke');
+    eq(regionBucket('Staffordshire'), 'west-midlands', 'staffordshire');
+    eq(regionBucket('Newcastle-under-Lyme'), 'west-midlands', 'NUL is west-midlands');
+    eq(regionBucket('Hanley, Stoke-on-Trent, UK'), 'west-midlands', 'compound');
+    eq(regionBucket('Birmingham'), 'west-midlands', 'birmingham');
+    eq(regionBucket('Shropshire'), 'west-midlands', 'shropshire now in west-midlands');
   });
   t('newcastle disambiguation', () => {
-    eq(regionBucket('Newcastle upon Tyne'), 'ne', 'upon tyne is NE');
+    eq(regionBucket('Newcastle upon Tyne'), 'north-east', 'upon tyne is north-east');
     eq(regionBucket('Newcastle-under-Lyme') !== regionBucket('Newcastle upon Tyne'), true, 'two newcastles distinct');
   });
   t('not-guilty corpus', () => {
     eq(regionBucket('Yorkshire') !== regionBucket('Stoke-on-Trent'), true, 'Not Guilty Stoke vs Yorkshire distinct');
+    eq(regionBucket('Yorkshire'), 'yorkshire', 'yorkshire canonical');
   });
   t('unknowns', () => {
     eq(regionBucket(''), UNKNOWN_REGION, 'empty');
@@ -90,12 +100,22 @@ d('regionBucket', () => {
     eq(regionBucket(null), UNKNOWN_REGION, 'null');
     eq(regionBucket('tbc'), UNKNOWN_REGION, 'tbc');
   });
-  t('hants + nw + derbys', () => {
-    eq(regionBucket('Havant'), 'hants', 'havant');
-    eq(regionBucket('Waterlooville, Hampshire'), 'hants', 'waterlooville');
-    eq(regionBucket('Stockport'), 'nw', 'stockport');
-    eq(regionBucket('High Peak'), 'nw', 'high peak (New Mills gotcha)');
-    eq(regionBucket('Swadlincote, Derbyshire'), 'derbys-notts', 'swadlincote');
+  t('south-east (Hampshire/Portsmouth) + north-west + east-midlands', () => {
+    eq(regionBucket('Portsmouth'), 'south-east', 'portsmouth -> south-east (user correction)');
+    eq(regionBucket('Hampshire'), 'south-east', 'hampshire -> south-east (user correction)');
+    eq(regionBucket('Havant'), 'south-east', 'havant');
+    eq(regionBucket('Waterlooville, Hampshire'), 'south-east', 'waterlooville');
+    eq(regionBucket('Brighton'), 'south-east', 'brighton');
+    eq(regionBucket('Stockport'), 'north-west', 'stockport');
+    eq(regionBucket('High Peak'), 'north-west', 'high peak (New Mills gotcha)');
+    eq(regionBucket('Manchester'), 'north-west', 'manchester');
+    eq(regionBucket('Cheshire'), 'north-west', 'cheshire now in north-west');
+    eq(regionBucket('Swadlincote, Derbyshire'), 'east-midlands', 'swadlincote');
+  });
+  t('london separate from south-east', () => {
+    eq(regionBucket('London'), 'london', 'london standalone');
+    eq(regionBucket('Croydon'), 'london', 'croydon is london');
+    eq(regionBucket('London') !== regionBucket('Brighton'), true, 'london != south-east');
   });
   t('unmatched falls back to own slug (deterministic, fails safe)', () => {
     eq(regionBucket('Ballymena'), 'ballymena', 'unmatched town = own slug');
@@ -120,7 +140,7 @@ d('artistIdentityKey', () => {
        artistIdentityKey('Ant Clowes', 'Staffordshire').key, 'duo qualifier same key');
   });
   t('sentinel key format', () => {
-    eq(artistUniqueKey('The Glamz', 'Stoke-on-Trent'), 'artist#glamz#staffs', 'key shape');
+    eq(artistUniqueKey('The Glamz', 'Stoke-on-Trent'), 'artist#glamz#west-midlands', 'key shape (2026-07-28 updated)');
   });
 });
 

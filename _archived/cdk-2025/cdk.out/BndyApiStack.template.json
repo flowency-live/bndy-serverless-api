@@ -1,0 +1,7324 @@
+{
+ "Description": "BNDY Platform Serverless API - Lambda Functions + API Gateway",
+ "Resources": {
+  "ExistingLambdaRolePolicy472C94D8": {
+   "Type": "AWS::IAM::Policy",
+   "Properties": {
+    "PolicyDocument": {
+     "Statement": [
+      {
+       "Action": [
+        "xray:PutTraceSegments",
+        "xray:PutTelemetryRecords"
+       ],
+       "Effect": "Allow",
+       "Resource": "*"
+      },
+      {
+       "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+       ],
+       "Effect": "Allow",
+       "Resource": {
+        "Ref": "JwtSecretB8834B39"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "PolicyName": "ExistingLambdaRolePolicy472C94D8",
+    "Roles": [
+     "bndy-api-instance-role"
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/ExistingLambdaRole/Policy/Resource"
+   }
+  },
+  "JwtSecretB8834B39": {
+   "Type": "AWS::SecretsManager::Secret",
+   "Properties": {
+    "Description": "JWT signing secret for BNDY API",
+    "GenerateSecretString": {
+     "ExcludePunctuation": true,
+     "GenerateStringKey": "secret",
+     "PasswordLength": 64,
+     "SecretStringTemplate": "{}"
+    },
+    "Name": "bndy/jwt-secret"
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/JwtSecret/Resource"
+   }
+  },
+  "BndyHttpApiD557A9C4": {
+   "Type": "AWS::ApiGatewayV2::Api",
+   "Properties": {
+    "CorsConfiguration": {
+     "AllowHeaders": [
+      "Content-Type",
+      "Authorization",
+      "X-Api-Key"
+     ],
+     "AllowMethods": [
+      "GET",
+      "POST",
+      "PUT",
+      "DELETE",
+      "OPTIONS"
+     ],
+     "AllowOrigins": [
+      "*"
+     ],
+     "MaxAge": 86400
+    },
+    "Description": "BNDY Platform HTTP API",
+    "Name": "bndy-api",
+    "ProtocolType": "HTTP"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/Resource"
+   }
+  },
+  "BndyHttpApiDefaultStageF8D9C0B1": {
+   "Type": "AWS::ApiGatewayV2::Stage",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AutoDeploy": true,
+    "StageName": "$default"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DefaultStage/Resource"
+   }
+  },
+  "BndyHttpApiGETapiartistsArtistsGETartistsIntegration4912B060": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artists/ArtistsGETartistsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiartistsArtistsGETartistsIntegrationPermission7B76DFC2": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/artists"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artists/ArtistsGETartistsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiartists0BDD8DC0": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/artists",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiartistsArtistsGETartistsIntegration4912B060"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artists/Resource"
+   }
+  },
+  "BndyHttpApiGETapiartistsbyexternalidArtistsGETartistsbyexternalidIntegration74DAAB46": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artists--by-external-id/ArtistsGETartistsby-external-idIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiartistsbyexternalidArtistsGETartistsbyexternalidIntegrationPermission853F056F": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/artists/by-external-id"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artists--by-external-id/ArtistsGETartistsby-external-idIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiartistsbyexternalid7D45969D": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/artists/by-external-id",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiartistsbyexternalidArtistsGETartistsbyexternalidIntegration74DAAB46"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artists--by-external-id/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiartistsArtistsPOSTartistsIntegration9DC74C57": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--artists/ArtistsPOSTartistsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiartistsArtistsPOSTartistsIntegrationPermission30276CAD": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/artists"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--artists/ArtistsPOSTartistsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiartistsDC06C442": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/artists",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiartistsArtistsPOSTartistsIntegration9DC74C57"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--artists/Resource"
+   }
+  },
+  "BndyHttpApiGETapiartistsidArtistsGETartistsidIntegrationE6F2E664": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artists--{id}/ArtistsGETartistsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiartistsidArtistsGETartistsidIntegrationPermissionBCA4B7D0": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/artists/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artists--{id}/ArtistsGETartistsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiartistsid674A7F5A": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/artists/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiartistsidArtistsGETartistsidIntegrationE6F2E664"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artists--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapiartistsidArtistsPUTartistsidIntegration0DB165BB": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--artists--{id}/ArtistsPUTartistsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapiartistsidArtistsPUTartistsidIntegrationPermission7AE2BBD1": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/artists/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--artists--{id}/ArtistsPUTartistsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapiartistsidCA3A4648": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/artists/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapiartistsidArtistsPUTartistsidIntegration0DB165BB"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--artists--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapiartistsidmcpArtistsPUTartistsidmcpIntegration63774DC8": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--artists--{id}--mcp/ArtistsPUTartistsidmcpIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapiartistsidmcpArtistsPUTartistsidmcpIntegrationPermissionCDB73840": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/artists/{id}/mcp"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--artists--{id}--mcp/ArtistsPUTartistsidmcpIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapiartistsidmcp4C2960B7": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/artists/{id}/mcp",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapiartistsidmcpArtistsPUTartistsidmcpIntegration63774DC8"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--artists--{id}--mcp/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapiartistsidArtistsDELETEartistsidIntegrationCEE974D4": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--artists--{id}/ArtistsDELETEartistsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapiartistsidArtistsDELETEartistsidIntegrationPermissionC5303523": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ArtistsFunction3DDB6F40",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/artists/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--artists--{id}/ArtistsDELETEartistsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiDELETEapiartistsid20D7C3F1": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "DELETE /api/artists/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiDELETEapiartistsidArtistsDELETEartistsidIntegrationCEE974D4"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--artists--{id}/Resource"
+   }
+  },
+  "BndyHttpApiGETapiartistsongsArtistSongsGETartistsongsIntegration4A051436": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "ArtistSongsFunctionD188A6DE",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artist-songs/ArtistSongsGETartist-songsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiartistsongsArtistSongsGETartistsongsIntegrationPermission7BC5AB74": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ArtistSongsFunctionD188A6DE",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/artist-songs"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artist-songs/ArtistSongsGETartist-songsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiartistsongs2B73E7CF": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/artist-songs",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiartistsongsArtistSongsGETartistsongsIntegration4A051436"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artist-songs/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiartistsongsArtistSongsPOSTartistsongsIntegrationB6A035E2": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "ArtistSongsFunctionD188A6DE",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--artist-songs/ArtistSongsPOSTartist-songsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiartistsongsArtistSongsPOSTartistsongsIntegrationPermissionE1FBC2CF": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ArtistSongsFunctionD188A6DE",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/artist-songs"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--artist-songs/ArtistSongsPOSTartist-songsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiartistsongs1D49B34F": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/artist-songs",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiartistsongsArtistSongsPOSTartistsongsIntegrationB6A035E2"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--artist-songs/Resource"
+   }
+  },
+  "BndyHttpApiGETapiartistsongsidArtistSongsGETartistsongsidIntegration11C467C3": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "ArtistSongsFunctionD188A6DE",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artist-songs--{id}/ArtistSongsGETartist-songsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiartistsongsidArtistSongsGETartistsongsidIntegrationPermission7CB8578B": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ArtistSongsFunctionD188A6DE",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/artist-songs/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artist-songs--{id}/ArtistSongsGETartist-songsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiartistsongsidE128A436": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/artist-songs/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiartistsongsidArtistSongsGETartistsongsidIntegration11C467C3"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--artist-songs--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapiartistsongsidArtistSongsPUTartistsongsidIntegrationF3B19289": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "ArtistSongsFunctionD188A6DE",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--artist-songs--{id}/ArtistSongsPUTartist-songsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapiartistsongsidArtistSongsPUTartistsongsidIntegrationPermission87D6FB05": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ArtistSongsFunctionD188A6DE",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/artist-songs/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--artist-songs--{id}/ArtistSongsPUTartist-songsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapiartistsongsid96EEE69A": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/artist-songs/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapiartistsongsidArtistSongsPUTartistsongsidIntegrationF3B19289"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--artist-songs--{id}/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapiartistsongsidArtistSongsDELETEartistsongsidIntegration551AA319": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "ArtistSongsFunctionD188A6DE",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--artist-songs--{id}/ArtistSongsDELETEartist-songsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapiartistsongsidArtistSongsDELETEartistsongsidIntegrationPermission1B56191B": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ArtistSongsFunctionD188A6DE",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/artist-songs/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--artist-songs--{id}/ArtistSongsDELETEartist-songsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiDELETEapiartistsongsid06E435CC": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "DELETE /api/artist-songs/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiDELETEapiartistsongsidArtistSongsDELETEartistsongsidIntegration551AA319"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--artist-songs--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiauthloginAuthPOSTauthloginIntegration0666D33E": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--login/AuthPOSTauthloginIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiauthloginAuthPOSTauthloginIntegrationPermission8B446E48": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/auth/login"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--login/AuthPOSTauthloginIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiauthlogin53788C7A": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/auth/login",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiauthloginAuthPOSTauthloginIntegration0666D33E"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--login/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiauthlogoutAuthPOSTauthlogoutIntegrationDB35957B": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--logout/AuthPOSTauthlogoutIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiauthlogoutAuthPOSTauthlogoutIntegrationPermissionF66F89C2": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/auth/logout"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--logout/AuthPOSTauthlogoutIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiauthlogout4FBC05DE": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/auth/logout",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiauthlogoutAuthPOSTauthlogoutIntegrationDB35957B"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--logout/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiauthrefreshAuthPOSTauthrefreshIntegration61459E30": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--refresh/AuthPOSTauthrefreshIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiauthrefreshAuthPOSTauthrefreshIntegrationPermission2546DFD1": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/auth/refresh"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--refresh/AuthPOSTauthrefreshIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiauthrefreshD01FB4E9": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/auth/refresh",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiauthrefreshAuthPOSTauthrefreshIntegration61459E30"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--refresh/Resource"
+   }
+  },
+  "BndyHttpApiGETapiauthmeAuthGETauthmeIntegrationE728594F": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--auth--me/AuthGETauthmeIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiauthmeAuthGETauthmeIntegrationPermissionC2ED4958": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/auth/me"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--auth--me/AuthGETauthmeIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiauthme4350330D": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/auth/me",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiauthmeAuthGETauthmeIntegrationE728594F"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--auth--me/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiauthregisterAuthPOSTauthregisterIntegration066FCCEF": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--register/AuthPOSTauthregisterIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiauthregisterAuthPOSTauthregisterIntegrationPermissionD4403A71": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/auth/register"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--register/AuthPOSTauthregisterIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiauthregister0E0E31BF": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/auth/register",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiauthregisterAuthPOSTauthregisterIntegration066FCCEF"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--register/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiauthfacebookAuthPOSTauthfacebookIntegration818B21DD": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--facebook/AuthPOSTauthfacebookIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiauthfacebookAuthPOSTauthfacebookIntegrationPermissionBF4234DF": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/auth/facebook"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--facebook/AuthPOSTauthfacebookIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiauthfacebookF3A43186": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/auth/facebook",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiauthfacebookAuthPOSTauthfacebookIntegration818B21DD"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--facebook/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiauthgoogleAuthPOSTauthgoogleIntegration6B55ECB1": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--google/AuthPOSTauthgoogleIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiauthgoogleAuthPOSTauthgoogleIntegrationPermissionB93F7D41": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "AuthFunctionA1CD5E0F",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/auth/google"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--google/AuthPOSTauthgoogleIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiauthgoogleC0EEAB3D": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/auth/google",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiauthgoogleAuthPOSTauthgoogleIntegration6B55ECB1"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--auth--google/Resource"
+   }
+  },
+  "BndyHttpApiGETapieventsEventsGETeventsIntegration10E5FF34": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--events/EventsGETeventsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapieventsEventsGETeventsIntegrationPermissionD8D9CC33": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/events"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--events/EventsGETeventsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapieventsD600AF11": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/events",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapieventsEventsGETeventsIntegration10E5FF34"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--events/Resource"
+   }
+  },
+  "BndyHttpApiGETapieventsbyexternalidEventsGETeventsbyexternalidIntegrationA028100B": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--events--by-external-id/EventsGETeventsby-external-idIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapieventsbyexternalidEventsGETeventsbyexternalidIntegrationPermissionC95C2F16": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/events/by-external-id"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--events--by-external-id/EventsGETeventsby-external-idIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapieventsbyexternalidFC7E5D86": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/events/by-external-id",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapieventsbyexternalidEventsGETeventsbyexternalidIntegrationA028100B"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--events--by-external-id/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapieventsEventsPOSTeventsIntegrationFDFA5D2E": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--events/EventsPOSTeventsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapieventsEventsPOSTeventsIntegrationPermissionD822A03F": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/events"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--events/EventsPOSTeventsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapieventsA7B82765": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/events",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapieventsEventsPOSTeventsIntegrationFDFA5D2E"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--events/Resource"
+   }
+  },
+  "BndyHttpApiGETapieventsidEventsGETeventsidIntegrationAFA2B797": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--events--{id}/EventsGETeventsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapieventsidEventsGETeventsidIntegrationPermission197E9F29": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/events/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--events--{id}/EventsGETeventsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapieventsid782EF16B": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/events/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapieventsidEventsGETeventsidIntegrationAFA2B797"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--events--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapieventsidEventsPUTeventsidIntegrationF0DFDFA1": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--events--{id}/EventsPUTeventsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapieventsidEventsPUTeventsidIntegrationPermission99A12976": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/events/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--events--{id}/EventsPUTeventsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapieventsid55F66C70": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/events/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapieventsidEventsPUTeventsidIntegrationF0DFDFA1"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--events--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapieventsidmcpEventsPUTeventsidmcpIntegration62A2285C": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--events--{id}--mcp/EventsPUTeventsidmcpIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapieventsidmcpEventsPUTeventsidmcpIntegrationPermission8D3169E3": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/events/{id}/mcp"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--events--{id}--mcp/EventsPUTeventsidmcpIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapieventsidmcp1C59EA0A": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/events/{id}/mcp",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapieventsidmcpEventsPUTeventsidmcpIntegration62A2285C"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--events--{id}--mcp/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapieventsidEventsDELETEeventsidIntegrationDF9CC07D": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--events--{id}/EventsDELETEeventsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapieventsidEventsDELETEeventsidIntegrationPermission233C4B6A": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/events/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--events--{id}/EventsDELETEeventsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiDELETEapieventsid405773CB": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "DELETE /api/events/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiDELETEapieventsidEventsDELETEeventsidIntegrationDF9CC07D"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--events--{id}/Resource"
+   }
+  },
+  "BndyHttpApiGETapicalendarEventsGETcalendarIntegrationF9CA36F6": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--calendar/EventsGETcalendarIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapicalendarEventsGETcalendarIntegrationPermission7D9BC3BA": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/calendar"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--calendar/EventsGETcalendarIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapicalendar6FB589FE": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/calendar",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapicalendarEventsGETcalendarIntegrationF9CA36F6"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--calendar/Resource"
+   }
+  },
+  "BndyHttpApiGETapicalendaridEventsGETcalendaridIntegration9C5F43BA": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--calendar--{id}/EventsGETcalendaridIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapicalendaridEventsGETcalendaridIntegrationPermission2501A190": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "EventsFunctionDE45FBEF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/calendar/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--calendar--{id}/EventsGETcalendaridIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapicalendaridF198D3DE": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/calendar/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapicalendaridEventsGETcalendaridIntegration9C5F43BA"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--calendar--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapieventsagentEventsAgentPOSTeventsagentIntegration46BC743F": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "EventsAgentFunction46E87932",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--events-agent/EventsAgentPOSTevents-agentIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapieventsagentEventsAgentPOSTeventsagentIntegrationPermission853ED0C2": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "EventsAgentFunction46E87932",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/events-agent"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--events-agent/EventsAgentPOSTevents-agentIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapieventsagent57A20ABB": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/events-agent",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapieventsagentEventsAgentPOSTeventsagentIntegration46BC743F"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--events-agent/Resource"
+   }
+  },
+  "BndyHttpApiGETapieventsagentidEventsAgentGETeventsagentidIntegration21D2A7EE": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "EventsAgentFunction46E87932",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--events-agent--{id}/EventsAgentGETevents-agentidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapieventsagentidEventsAgentGETeventsagentidIntegrationPermissionA8ACE076": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "EventsAgentFunction46E87932",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/events-agent/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--events-agent--{id}/EventsAgentGETevents-agentidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapieventsagentid8BF57053": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/events-agent/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapieventsagentidEventsAgentGETeventsagentidIntegration21D2A7EE"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--events-agent--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiflowencyinviteFlowencyInvitePOSTflowencyinviteIntegrationEB017C36": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "FlowencyInviteFunctionD8F73769",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--flowency--invite/FlowencyInvitePOSTflowencyinviteIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiflowencyinviteFlowencyInvitePOSTflowencyinviteIntegrationPermission15A7FBD4": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "FlowencyInviteFunctionD8F73769",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/flowency/invite"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--flowency--invite/FlowencyInvitePOSTflowencyinviteIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiflowencyinviteEDA9D0BC": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/flowency/invite",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiflowencyinviteFlowencyInvitePOSTflowencyinviteIntegrationEB017C36"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--flowency--invite/Resource"
+   }
+  },
+  "BndyHttpApiGETapiflowencystatusidFlowencyInviteGETflowencystatusidIntegration822FB0B8": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "FlowencyInviteFunctionD8F73769",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--flowency--status--{id}/FlowencyInviteGETflowencystatusidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiflowencystatusidFlowencyInviteGETflowencystatusidIntegrationPermissionE18D3F00": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "FlowencyInviteFunctionD8F73769",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/flowency/status/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--flowency--status--{id}/FlowencyInviteGETflowencystatusidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiflowencystatusid340875B7": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/flowency/status/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiflowencystatusidFlowencyInviteGETflowencystatusidIntegration822FB0B8"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--flowency--status--{id}/Resource"
+   }
+  },
+  "BndyHttpApiGETapiinvitesInvitesGETinvitesIntegration91657947": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "InvitesFunction08430844",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--invites/InvitesGETinvitesIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiinvitesInvitesGETinvitesIntegrationPermission2CB951D7": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "InvitesFunction08430844",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/invites"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--invites/InvitesGETinvitesIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiinvitesE6E60E87": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/invites",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiinvitesInvitesGETinvitesIntegration91657947"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--invites/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiinvitesInvitesPOSTinvitesIntegration4E7F4FC2": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "InvitesFunction08430844",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--invites/InvitesPOSTinvitesIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiinvitesInvitesPOSTinvitesIntegrationPermissionD99A3F4E": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "InvitesFunction08430844",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/invites"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--invites/InvitesPOSTinvitesIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiinvites28ED3791": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/invites",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiinvitesInvitesPOSTinvitesIntegration4E7F4FC2"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--invites/Resource"
+   }
+  },
+  "BndyHttpApiGETapiinvitesidInvitesGETinvitesidIntegration5C368223": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "InvitesFunction08430844",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--invites--{id}/InvitesGETinvitesidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiinvitesidInvitesGETinvitesidIntegrationPermission6CA486CE": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "InvitesFunction08430844",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/invites/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--invites--{id}/InvitesGETinvitesidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiinvitesidEDA48292": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/invites/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiinvitesidInvitesGETinvitesidIntegration5C368223"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--invites--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapiinvitesidInvitesPUTinvitesidIntegration49DF9FB8": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "InvitesFunction08430844",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--invites--{id}/InvitesPUTinvitesidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapiinvitesidInvitesPUTinvitesidIntegrationPermission481CBC27": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "InvitesFunction08430844",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/invites/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--invites--{id}/InvitesPUTinvitesidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapiinvitesid54D141B8": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/invites/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapiinvitesidInvitesPUTinvitesidIntegration49DF9FB8"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--invites--{id}/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapiinvitesidInvitesDELETEinvitesidIntegration007C156D": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "InvitesFunction08430844",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--invites--{id}/InvitesDELETEinvitesidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapiinvitesidInvitesDELETEinvitesidIntegrationPermission6617A483": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "InvitesFunction08430844",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/invites/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--invites--{id}/InvitesDELETEinvitesidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiDELETEapiinvitesid01270AB1": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "DELETE /api/invites/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiDELETEapiinvitesidInvitesDELETEinvitesidIntegration007C156D"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--invites--{id}/Resource"
+   }
+  },
+  "BndyHttpApiGETapiissuesIssuesGETissuesIntegration8E47425B": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "IssuesFunctionA7C994AD",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--issues/IssuesGETissuesIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiissuesIssuesGETissuesIntegrationPermissionE69609E8": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "IssuesFunctionA7C994AD",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/issues"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--issues/IssuesGETissuesIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiissues09F9946D": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/issues",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiissuesIssuesGETissuesIntegration8E47425B"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--issues/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiissuesIssuesPOSTissuesIntegrationF2017FDF": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "IssuesFunctionA7C994AD",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--issues/IssuesPOSTissuesIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiissuesIssuesPOSTissuesIntegrationPermission98AE372C": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "IssuesFunctionA7C994AD",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/issues"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--issues/IssuesPOSTissuesIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiissuesFB5EBD42": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/issues",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiissuesIssuesPOSTissuesIntegrationF2017FDF"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--issues/Resource"
+   }
+  },
+  "BndyHttpApiGETapiissuesidIssuesGETissuesidIntegration15502365": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "IssuesFunctionA7C994AD",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--issues--{id}/IssuesGETissuesidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiissuesidIssuesGETissuesidIntegrationPermission12B57396": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "IssuesFunctionA7C994AD",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/issues/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--issues--{id}/IssuesGETissuesidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiissuesid70D49E75": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/issues/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiissuesidIssuesGETissuesidIntegration15502365"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--issues--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapiissuesidIssuesPUTissuesidIntegrationD3FC3E92": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "IssuesFunctionA7C994AD",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--issues--{id}/IssuesPUTissuesidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapiissuesidIssuesPUTissuesidIntegrationPermissionDA1CBBFF": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "IssuesFunctionA7C994AD",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/issues/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--issues--{id}/IssuesPUTissuesidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapiissuesidAB195B46": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/issues/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapiissuesidIssuesPUTissuesidIntegrationD3FC3E92"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--issues--{id}/Resource"
+   }
+  },
+  "BndyHttpApiGETapimembershipsMembershipsGETmembershipsIntegrationFC7BFFEC": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "MembershipsFunction59CF8E31",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--memberships/MembershipsGETmembershipsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapimembershipsMembershipsGETmembershipsIntegrationPermissionF09775C0": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "MembershipsFunction59CF8E31",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/memberships"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--memberships/MembershipsGETmembershipsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapimemberships91C8F2E6": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/memberships",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapimembershipsMembershipsGETmembershipsIntegrationFC7BFFEC"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--memberships/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapimembershipsMembershipsPOSTmembershipsIntegrationE5FE787C": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "MembershipsFunction59CF8E31",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--memberships/MembershipsPOSTmembershipsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapimembershipsMembershipsPOSTmembershipsIntegrationPermission131F6F1F": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "MembershipsFunction59CF8E31",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/memberships"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--memberships/MembershipsPOSTmembershipsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapimemberships8D10C133": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/memberships",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapimembershipsMembershipsPOSTmembershipsIntegrationE5FE787C"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--memberships/Resource"
+   }
+  },
+  "BndyHttpApiGETapimembershipsmembershipIdMembershipsGETmembershipsmembershipIdIntegration119D4B85": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "MembershipsFunction59CF8E31",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--memberships--{membershipId}/MembershipsGETmembershipsmembershipIdIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapimembershipsmembershipIdMembershipsGETmembershipsmembershipIdIntegrationPermissionBA7EA494": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "MembershipsFunction59CF8E31",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/memberships/{membershipId}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--memberships--{membershipId}/MembershipsGETmembershipsmembershipIdIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapimembershipsmembershipId61F4F897": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/memberships/{membershipId}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapimembershipsmembershipIdMembershipsGETmembershipsmembershipIdIntegration119D4B85"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--memberships--{membershipId}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapimembershipsmembershipIdMembershipsPUTmembershipsmembershipIdIntegrationA6CAA509": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "MembershipsFunction59CF8E31",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--memberships--{membershipId}/MembershipsPUTmembershipsmembershipIdIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapimembershipsmembershipIdMembershipsPUTmembershipsmembershipIdIntegrationPermissionD347E522": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "MembershipsFunction59CF8E31",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/memberships/{membershipId}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--memberships--{membershipId}/MembershipsPUTmembershipsmembershipIdIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapimembershipsmembershipId50C45DB6": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/memberships/{membershipId}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapimembershipsmembershipIdMembershipsPUTmembershipsmembershipIdIntegrationA6CAA509"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--memberships--{membershipId}/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapimembershipsmembershipIdMembershipsDELETEmembershipsmembershipIdIntegration79F9298B": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "MembershipsFunction59CF8E31",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--memberships--{membershipId}/MembershipsDELETEmembershipsmembershipIdIntegration/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapimembershipsmembershipIdMembershipsDELETEmembershipsmembershipIdIntegrationPermission4C80B630": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "MembershipsFunction59CF8E31",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/memberships/{membershipId}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--memberships--{membershipId}/MembershipsDELETEmembershipsmembershipIdIntegration-Permission"
+   }
+  },
+  "BndyHttpApiDELETEapimembershipsmembershipId6309969E": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "DELETE /api/memberships/{membershipId}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiDELETEapimembershipsmembershipIdMembershipsDELETEmembershipsmembershipIdIntegration79F9298B"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--memberships--{membershipId}/Resource"
+   }
+  },
+  "BndyHttpApiGETapinotificationsNotificationsGETnotificationsIntegration368F02C5": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "NotificationsFunctionE347FB50",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--notifications/NotificationsGETnotificationsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapinotificationsNotificationsGETnotificationsIntegrationPermissionB9EF17C1": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "NotificationsFunctionE347FB50",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/notifications"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--notifications/NotificationsGETnotificationsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapinotifications46089782": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/notifications",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapinotificationsNotificationsGETnotificationsIntegration368F02C5"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--notifications/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapinotificationsNotificationsPOSTnotificationsIntegration81EEF7C3": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "NotificationsFunctionE347FB50",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--notifications/NotificationsPOSTnotificationsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapinotificationsNotificationsPOSTnotificationsIntegrationPermission2D553CFE": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "NotificationsFunctionE347FB50",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/notifications"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--notifications/NotificationsPOSTnotificationsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapinotifications5811083F": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/notifications",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapinotificationsNotificationsPOSTnotificationsIntegration81EEF7C3"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--notifications/Resource"
+   }
+  },
+  "BndyHttpApiPUTapinotificationsidNotificationsPUTnotificationsidIntegrationCDEB2F44": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "NotificationsFunctionE347FB50",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--notifications--{id}/NotificationsPUTnotificationsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapinotificationsidNotificationsPUTnotificationsidIntegrationPermission8E4180F5": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "NotificationsFunctionE347FB50",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/notifications/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--notifications--{id}/NotificationsPUTnotificationsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapinotificationsidE76FC850": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/notifications/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapinotificationsidNotificationsPUTnotificationsidIntegrationCDEB2F44"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--notifications--{id}/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapinotificationsidNotificationsDELETEnotificationsidIntegration9AF092C8": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "NotificationsFunctionE347FB50",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--notifications--{id}/NotificationsDELETEnotificationsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapinotificationsidNotificationsDELETEnotificationsidIntegrationPermission20D995AA": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "NotificationsFunctionE347FB50",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/notifications/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--notifications--{id}/NotificationsDELETEnotificationsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiDELETEapinotificationsid2A02B83A": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "DELETE /api/notifications/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiDELETEapinotificationsidNotificationsDELETEnotificationsidIntegration9AF092C8"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--notifications--{id}/Resource"
+   }
+  },
+  "BndyHttpApiGETapisetlistsSetlistsGETsetlistsIntegration8BAC9406": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SetlistsFunctionCE7250CF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--setlists/SetlistsGETsetlistsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapisetlistsSetlistsGETsetlistsIntegrationPermission85374527": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SetlistsFunctionCE7250CF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/setlists"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--setlists/SetlistsGETsetlistsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapisetlistsA41F1DA8": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/setlists",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapisetlistsSetlistsGETsetlistsIntegration8BAC9406"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--setlists/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapisetlistsSetlistsPOSTsetlistsIntegrationC75ED0BB": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SetlistsFunctionCE7250CF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--setlists/SetlistsPOSTsetlistsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapisetlistsSetlistsPOSTsetlistsIntegrationPermissionA517C207": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SetlistsFunctionCE7250CF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/setlists"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--setlists/SetlistsPOSTsetlistsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapisetlistsC7B7F2EF": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/setlists",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapisetlistsSetlistsPOSTsetlistsIntegrationC75ED0BB"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--setlists/Resource"
+   }
+  },
+  "BndyHttpApiGETapisetlistsidSetlistsGETsetlistsidIntegration7EBD4028": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SetlistsFunctionCE7250CF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--setlists--{id}/SetlistsGETsetlistsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapisetlistsidSetlistsGETsetlistsidIntegrationPermissionFC7AA1CD": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SetlistsFunctionCE7250CF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/setlists/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--setlists--{id}/SetlistsGETsetlistsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapisetlistsidF6EAEFA5": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/setlists/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapisetlistsidSetlistsGETsetlistsidIntegration7EBD4028"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--setlists--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapisetlistsidSetlistsPUTsetlistsidIntegration05DC802E": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SetlistsFunctionCE7250CF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--setlists--{id}/SetlistsPUTsetlistsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapisetlistsidSetlistsPUTsetlistsidIntegrationPermission6624C5B3": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SetlistsFunctionCE7250CF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/setlists/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--setlists--{id}/SetlistsPUTsetlistsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapisetlistsidDE87CF4B": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/setlists/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapisetlistsidSetlistsPUTsetlistsidIntegration05DC802E"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--setlists--{id}/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapisetlistsidSetlistsDELETEsetlistsidIntegration9DC320F0": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SetlistsFunctionCE7250CF",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--setlists--{id}/SetlistsDELETEsetlistsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapisetlistsidSetlistsDELETEsetlistsidIntegrationPermissionA7830F50": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SetlistsFunctionCE7250CF",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/setlists/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--setlists--{id}/SetlistsDELETEsetlistsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiDELETEapisetlistsidC00B55CF": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "DELETE /api/setlists/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiDELETEapisetlistsidSetlistsDELETEsetlistsidIntegration9DC320F0"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--setlists--{id}/Resource"
+   }
+  },
+  "BndyHttpApiGETapisongsSongsGETsongsIntegrationC8E39334": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SongsFunction4FE0CD9E",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--songs/SongsGETsongsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapisongsSongsGETsongsIntegrationPermission21516B06": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SongsFunction4FE0CD9E",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/songs"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--songs/SongsGETsongsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapisongsCB93D352": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/songs",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapisongsSongsGETsongsIntegrationC8E39334"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--songs/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapisongsSongsPOSTsongsIntegrationB989312A": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SongsFunction4FE0CD9E",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--songs/SongsPOSTsongsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapisongsSongsPOSTsongsIntegrationPermission05B593E8": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SongsFunction4FE0CD9E",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/songs"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--songs/SongsPOSTsongsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapisongs59F048A6": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/songs",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapisongsSongsPOSTsongsIntegrationB989312A"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--songs/Resource"
+   }
+  },
+  "BndyHttpApiGETapisongsidSongsGETsongsidIntegration27BE5ECE": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SongsFunction4FE0CD9E",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--songs--{id}/SongsGETsongsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapisongsidSongsGETsongsidIntegrationPermission2F1A0D57": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SongsFunction4FE0CD9E",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/songs/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--songs--{id}/SongsGETsongsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapisongsid4FD205FF": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/songs/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapisongsidSongsGETsongsidIntegration27BE5ECE"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--songs--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapisongsidSongsPUTsongsidIntegration3F2118C4": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SongsFunction4FE0CD9E",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--songs--{id}/SongsPUTsongsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapisongsidSongsPUTsongsidIntegrationPermissionEDB63B61": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SongsFunction4FE0CD9E",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/songs/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--songs--{id}/SongsPUTsongsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapisongsidBD3DA868": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/songs/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapisongsidSongsPUTsongsidIntegration3F2118C4"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--songs--{id}/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapisongsidSongsDELETEsongsidIntegration75E50B47": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SongsFunction4FE0CD9E",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--songs--{id}/SongsDELETEsongsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapisongsidSongsDELETEsongsidIntegrationPermissionCCA69D36": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SongsFunction4FE0CD9E",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/songs/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--songs--{id}/SongsDELETEsongsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiDELETEapisongsid668C4DA2": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "DELETE /api/songs/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiDELETEapisongsidSongsDELETEsongsidIntegration75E50B47"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--songs--{id}/Resource"
+   }
+  },
+  "BndyHttpApiGETapispotifysearchSpotifyGETspotifysearchIntegration677937F8": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SpotifyFunction0BC3EF30",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--spotify--search/SpotifyGETspotifysearchIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapispotifysearchSpotifyGETspotifysearchIntegrationPermissionAA734BA9": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SpotifyFunction0BC3EF30",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/spotify/search"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--spotify--search/SpotifyGETspotifysearchIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapispotifysearchC2BB5FB8": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/spotify/search",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapispotifysearchSpotifyGETspotifysearchIntegration677937F8"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--spotify--search/Resource"
+   }
+  },
+  "BndyHttpApiGETapispotifytrackidSpotifyGETspotifytrackidIntegrationABB9F20E": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SpotifyFunction0BC3EF30",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--spotify--track--{id}/SpotifyGETspotifytrackidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapispotifytrackidSpotifyGETspotifytrackidIntegrationPermissionA7EFEDEF": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SpotifyFunction0BC3EF30",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/spotify/track/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--spotify--track--{id}/SpotifyGETspotifytrackidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapispotifytrackidF0A20F26": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/spotify/track/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapispotifytrackidSpotifyGETspotifytrackidIntegrationABB9F20E"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--spotify--track--{id}/Resource"
+   }
+  },
+  "BndyHttpApiGETapispotifyartistidSpotifyGETspotifyartistidIntegration975EC8CA": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "SpotifyFunction0BC3EF30",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--spotify--artist--{id}/SpotifyGETspotifyartistidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapispotifyartistidSpotifyGETspotifyartistidIntegrationPermissionCFF52661": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "SpotifyFunction0BC3EF30",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/spotify/artist/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--spotify--artist--{id}/SpotifyGETspotifyartistidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapispotifyartistidF454F6B5": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/spotify/artist/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapispotifyartistidSpotifyGETspotifyartistidIntegration975EC8CA"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--spotify--artist--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiuploadsUploadsPOSTuploadsIntegration7D73B148": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "UploadsFunction47DC01EA",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--uploads/UploadsPOSTuploadsIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiuploadsUploadsPOSTuploadsIntegrationPermission27EEB7D8": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "UploadsFunction47DC01EA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/uploads"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--uploads/UploadsPOSTuploadsIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiuploads48435898": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/uploads",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiuploadsUploadsPOSTuploadsIntegration7D73B148"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--uploads/Resource"
+   }
+  },
+  "BndyHttpApiGETapiuploadsidUploadsGETuploadsidIntegration7229F8FB": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "UploadsFunction47DC01EA",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--uploads--{id}/UploadsGETuploadsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiuploadsidUploadsGETuploadsidIntegrationPermission87EFA1BC": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "UploadsFunction47DC01EA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/uploads/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--uploads--{id}/UploadsGETuploadsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiuploadsid72FDDA04": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/uploads/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiuploadsidUploadsGETuploadsidIntegration7229F8FB"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--uploads--{id}/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapiuploadsidUploadsDELETEuploadsidIntegration33C0BFD6": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "UploadsFunction47DC01EA",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--uploads--{id}/UploadsDELETEuploadsidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapiuploadsidUploadsDELETEuploadsidIntegrationPermissionCE520314": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "UploadsFunction47DC01EA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/uploads/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--uploads--{id}/UploadsDELETEuploadsidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiDELETEapiuploadsidD78417DD": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "DELETE /api/uploads/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiDELETEapiuploadsidUploadsDELETEuploadsidIntegration33C0BFD6"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--uploads--{id}/Resource"
+   }
+  },
+  "BndyHttpApiGETapiusersUsersGETusersIntegration758913AB": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "UsersFunction1976AE51",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--users/UsersGETusersIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiusersUsersGETusersIntegrationPermission03EC9081": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "UsersFunction1976AE51",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/users"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--users/UsersGETusersIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiusers1F365DF6": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/users",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiusersUsersGETusersIntegration758913AB"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--users/Resource"
+   }
+  },
+  "BndyHttpApiGETapiusersidUsersGETusersidIntegration36D179A1": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "UsersFunction1976AE51",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--users--{id}/UsersGETusersidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiusersidUsersGETusersidIntegrationPermission18465915": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "UsersFunction1976AE51",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/users/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--users--{id}/UsersGETusersidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiusersid2A9D85B6": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/users/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiusersidUsersGETusersidIntegration36D179A1"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--users--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapiusersidUsersPUTusersidIntegrationDB6ABA13": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "UsersFunction1976AE51",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--users--{id}/UsersPUTusersidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapiusersidUsersPUTusersidIntegrationPermissionDCD74FEA": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "UsersFunction1976AE51",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/users/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--users--{id}/UsersPUTusersidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapiusersidBF3F3393": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/users/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapiusersidUsersPUTusersidIntegrationDB6ABA13"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--users--{id}/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapiusersidUsersDELETEusersidIntegration22B97E8E": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "UsersFunction1976AE51",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--users--{id}/UsersDELETEusersidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapiusersidUsersDELETEusersidIntegrationPermission72EECA7F": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "UsersFunction1976AE51",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/users/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--users--{id}/UsersDELETEusersidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiDELETEapiusersidA47BD379": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "DELETE /api/users/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiDELETEapiusersidUsersDELETEusersidIntegration22B97E8E"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--users--{id}/Resource"
+   }
+  },
+  "BndyHttpApiGETapivenuesVenuesGETvenuesIntegration33D82722": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venues/VenuesGETvenuesIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapivenuesVenuesGETvenuesIntegrationPermission2483F181": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/venues"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venues/VenuesGETvenuesIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapivenues91C71E3F": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/venues",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapivenuesVenuesGETvenuesIntegration33D82722"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venues/Resource"
+   }
+  },
+  "BndyHttpApiGETapivenuesbyexternalidVenuesGETvenuesbyexternalidIntegration77428C31": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venues--by-external-id/VenuesGETvenuesby-external-idIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapivenuesbyexternalidVenuesGETvenuesbyexternalidIntegrationPermission3FE3DF0C": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/venues/by-external-id"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venues--by-external-id/VenuesGETvenuesby-external-idIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapivenuesbyexternalid70ADD166": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/venues/by-external-id",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapivenuesbyexternalidVenuesGETvenuesbyexternalidIntegration77428C31"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venues--by-external-id/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapivenuesVenuesPOSTvenuesIntegrationCCEEA1CE": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--venues/VenuesPOSTvenuesIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapivenuesVenuesPOSTvenuesIntegrationPermission3F233510": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/venues"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--venues/VenuesPOSTvenuesIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapivenuesB401ACA7": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/venues",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapivenuesVenuesPOSTvenuesIntegrationCCEEA1CE"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--venues/Resource"
+   }
+  },
+  "BndyHttpApiGETapivenuesidVenuesGETvenuesidIntegration98AF5BA2": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venues--{id}/VenuesGETvenuesidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapivenuesidVenuesGETvenuesidIntegrationPermission9D13C07D": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/venues/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venues--{id}/VenuesGETvenuesidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapivenuesid1B84AA45": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/venues/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapivenuesidVenuesGETvenuesidIntegration98AF5BA2"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venues--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapivenuesidVenuesPUTvenuesidIntegration31B15AC8": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--venues--{id}/VenuesPUTvenuesidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapivenuesidVenuesPUTvenuesidIntegrationPermission0116C0DB": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/venues/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--venues--{id}/VenuesPUTvenuesidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapivenuesidD9FE554E": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/venues/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapivenuesidVenuesPUTvenuesidIntegration31B15AC8"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--venues--{id}/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapivenuesidVenuesDELETEvenuesidIntegrationDDBA2363": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--venues--{id}/VenuesDELETEvenuesidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiDELETEapivenuesidVenuesDELETEvenuesidIntegrationPermission0AEF7D3A": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/venues/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--venues--{id}/VenuesDELETEvenuesidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiDELETEapivenuesid9CAAA4AE": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "DELETE /api/venues/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiDELETEapivenuesidVenuesDELETEvenuesidIntegrationDDBA2363"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/DELETE--api--venues--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiintegrationvenuesVenuesPOSTintegrationvenuesIntegration2F9F5FE1": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--integration--venues/VenuesPOSTintegrationvenuesIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapiintegrationvenuesVenuesPOSTintegrationvenuesIntegrationPermission07BF94A1": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/integration/venues"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--integration--venues/VenuesPOSTintegrationvenuesIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapiintegrationvenues9F691F06": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/integration/venues",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapiintegrationvenuesVenuesPOSTintegrationvenuesIntegration2F9F5FE1"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--integration--venues/Resource"
+   }
+  },
+  "BndyHttpApiGETapiintegrationvenuesidVenuesGETintegrationvenuesidIntegrationB6DBB8FF": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--integration--venues--{id}/VenuesGETintegrationvenuesidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapiintegrationvenuesidVenuesGETintegrationvenuesidIntegrationPermission8FCD6CF4": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "VenuesFunction39ABD6CA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/integration/venues/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--integration--venues--{id}/VenuesGETintegrationvenuesidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapiintegrationvenuesid26B1F70D": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/integration/venues/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapiintegrationvenuesidVenuesGETintegrationvenuesidIntegrationB6DBB8FF"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--integration--venues--{id}/Resource"
+   }
+  },
+  "BndyHttpApiGETapivenuecrmVenueCrmGETvenuecrmIntegration943B3475": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "VenueCrmFunction7F56A03C",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venue-crm/VenueCrmGETvenue-crmIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapivenuecrmVenueCrmGETvenuecrmIntegrationPermission47D78BA1": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "VenueCrmFunction7F56A03C",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/venue-crm"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venue-crm/VenueCrmGETvenue-crmIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapivenuecrmC9B415FF": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/venue-crm",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapivenuecrmVenueCrmGETvenuecrmIntegration943B3475"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venue-crm/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapivenuecrmVenueCrmPOSTvenuecrmIntegration7079FD1F": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "VenueCrmFunction7F56A03C",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--venue-crm/VenueCrmPOSTvenue-crmIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPOSTapivenuecrmVenueCrmPOSTvenuecrmIntegrationPermission51DB53BA": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "VenueCrmFunction7F56A03C",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/venue-crm"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--venue-crm/VenueCrmPOSTvenue-crmIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPOSTapivenuecrm94426440": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "POST /api/venue-crm",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPOSTapivenuecrmVenueCrmPOSTvenuecrmIntegration7079FD1F"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/POST--api--venue-crm/Resource"
+   }
+  },
+  "BndyHttpApiGETapivenuecrmidVenueCrmGETvenuecrmidIntegration93386609": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "VenueCrmFunction7F56A03C",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venue-crm--{id}/VenueCrmGETvenue-crmidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiGETapivenuecrmidVenueCrmGETvenuecrmidIntegrationPermission3AB54274": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "VenueCrmFunction7F56A03C",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/venue-crm/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venue-crm--{id}/VenueCrmGETvenue-crmidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiGETapivenuecrmid89C09225": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "GET /api/venue-crm/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiGETapivenuecrmidVenueCrmGETvenuecrmidIntegration93386609"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/GET--api--venue-crm--{id}/Resource"
+   }
+  },
+  "BndyHttpApiPUTapivenuecrmidVenueCrmPUTvenuecrmidIntegrationC6DE0F52": {
+   "Type": "AWS::ApiGatewayV2::Integration",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "IntegrationType": "AWS_PROXY",
+    "IntegrationUri": {
+     "Fn::GetAtt": [
+      "VenueCrmFunction7F56A03C",
+      "Arn"
+     ]
+    },
+    "PayloadFormatVersion": "2.0"
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--venue-crm--{id}/VenueCrmPUTvenue-crmidIntegration/Resource"
+   }
+  },
+  "BndyHttpApiPUTapivenuecrmidVenueCrmPUTvenuecrmidIntegrationPermissionC146BD24": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "VenueCrmFunction7F56A03C",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-2:771551874768:",
+       {
+        "Ref": "BndyHttpApiD557A9C4"
+       },
+       "/*/*/api/venue-crm/{id}"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--venue-crm--{id}/VenueCrmPUTvenue-crmidIntegration-Permission"
+   }
+  },
+  "BndyHttpApiPUTapivenuecrmid5B46FAA8": {
+   "Type": "AWS::ApiGatewayV2::Route",
+   "Properties": {
+    "ApiId": {
+     "Ref": "BndyHttpApiD557A9C4"
+    },
+    "AuthorizationType": "NONE",
+    "RouteKey": "PUT /api/venue-crm/{id}",
+    "Target": {
+     "Fn::Join": [
+      "",
+      [
+       "integrations/",
+       {
+        "Ref": "BndyHttpApiPUTapivenuecrmidVenueCrmPUTvenuecrmidIntegrationC6DE0F52"
+       }
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/BndyHttpApi/PUT--api--venue-crm--{id}/Resource"
+   }
+  },
+  "ArtistsLogGroup7FFE2358": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-artists",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/ArtistsLogGroup/Resource"
+   }
+  },
+  "ArtistsFunction3DDB6F40": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "ecf15d82c59c267ba8b577f218fd4bc5f4feef1833b75ad97d877807273a330b.zip"
+    },
+    "Description": "BNDY Artists API - handles /api/artists endpoints",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-artists",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "ArtistsLogGroup7FFE2358"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/ArtistsFunction/Resource",
+    "aws:asset:path": "asset.ecf15d82c59c267ba8b577f218fd4bc5f4feef1833b75ad97d877807273a330b",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "ArtistSongsLogGroup1F09670F": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-artist-songs",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/ArtistSongsLogGroup/Resource"
+   }
+  },
+  "ArtistSongsFunctionD188A6DE": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "0d251de34ef890834897864d18b37f586f29f4b83ba0442055d469147f6cdef0.zip"
+    },
+    "Description": "BNDY Artist Songs API - handles /api/artist-songs endpoints",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-artist-songs",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "ArtistSongsLogGroup1F09670F"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/ArtistSongsFunction/Resource",
+    "aws:asset:path": "asset.0d251de34ef890834897864d18b37f586f29f4b83ba0442055d469147f6cdef0",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "AuthLogGroupF07A5C5F": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-auth",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/AuthLogGroup/Resource"
+   }
+  },
+  "AuthFunctionA1CD5E0F": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "ad8061924ccda5564fde396ad08f6d58f5e2965025a5c829aef73816a47ff962.zip"
+    },
+    "Description": "BNDY Authentication API - handles OAuth and sessions",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-auth",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "AuthLogGroupF07A5C5F"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/AuthFunction/Resource",
+    "aws:asset:path": "asset.ad8061924ccda5564fde396ad08f6d58f5e2965025a5c829aef73816a47ff962",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "EventsLogGroupEB594EE7": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-events",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/EventsLogGroup/Resource"
+   }
+  },
+  "EventsFunctionDE45FBEF": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "e88e767e4a68d662d53db5906edcc00451b1fff1093f8c646c894720662c2e30.zip"
+    },
+    "Description": "BNDY Events API - handles /api/events and /api/calendar endpoints",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-events",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "EventsLogGroupEB594EE7"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/EventsFunction/Resource",
+    "aws:asset:path": "asset.e88e767e4a68d662d53db5906edcc00451b1fff1093f8c646c894720662c2e30",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "EventsAgentLogGroup7F0FD874": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-events-agent",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/EventsAgentLogGroup/Resource"
+   }
+  },
+  "EventsAgentFunction46E87932": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "0146e3e6487c20e3eeb58347018e704e4deb41333671509ecb2a79208bbcb8f8.zip"
+    },
+    "Description": "BNDY Events Agent - AI-powered event discovery",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-events-agent",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "EventsAgentLogGroup7F0FD874"
+     }
+    },
+    "MemorySize": 1024,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 120,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/EventsAgentFunction/Resource",
+    "aws:asset:path": "asset.0146e3e6487c20e3eeb58347018e704e4deb41333671509ecb2a79208bbcb8f8",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "FlowencyInviteLogGroupC56285BE": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-flowency-invite",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/FlowencyInviteLogGroup/Resource"
+   }
+  },
+  "FlowencyInviteFunctionD8F73769": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "7e0bdd539aabffec77fa9050e12bfe1c89a46317ffcf879470f392c31b1c5d63.zip"
+    },
+    "Description": "BNDY Flowency Integration - external invites",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-flowency-invite",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "FlowencyInviteLogGroupC56285BE"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/FlowencyInviteFunction/Resource",
+    "aws:asset:path": "asset.7e0bdd539aabffec77fa9050e12bfe1c89a46317ffcf879470f392c31b1c5d63",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "InvitesLogGroup4B38CDDF": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-invites",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/InvitesLogGroup/Resource"
+   }
+  },
+  "InvitesFunction08430844": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "1f93fd8995a2bb243fc8f75d26623f1d011e1d66b8506e90e680ea0626d86f9e.zip"
+    },
+    "Description": "BNDY Invites API - handles artist/band invitations",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-invites",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "InvitesLogGroup4B38CDDF"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/InvitesFunction/Resource",
+    "aws:asset:path": "asset.1f93fd8995a2bb243fc8f75d26623f1d011e1d66b8506e90e680ea0626d86f9e",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "IssuesLogGroupCCC6958D": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-issues",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/IssuesLogGroup/Resource"
+   }
+  },
+  "IssuesFunctionA7C994AD": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "85a831a590b0e6681a11510af40e6d8c6c9a277eb67cec1ae1b81765406d8814.zip"
+    },
+    "Description": "BNDY Issues API - handles user-reported issues",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-issues",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "IssuesLogGroupCCC6958D"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/IssuesFunction/Resource",
+    "aws:asset:path": "asset.85a831a590b0e6681a11510af40e6d8c6c9a277eb67cec1ae1b81765406d8814",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "MembershipsLogGroup247E23CC": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-memberships",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/MembershipsLogGroup/Resource"
+   }
+  },
+  "MembershipsFunction59CF8E31": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "2dfd24054066a4a400a7b58000429185ab6535906ce2ecf5482c6c1d1e771874.zip"
+    },
+    "Description": "BNDY Memberships API - handles artist/band memberships",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-memberships",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "MembershipsLogGroup247E23CC"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/MembershipsFunction/Resource",
+    "aws:asset:path": "asset.2dfd24054066a4a400a7b58000429185ab6535906ce2ecf5482c6c1d1e771874",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "NotificationsLogGroup30CD7BAC": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-notifications",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/NotificationsLogGroup/Resource"
+   }
+  },
+  "NotificationsFunctionE347FB50": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "868106282f20c958ccca4b2ebb4164d69a3ebf7df65af29ced55fc51cf87e2b8.zip"
+    },
+    "Description": "BNDY Notifications API - handles push notifications",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-notifications",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "NotificationsLogGroup30CD7BAC"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/NotificationsFunction/Resource",
+    "aws:asset:path": "asset.868106282f20c958ccca4b2ebb4164d69a3ebf7df65af29ced55fc51cf87e2b8",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "SetlistsLogGroup7124380D": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-setlists",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/SetlistsLogGroup/Resource"
+   }
+  },
+  "SetlistsFunctionCE7250CF": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "e9f89a4e50eee7570a247e898bee0e8a8c7c181e78d4f36f847f998525450cf2.zip"
+    },
+    "Description": "BNDY Setlists API - handles band setlists",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-setlists",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "SetlistsLogGroup7124380D"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/SetlistsFunction/Resource",
+    "aws:asset:path": "asset.e9f89a4e50eee7570a247e898bee0e8a8c7c181e78d4f36f847f998525450cf2",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "SongsLogGroupEFF444F5": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-songs",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/SongsLogGroup/Resource"
+   }
+  },
+  "SongsFunction4FE0CD9E": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "8943a88289327f7fb92e035aaeca094df1e81f700f8a2773e47040212ab020d2.zip"
+    },
+    "Description": "BNDY Songs API - handles song library",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-songs",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "SongsLogGroupEFF444F5"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/SongsFunction/Resource",
+    "aws:asset:path": "asset.8943a88289327f7fb92e035aaeca094df1e81f700f8a2773e47040212ab020d2",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "SpotifyLogGroup3921E4AF": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-spotify",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/SpotifyLogGroup/Resource"
+   }
+  },
+  "SpotifyFunction0BC3EF30": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "102e80ca4d058c4be1ef865daf26552e591b8acfa83489e2a251f4c55f0c940f.zip"
+    },
+    "Description": "BNDY Spotify Integration - handles Spotify API",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-spotify",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "SpotifyLogGroup3921E4AF"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/SpotifyFunction/Resource",
+    "aws:asset:path": "asset.102e80ca4d058c4be1ef865daf26552e591b8acfa83489e2a251f4c55f0c940f",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "UploadsLogGroup51AD7789": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-uploads",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/UploadsLogGroup/Resource"
+   }
+  },
+  "UploadsFunction47DC01EA": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "1816ebebdfc0d2e4e16d4a0cab9fbd3fad10143523f863a2425587f1034548a3.zip"
+    },
+    "Description": "BNDY Uploads API - handles S3 file uploads",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-uploads",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "UploadsLogGroup51AD7789"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/UploadsFunction/Resource",
+    "aws:asset:path": "asset.1816ebebdfc0d2e4e16d4a0cab9fbd3fad10143523f863a2425587f1034548a3",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "UsersLogGroup137A0AC4": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-users",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/UsersLogGroup/Resource"
+   }
+  },
+  "UsersFunction1976AE51": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "3369e02a5a52f0612df8384d8808582bea6752bf7998ec584cab1a27314cf54c.zip"
+    },
+    "Description": "BNDY Users API - handles user profiles",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-users",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "UsersLogGroup137A0AC4"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/UsersFunction/Resource",
+    "aws:asset:path": "asset.3369e02a5a52f0612df8384d8808582bea6752bf7998ec584cab1a27314cf54c",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "VenuesLogGroup670DBFC7": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-venues",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/VenuesLogGroup/Resource"
+   }
+  },
+  "VenuesFunction39ABD6CA": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "550b54eff571f6d69c75e01f329533bb157f4b0d121bfcc0194080f43feb88e4.zip"
+    },
+    "Description": "BNDY Venues API - handles /api/venues and integration endpoints",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-venues",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "VenuesLogGroup670DBFC7"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/VenuesFunction/Resource",
+    "aws:asset:path": "asset.550b54eff571f6d69c75e01f329533bb157f4b0d121bfcc0194080f43feb88e4",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "VenueCrmLogGroup7C7D4562": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-venue-crm",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/VenueCrmLogGroup/Resource"
+   }
+  },
+  "VenueCrmFunction7F56A03C": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "536348dc9c4a2cc11f0ea9b7ebba754b16bc3eaa48001606fc5be67881393907.zip"
+    },
+    "Description": "BNDY Venue CRM API - handles venue relationship management",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-venue-crm",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "VenueCrmLogGroup7C7D4562"
+     }
+    },
+    "MemorySize": 512,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 30,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/VenueCrmFunction/Resource",
+    "aws:asset:path": "asset.536348dc9c4a2cc11f0ea9b7ebba754b16bc3eaa48001606fc5be67881393907",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "VenueEnrichmentLogGroup25DF3018": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/bndy-venue-enrichment",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/VenueEnrichmentLogGroup/Resource"
+   }
+  },
+  "VenueEnrichmentFunction574BF14A": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-771551874768-eu-west-2",
+     "S3Key": "3470f0f72079d90bb77aa33dbc8b2ae3ac59d1c13b2f6d26bd6c15769968b9c9.zip"
+    },
+    "Description": "BNDY Venue Enrichment - background data enrichment (no HTTP routes)",
+    "Environment": {
+     "Variables": {
+      "NODE_ENV": "production",
+      "JWT_SECRET_ARN": {
+       "Ref": "JwtSecretB8834B39"
+      }
+     }
+    },
+    "FunctionName": "bndy-venue-enrichment",
+    "Handler": "handler.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "VenueEnrichmentLogGroup25DF3018"
+     }
+    },
+    "MemorySize": 1024,
+    "Role": "arn:aws:iam::771551874768:role/bndy-api-instance-role",
+    "Runtime": "nodejs20.x",
+    "Timeout": 300,
+    "TracingConfig": {
+     "Mode": "Active"
+    }
+   },
+   "DependsOn": [
+    "ExistingLambdaRolePolicy472C94D8"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/VenueEnrichmentFunction/Resource",
+    "aws:asset:path": "asset.3470f0f72079d90bb77aa33dbc8b2ae3ac59d1c13b2f6d26bd6c15769968b9c9",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "CDKMetadata": {
+   "Type": "AWS::CDK::Metadata",
+   "Properties": {
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/12O3WrDMAxGn6X3jhbSXey2HewHBhvJAxTV0YybxA6W3FCM3304ITe7+s4nHYEaaJ5foD7gwpXuh2q0V0idoB5US+xj0KRw4UuyOEH68aPVD/X66zbKikkHEp7QoaEAqVt7MTbKCmdrUGjBx72B9CEyn2ZbhBKldoKG1osVyqj1UTb6dEImoFjvivKvrl5WI07XHiGVvyhMlrns36LTu7hzVqM3DOnLm/fg41x2O2fFxwsykzCcSig+wjnqgeSMTFmtw/KkdaYcfkeZo2TlfE9w46d7U0NTQ324sbVViE7sRNBu+QdBCxZKaQEAAA=="
+   },
+   "Metadata": {
+    "aws:cdk:path": "BndyApiStack/CDKMetadata/Default"
+   }
+  }
+ },
+ "Outputs": {
+  "HttpApiUrl": {
+   "Description": "BNDY HTTP API Gateway endpoint URL",
+   "Value": {
+    "Fn::GetAtt": [
+     "BndyHttpApiD557A9C4",
+     "ApiEndpoint"
+    ]
+   },
+   "Export": {
+    "Name": "BndyApiUrl"
+   }
+  },
+  "HttpApiId": {
+   "Description": "BNDY HTTP API Gateway ID",
+   "Value": {
+    "Ref": "BndyHttpApiD557A9C4"
+   },
+   "Export": {
+    "Name": "BndyApiId"
+   }
+  }
+ },
+ "Parameters": {
+  "BootstrapVersion": {
+   "Type": "AWS::SSM::Parameter::Value<String>",
+   "Default": "/cdk-bootstrap/hnb659fds/version",
+   "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]"
+  }
+ },
+ "Rules": {
+  "CheckBootstrapVersion": {
+   "Assertions": [
+    {
+     "Assert": {
+      "Fn::Not": [
+       {
+        "Fn::Contains": [
+         [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+         ],
+         {
+          "Ref": "BootstrapVersion"
+         }
+        ]
+       }
+      ]
+     },
+     "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+    }
+   ]
+  }
+ }
+}

@@ -37,6 +37,34 @@ const TRAILING_TOKENS = ['band', 'duo', 'trio', 'acoustic', 'live', 'music', 'uk
 const LEET = { 3: 'e', 0: 'o', 1: 'i', 5: 's' };
 
 /**
+ * Confusables map for stylized names (runbook §2A / validation Gate 3).
+ * Applied AFTER NFKD + combining-mark stripping, so plain diacritics
+ * (Motörhead, Beyoncé) are already handled before this map runs.
+ * Keep small and evidence-driven — extend only for real incidents.
+ */
+const CONFUSABLES = {
+  '†': 't', '‡': 't', 'ø': 'o', 'ᛟ': 'o', 'ɸ': 'f', 'φ': 'f', 'ɣ': 'y',
+  'ᛨ': 'l', 'æ': 'ae', 'œ': 'oe', 'ß': 'ss', 'ð': 'd', 'þ': 'th',
+  'ʌ': 'a', 'Λ': 'a', '$': 's', '€': 'e', '¥': 'y', '@': 'a',
+  // NOTE: '!' deliberately NOT mapped — trailing bang ("Wham!") is punctuation;
+  // mid-word bangs (P!nk) resolve via the near-miss pass instead.
+};
+
+/**
+ * Unicode fold: NFKD-decompose, strip combining marks (ö -> o, é -> e),
+ * then map known confusable symbols to plain letters. Stylized spellings
+ * fold toward their searchable form so the identity key collides where it
+ * should (ÜL†RᛟɣᛨɸLE† keys toward "ultraviolet"-like forms instead of
+ * being unmatchable). NEVER used to REJECT non-ASCII names — accented and
+ * non-Latin names are legitimate; this only normalises the KEY.
+ */
+function unicodeFold(s) {
+  let out = s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  out = out.replace(/./gu, (c) => (CONFUSABLES[c] !== undefined ? CONFUSABLES[c] : c));
+  return out;
+}
+
+/**
  * Canonical artist-name normalisation.
  * lowercase → '&'→' and ' → leet-fold → punctuation/apostrophes/hyphens → space
  * → collapse whitespace → strip leading 'the ' → strip trailing tokens (repeat).
@@ -51,6 +79,7 @@ const LEET = { 3: 'e', 0: 'o', 1: 'i', 5: 's' };
 function normalise(name) {
   if (!name || typeof name !== 'string') return '';
   let s = name.toLowerCase();
+  s = unicodeFold(s); // diacritics + confusables fold BEFORE everything else (v1.3 Gate 3)
   s = s.replace(/['’‘]/g, ''); // apostrophes are REMOVED (banker's -> bankers), not spaced
   s = s.replace(/&/g, ' and ');
   s = s.replace(/[3015]/g, (c) => LEET[c]);
@@ -82,47 +111,60 @@ function normaliseKey(name) {
 }
 
 /**
- * Region bucket table. First match wins — ORDER MATTERS:
- * 'newcastle-under-lyme' MUST be tested before 'newcastle' (upon Tyne).
- * Patterns are tested against the lowercased, punctuation-stripped location.
+ * Region bucket table — BNDY canonical 13 regions (2026-07-28 gate hardening).
+ * First match wins — ORDER MATTERS: 'newcastle-under-lyme' MUST be tested
+ * before 'newcastle' (upon Tyne). Patterns are tested against the lowercased,
+ * punctuation-stripped location.
  *
- * Coarse on purpose (artist-identity-gate-plan §5 recommendation): a bucket is
- * a "performing footprint" area, not a town. stoke-on-trent / staffordshire /
- * newcastle-under-lyme are ONE bucket.
+ * Coarse on purpose: a bucket is a "performing footprint" area, not a town.
+ * stoke-on-trent / staffordshire / newcastle-under-lyme are ONE bucket.
  */
 const REGION_PATTERNS = [
-  // Staffordshire / Potteries
-  [/newcastle under lyme|stoke|staffordshire|staffs|hanley|burslem|tunstall|longton|fenton|kidsgrove|biddulph|leek\b|stafford\b|cannock|lichfield|tamworth|uttoxeter|stone\b/, 'staffs'],
-  // Cheshire
-  [/cheshire|crewe|nantwich|congleton|macclesfield|sandbach|alsager|northwich|winsford|middlewich|knutsford|wilmslow|chester\b|ellesmere port/, 'cheshire'],
+  // West Midlands (includes Staffordshire + Shropshire - user correction 2026-07-28)
+  [/newcastle under lyme|stoke|staffordshire|staffs|hanley|burslem|tunstall|longton|fenton|kidsgrove|biddulph|leek\b|stafford\b|cannock|lichfield|tamworth|uttoxeter|stone\b|west midlands|birmingham|wolverhampton|walsall|dudley|sandwell|solihull|coventry|west bromwich|stourbridge|halesowen|shropshire|shrewsbury|telford|oswestry|market drayton|whitchurch|bridgnorth|hartshill|tean|madeley|cheddleton|burntwood|eccleshall|stratford upon avon|nuneaton|sutton coldfield|bilston|ketley|salt|forsbrook|clifton|norton|trentham|meir|hadnall|ironbridge|drayton|marchamley|much wenlock|offley hay|seabridge|brewood|knutton|maer|rugeley|hereford|warwickshire|hatton|warwick/, 'west-midlands'],
   // North East (Tyne & Wear / Northumberland / Durham / Teesside)
-  [/newcastle upon tyne|tyne|wearside|sunderland|gateshead|northumberland|ashington|blyth|cramlington|morpeth|whitley bay|north shields|south shields|washington\b|durham|hartlepool|darlington|stockton|middlesbrough|teesside|seaham|peterlee|consett|stanley\b|chester le street|crook\b|new hartley/, 'ne'],
-  // North West (Gtr Manchester / Lancashire / Merseyside)
-  [/manchester|stockport|oldham|rochdale|bury\b|bolton|wigan|salford|tameside|ashton under lyne|glossop|trafford|altrincham|sale\b|lancashire|preston|blackburn|burnley|blackpool|lancaster|merseyside|liverpool|st helens|warrington|widnes|runcorn|high peak|new mills|chapel en le frith|buxton/, 'nw'],
+  // NOTE: bare "newcastle" maps here (vast majority are upon Tyne, not under Lyme)
+  [/north east|newcastle|tyne|wearside|sunderland|gateshead|northumberland|ashington|blyth|cramlington|morpeth|whitley bay|north shields|south shields|washington\b|durham|hartlepool|darlington|stockton|middlesbrough|teesside|seaham|peterlee|consett|stanley\b|chester le street|crook\b|new hartley|gosforth|alnwick|whickham|jarrow|hebburn|tow law|houghton le spring|spennymoor|coxhoe|forest hall|esh winning|seaton sluice|pegswood|cleadon|penshaw|sunniside|ryton|seaton delaval|allendale|cullercoats|bishop auckland|whitburn|easington|annitsford|new kyo|hamsterley|burnopfield|seghill|wallsend|boldon|felling|amble|killingworth|acklington|ovingham|barnard castle|ushaw moor|murton|langley park|winlaton|hexham/, 'north-east'],
+  // North West (Gtr Manchester / Lancashire / Merseyside / Cheshire - user correction 2026-07-28)
+  [/north west|manchester|stockport|oldham|rochdale|bury\b|bolton|wigan|salford|tameside|ashton under lyne|glossop|trafford|altrincham|sale\b|lancashire|preston|blackburn|burnley|blackpool|lancaster|merseyside|liverpool|st helens|saint helens|warrington|widnes|runcorn|high peak|new mills|chapel en le frith|buxton|cheshire|crewe|nantwich|congleton|macclesfield|sandbach|alsager|northwich|winsford|middlewich|knutsford|wilmslow|chester\b|ellesmere port|colne|darwen|leigh\b|whaley bridge|hyde\b|cheadle|stalybridge|radcliffe|barnoldswick|southport|chorley|skelmersdale|leyland|birkenhead|wirral|audlem|hawkshead|bowness on windermere|clitheroe|little hulton|ashton in makerfield|oswaldtwistle|pemberton|nelson|westhoughton|heaton moor|golborne|garswood|whitehaven|middleton|eccles|buckley|hawes|farnworth|newton le willows|rawtenstall|barrow in furness|bootle|morecambe|handforth|romiley|atherton|kendal|littleborough|dukinfield|padiham|poynton|prestwich|billinge|timperley|poulton|thelwall|lowton|thornton cleveleys|accrington|hayfield|bollington|coniston|whatcroft|sutton|reddish|high lane|great sutton|tyldesley|calthwaite|hoylake|denford|marple/, 'north-west'],
   // Yorkshire
-  [/yorkshire|leeds|sheffield|york\b|bradford|huddersfield|halifax|wakefield|barnsley|doncaster|rotherham|hull\b|harrogate|scarborough|selston/, 'yorks'],
-  // Derbyshire / Notts
-  [/derbyshire|derby\b|swadlincote|melbourne|ilkeston|ripley|belper|matlock|chesterfield|alfreton|heanor|long eaton|nottingham|notts|mansfield/, 'derbys-notts'],
-  // Hampshire / south coast
-  [/hampshire|hants|havant|waterlooville|emsworth|hayling|portsmouth|southampton|gosport|fareham|petersfield|winchester|eastleigh|basingstoke|isle of wight|bembridge/, 'hants'],
-  // West Midlands
-  [/west midlands|birmingham|wolverhampton|walsall|dudley|sandwell|solihull|coventry|west bromwich|stourbridge|halesowen/, 'west-mids'],
-  // Shropshire
-  [/shropshire|shrewsbury|telford|oswestry|market drayton|whitchurch/, 'shrops'],
-  // Wales (coarse)
-  [/wales|cardiff|swansea|newport\b|wrexham|rhyl|bangor\b|llandudno/, 'wales'],
-  // Scotland (coarse)
-  [/scotland|glasgow|edinburgh|aberdeen|dundee|stirling|inverness/, 'scotland'],
-  // London / South East (coarse)
-  [/london|croydon|bromley|essex|kent\b|surrey|sussex|brighton|reading\b|oxford\b|milton keynes|luton|watford/, 'london-se'],
-  // South West (coarse)
-  [/bristol|bath\b|somerset|devon|cornwall|plymouth|exeter|gloucester|cheltenham|swindon|dorset|bournemouth|poole/, 'sw'],
-  // East (coarse)
-  [/norfolk|norwich|suffolk|ipswich|cambridge|peterborough|lincoln/, 'east'],
+  [/yorkshire|leeds|sheffield|york\b|bradford|huddersfield|halifax|wakefield|barnsley|doncaster|rotherham|hull\b|harrogate|scarborough|selston|whitby|pontefract|holmfirth|keighley|hebden bridge|shipley|marsden|thirsk|morley|saltburn by the sea|bingley|ossett|cleckheaton|brighouse|stocksbridge|pudsey|snaith|castleford|linthwaite|steeton|baildon|diggle|leyburn|todmorden|skipton|mexborough|knaresborough|golcar|acaster malbis|malton|lindley/, 'yorkshire'],
+  // East Midlands (Derbyshire / Notts / Leicestershire)
+  [/east midlands|derbyshire|derby\b|swadlincote|melbourne|ilkeston|ripley|belper|matlock|chesterfield|alfreton|heanor|long eaton|nottingham|notts|mansfield|leicester|worksop|burton upon trent|burton on trent|ashbourne|stapleford|beeston|coalville|langley mill|kimberley|ibstock|bakewell|spondon|chellaston|wirksworth|louth|grimsby|clowne|wellingborough|edwinstowe|waingroves|scunthorpe|boston|hinckley|skegness|melton mowbray|ashby de la zouch|markfield|etwall|ironville|castle donington|youlgreave|crich|south normanton|shardlow|oakamoor|immingham|eastwood|kirkby in ashfield|whitwick|bonsall|cromer|newton solney|cleethorpes|netherton|clayton|milford/, 'east-midlands'],
+  // South East (Hampshire / Surrey / Kent / Sussex - user correction 2026-07-28: Portsmouth AND Hampshire → south-east)
+  [/south east|hampshire|hants|havant|waterlooville|emsworth|hayling|portsmouth|southampton|gosport|fareham|petersfield|winchester|eastleigh|basingstoke|isle of wight|bembridge|surrey|guildford|woking|kent\b|canterbury|maidstone|dover|sussex|brighton|hove|crawley|worthing|hastings|eastbourne|chichester|reading\b|oxford\b|berkshire|buckinghamshire|milton keynes|southsea|romsey|lewes|durrington|wickford|rowland s castle|portsdown hill|horndean|tonbridge|dartford|east grinstead|haywards heath|denmead|burgess hill|liphook|shoreham by sea|seaford|witney|abingdon|northfleet/, 'south-east'],
+  // London (separated from south-east - user correction 2026-07-28)
+  [/london|croydon|bromley|greenwich|lewisham|southwark|lambeth|wandsworth|richmond|kingston|brent|ealing|hounslow|harrow|barnet|enfield|haringey|islington|camden|westminster|city of london|chislehurst|romford|carshalton|sidcup/, 'london'],
+  // South West
+  [/south west|bristol|bath\b|somerset|devon|cornwall|plymouth|exeter|gloucester|cheltenham|swindon|dorset|bournemouth|poole|wiltshire|salisbury|weston super mare|brean|bude|minehead|torquay|penzance|seaton|southbourne/, 'south-west'],
+  // East of England
+  [/east of england|norfolk|norwich|suffolk|ipswich|cambridge|peterborough|lincoln|essex|colchester|southend|luton|watford|hertfordshire|bedfordshire|basildon|hatfield peverel|canvey island|stevenage|abbots langley|royston|hunstanton|great yarmouth|wisbech|burwell|south woodham ferrers|hullbridge|harlow|rayleigh|maldon|hertford/, 'east'],
+  // Wales
+  [/wales|cardiff|swansea|newport\b|wrexham|rhyl|bangor\b|llandudno|aberystwyth|carmarthen|holywell|ty croes|blackwood|mold|beaumaris|caernarfon|pentraeth|llangollen|crumlin|aberdare|holyhead/, 'wales'],
+  // Scotland
+  [/scotland|glasgow|edinburgh|aberdeen|dundee|stirling|inverness|perth\b|paisley|kilmarnock|dumfries|gourock|gordon/, 'scotland'],
+  // Northern Ireland
+  [/northern ireland|belfast|derry|londonderry|lisburn|newry|armagh/, 'northern-ireland'],
 ];
 
 /** Values that mean "no usable location". 'uk' alone is NOT a location (331-artist backfill finding). */
-const NON_LOCATIONS = new Set(['', 'uk', 'united kingdom', 'england', 'britain', 'great britain', 'tbc', 'unknown', 'n a', 'none', 'null']);
+const NON_LOCATIONS = new Set([
+  '', 'uk', 'united kingdom', 'england', 'britain', 'great britain',
+  'tbc', 'unknown', 'n a', 'none', 'null', 'test',
+  // Vague/non-specific
+  'midlands', 'midlands uk', 'south coast', 'south coast uk', 'south of england',
+  'uk touring', 'event location', 'event location uk',
+  // International (not UK-based) - multiple punctuation variants
+  'usa', 'touring', 'usa touring', 'usa touring uk',
+  'north america touring', 'north america touring uk',
+  'france italy touring', 'france italy touring uk',
+  'malawi touring', 'malawi touring uk',
+  'philadelphia usa touring', 'philadelphia usa touring uk',
+  'los angeles usa touring', 'los angeles usa touring uk',
+  'nashville usa', 'atlanta usa', 'new jersey usa', 'los angeles usa',
+  'rotterdam', 'dresden',
+  'oth hill', // Typo/unknown
+]);
 
 /**
  * Canonicalise a free-text location (or region string) to a coarse bucket.
@@ -269,6 +311,35 @@ function artistUniqueKey(name, location) {
   return resolvable ? `artist#${key}` : '';
 }
 
+/**
+ * All uniqueness keys for an artist (name+region + facebookUrl).
+ * Used for sentinel backfill and update re-keying.
+ *
+ * @param {string} name
+ * @param {string} location
+ * @param {string} [facebookUrl]
+ * @returns {{keys: string[], resolvable: boolean}} Array of sentinel keys + whether name key is resolvable
+ */
+function buildArtistUniqueKeys(name, location, facebookUrl) {
+  const keys = [];
+
+  // Name + location key
+  const { key: nameKey, resolvable } = artistIdentityKey(name, location);
+  if (resolvable) {
+    keys.push(`artist#${nameKey}`);
+  }
+
+  // Facebook key
+  if (facebookUrl) {
+    const fbKey = facebookKey(facebookUrl);
+    if (fbKey) {
+      keys.push(`artist#fb#${fbKey}`);
+    }
+  }
+
+  return { keys, resolvable };
+}
+
 /** Event uniqueness key strings for the unique-keys table. */
 function eventUniqueKeys(ev) {
   return eventNaturalKeys(ev).map((k) => `event#${k}`);
@@ -317,6 +388,7 @@ module.exports = {
   eventNaturalKeys,
   venuePlaceKey,
   artistUniqueKey,
+  buildArtistUniqueKeys,
   eventUniqueKeys,
   editDistance,
   isNearMiss,

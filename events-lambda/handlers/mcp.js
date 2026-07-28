@@ -6,8 +6,8 @@
  */
 
 const { createCancellationRecord } = require('../calendar-cancellations');
-const { checkForDuplicateEvent, releaseEventSentinels } = require('../lib/event-data');
-const { gateMode } = require('../lib/unique-gate');
+const { checkForDuplicateEvent, releaseEventSentinels, eventGateKeys } = require('../lib/event-data');
+const { gateMode, rekeyUniqueKeys } = require('../lib/unique-gate');
 
 // Table constants
 const EVENTS_TABLE = 'bndy-events';
@@ -218,7 +218,11 @@ async function handleUpdateEventMcp(deps, event) {
   const isPublicGig = existing.Item.isPublic === true || existing.Item.type === 'gig' || existing.Item.type === 'public_gig';
 
   if (identityChanged && isPublicGig && effVenueId && effArtistId) {
-    const dup = await checkForDuplicateEvent(dynamodb, effVenueId, effDate, [effArtistId]);
+    // GATE FIX 2026-07-28: cover collaborators too, not just the primary artist
+    const effAllArtists = [effArtistId,
+      ...(existing.Item.artistIds || []),
+      ...(existing.Item.collaboratingArtistIds || [])].filter(Boolean);
+    const dup = await checkForDuplicateEvent(dynamodb, effVenueId, effDate, effAllArtists);
     if (dup && dup.id !== id) {
       const detail = { eventId: id, conflictsWith: dup.id, effArtistId, effVenueId, effDate };
       if (gateMode() === 'enforce') {
@@ -235,6 +239,36 @@ async function handleUpdateEventMcp(deps, event) {
         };
       }
       console.warn('[MCP] UPDATE WOULD_BOUNCE (log mode): duplicate event', JSON.stringify(detail));
+    }
+
+    // GATE FIX 2026-07-28: re-key sentinels — claim the new (venue|artist|date)
+    // keys + release the old ones atomically. Enforce-mode collision → 409,
+    // update NOT performed (the sentinel is the race-proof backstop behind the
+    // advisory check above).
+    const projected = {
+      ...existing.Item,
+      artistId: effArtistId,
+      venueId: effVenueId,
+      date: effDate,
+    };
+    const rekey = await rekeyUniqueKeys(dynamodb, {
+      oldKeys: eventGateKeys(existing.Item),
+      newKeys: eventGateKeys(projected),
+      refId: id,
+      entityType: 'event',
+      source: 'mcp-update'
+    });
+    if (rekey.changed && rekey.ok === false) {
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({
+          error: 'Duplicate event',
+          code: 'DUPLICATE',
+          message: 'The uniqueness gate holds a sentinel for the target (venue|artist|date) — this update would collide with an existing event.',
+          existingEventId: rekey.existing ? rekey.existing.refId : null
+        })
+      };
     }
   }
 

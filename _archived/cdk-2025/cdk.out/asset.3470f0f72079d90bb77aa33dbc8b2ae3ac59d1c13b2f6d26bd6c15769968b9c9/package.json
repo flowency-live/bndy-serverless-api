@@ -1,0 +1,15 @@
+{
+  "name": "venue-enrichment-lambda",
+  "version": "1.0.0",
+  "description": "AI-based venue social media enrichment using Claude API",
+  "main": "handler.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "aws-sdk": "^2.1691.0"
+  },
+  "author": "BNDY",
+  "license": "ISC"
+}
