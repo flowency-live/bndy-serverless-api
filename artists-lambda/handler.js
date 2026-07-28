@@ -17,6 +17,7 @@ const { scanAll } = require('./lib/scan-all');
 const { artistIdentityKey, artistUniqueKey, facebookKey } = require('./lib/identity');
 const { gatedPut, releaseUniqueKeys, duplicateResponseBody, gateMode } = require('./lib/unique-gate');
 const { validateArtistData } = require('./lib/data-quality');
+const { deleteArtistEvents } = require('./lib/cascade-delete-events');
 
 /**
  * Sentinel keys for an artist record (2026-07-27 gate plan):
@@ -1433,6 +1434,14 @@ async function handleMCPDeleteArtist(artistId) {
       }).promise();
     }
 
+    // Step 3: Cascade-delete ALL events for this artist (any date, public or not).
+    // Pre-launch manual-cleanup path. Audit list is logged BEFORE the artist record
+    // goes (capture-before-prune, ADR-022).
+    const eventsResult = await deleteArtistEvents(dynamodb, artistId);
+    if (eventsResult.deleted > 0) {
+      console.log(` MCP: Cascade-deleting ${eventsResult.deleted} events for artist ${artistId} (${artistResult.Item.name}). Audit:`, JSON.stringify(eventsResult.audit));
+    }
+
     // Step 4: Delete the artist record + release uniqueness sentinels
     // (artistResult.Item was fetched in Step 1)
     await dynamodb.delete({
@@ -1453,7 +1462,8 @@ async function handleMCPDeleteArtist(artistId) {
       body: JSON.stringify({
         message: 'Artist deleted successfully',
         id: artistId,
-        cascadedMemberships: membershipsResult.Items.length
+        cascadedMemberships: membershipsResult.Items.length,
+        cascadedEvents: eventsResult.deleted
       })
     };
   } catch (error) {
