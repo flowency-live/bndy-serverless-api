@@ -7,7 +7,7 @@
 
 const crypto = require('crypto');
 const { verifyMembership } = require('../lib/auth');
-const { checkForDuplicateEvent, ensureVenueRelationship, validateRecurring, clearAvailabilityForDates, putEventGated, EVENTS_TABLE } = require('../lib/event-data');
+const { checkForDuplicateEvent, ensureVenueRelationship, validateRecurring, clearAvailabilityForDates, putEventGated, releaseEventSentinels, EVENTS_TABLE } = require('../lib/event-data');
 const { duplicateResponseBody } = require('../lib/unique-gate');
 const { triggerNotification } = require('../lib/notifications');
 const { createCancellationRecord } = require('../calendar-cancellations');
@@ -550,6 +550,10 @@ async function handleDeleteEvent(deps, event, user) {
     TableName: EVENTS_TABLE,
     Key: { id }
   }).promise();
+
+  // Fix #5c: Release uniqueness sentinels so keys are claimable again (2026-07-29)
+  // This prevents orphan sentinels that block legitimate creates
+  await releaseEventSentinels(dynamodb, existingEvent);
 
   console.log('EVENT: Deleted event', { eventId: id, deleteAll: deleteAll === 'true' });
 
