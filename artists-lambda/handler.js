@@ -18,6 +18,7 @@ const { artistIdentityKey, artistUniqueKey, facebookKey, normaliseKey, regionBuc
 const { gatedPut, rekeyUniqueKeys, releaseUniqueKeys, duplicateResponseBody, gateMode } = require('./lib/unique-gate');
 const { validateArtistData } = require('./lib/data-quality');
 const { deleteArtistEvents } = require('./lib/cascade-delete-events');
+const { hasEventsForArtist } = require('./lib/artist-event-guard');
 
 /**
  * Sentinel keys for an artist record (2026-07-27 gate plan):
@@ -1465,7 +1466,24 @@ async function handleDeleteArtist(artistId) {
   console.log(` Artists Lambda: Deleting artist: ${artistId}`);
 
   try {
-    // Step 1: Query all memberships for this artist
+    // Step 1: Check if any events reference this artist (Fix #6b, 2026-07-29)
+    // Refuse deletion to prevent orphan events with dead artistIds
+    const hasEvents = await hasEventsForArtist(dynamodb, artistId);
+    if (hasEvents) {
+      console.log(` ✗ Artist ${artistId} has events - refusing deletion`);
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'Artist has events',
+          code: 'ARTIST_HAS_EVENTS',
+          message: 'Cannot delete artist while events reference it. Delete or reassign events first.',
+          artistId
+        })
+      };
+    }
+
+    // Step 2: Query all memberships for this artist
     const membershipQueryParams = {
       TableName: MEMBERSHIPS_TABLE,
       IndexName: 'artist_id-index',
@@ -1478,7 +1496,7 @@ async function handleDeleteArtist(artistId) {
     const membershipsResult = await dynamodb.query(membershipQueryParams).promise();
     console.log(` Found ${membershipsResult.Items.length} memberships to delete`);
 
-    // Step 2: Delete all memberships (cascade delete)
+    // Step 3: Delete all memberships (cascade delete)
     for (const membership of membershipsResult.Items) {
       await dynamodb.delete({
         TableName: MEMBERSHIPS_TABLE,
@@ -1487,7 +1505,7 @@ async function handleDeleteArtist(artistId) {
       console.log(` Deleted membership: ${membership.membership_id} for user: ${membership.user_id}`);
     }
 
-    // Step 3: Delete the artist record (fetch first so the uniqueness
+    // Step 4: Delete the artist record (fetch first so the uniqueness
     // sentinels can be released — gate plan 2026-07-27)
     const artistParams = {
       TableName: 'bndy-artists',
@@ -1533,7 +1551,25 @@ async function handleMCPDeleteArtist(artistId) {
       };
     }
 
-    // Step 2: Delete memberships (cascade)
+    // Step 2: Check if any events reference this artist (Fix #6b, 2026-07-29)
+    // CHANGED: No longer cascade-deletes events - refuses deletion instead
+    // to prevent orphan events with dead artistIds
+    const hasEvents = await hasEventsForArtist(dynamodb, artistId);
+    if (hasEvents) {
+      console.log(` ✗ MCP: Artist ${artistId} has events - refusing deletion`);
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'Artist has events',
+          code: 'ARTIST_HAS_EVENTS',
+          message: 'Cannot delete artist while events reference it. Delete or reassign events first.',
+          artistId
+        })
+      };
+    }
+
+    // Step 3: Delete memberships (cascade)
     const membershipQueryParams = {
       TableName: MEMBERSHIPS_TABLE,
       IndexName: 'artist_id-index',
@@ -1551,14 +1587,6 @@ async function handleMCPDeleteArtist(artistId) {
         TableName: MEMBERSHIPS_TABLE,
         Key: { membership_id: membership.membership_id }
       }).promise();
-    }
-
-    // Step 3: Cascade-delete ALL events for this artist (any date, public or not).
-    // Pre-launch manual-cleanup path. Audit list is logged BEFORE the artist record
-    // goes (capture-before-prune, ADR-022).
-    const eventsResult = await deleteArtistEvents(dynamodb, artistId);
-    if (eventsResult.deleted > 0) {
-      console.log(` MCP: Cascade-deleting ${eventsResult.deleted} events for artist ${artistId} (${artistResult.Item.name}). Audit:`, JSON.stringify(eventsResult.audit));
     }
 
     // Step 4: Delete the artist record + release uniqueness sentinels
@@ -1581,8 +1609,7 @@ async function handleMCPDeleteArtist(artistId) {
       body: JSON.stringify({
         message: 'Artist deleted successfully',
         id: artistId,
-        cascadedMemberships: membershipsResult.Items.length,
-        cascadedEvents: eventsResult.deleted
+        cascadedMemberships: membershipsResult.Items.length
       })
     };
   } catch (error) {
