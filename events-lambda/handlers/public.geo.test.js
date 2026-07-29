@@ -10,7 +10,7 @@ const WINDOW = { startDate: '2026-07-11', endDate: '2026-07-18' };
 
 const ITEM = {
   id: 'e1', artistId: 'a1', venueId: 'v1', date: '2026-07-12',
-  startTime: '20:00', geoLat: 53.0, geoLng: -2.2, isPublic: true,
+  startTime: '20:00', geoLat: 53.0, geoLng: -2.2, isPublic: true, ticketed: true,
   privateNotes: 'must not leak',
 };
 
@@ -56,7 +56,7 @@ describe('handleGetPublicEventsGeo — bbox contract', () => {
     const body = JSON.parse(res.body);
     expect(body.truncated).toBe(false);
     const e = body.events[0];
-    expect(e).toEqual({ id: 'e1', artistId: 'a1', venueId: 'v1', date: '2026-07-12', startTime: '20:00', geoLat: 53.0, geoLng: -2.2 });
+    expect(e).toEqual({ id: 'e1', artistId: 'a1', venueId: 'v1', date: '2026-07-12', startTime: '20:00', geoLat: 53.0, geoLng: -2.2, ticketed: true });
   });
   it('city-scale bbox → gh4 index with bounded fan-out', async () => {
     const dynamodb = mockDynamo();

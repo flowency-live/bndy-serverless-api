@@ -219,7 +219,8 @@ async function handleGetPublicEventsGeo(deps, event) {
   // Lightweight shape — enough for map pins; details via POST /api/events/batch.
   const events = items.map(e => ({
     id: e.id, artistId: e.artistId, venueId: e.venueId,
-    date: e.date, startTime: e.startTime, geoLat: e.geoLat, geoLng: e.geoLng
+    date: e.date, startTime: e.startTime, geoLat: e.geoLat, geoLng: e.geoLng,
+    ticketed: !!e.ticketed
   }));
 
   console.log('PUBLIC_GEO: Found events', { count: events.length, truncated });
