@@ -66,6 +66,35 @@ function mergeExternalIds(existing, incoming) {
   return merged;
 }
 
+/**
+ * Merge nameVariants additively (union, dedupe by normalized key).
+ * Used for artist update paths to ensure known billing variations accumulate.
+ *
+ * @param {Array} existing - existing name_variants from DynamoDB
+ * @param {Array} incoming - new nameVariants from request
+ * @returns {Array} merged and deduplicated array (case-insensitive dedup)
+ */
+function mergeNameVariants(existing, incoming) {
+  const existingArr = existing || [];
+  const incomingArr = incoming || [];
+
+  // Dedupe by normalized key (case-insensitive, whitespace normalized)
+  const seen = new Set(existingArr.map(variant => normaliseKey(variant)));
+
+  // Merge: start with existing, add new ones that aren't duplicates
+  const merged = [...existingArr];
+
+  for (const variant of incomingArr) {
+    const key = normaliseKey(variant);
+    if (!seen.has(key)) {
+      merged.push(variant);
+      seen.add(key);
+    }
+  }
+
+  return merged;
+}
+
 // Configuration
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
 
@@ -537,6 +566,7 @@ async function handleGetAllArtists(event) {
       socialMediaUrls: artist.socialMediaUrls || [],
       profileImageUrl: artist.profileImageUrl || '',
       externalIds: artist.external_ids || [],
+      nameVariants: artist.name_variants || [],
       isVerified: artist.isVerified || false,
       followerCount: artist.followerCount || 0,
       claimedByUserId: artist.claimedByUserId || null,
@@ -616,6 +646,9 @@ async function handleGetArtistById(artistId) {
       ai_created: result.Item.ai_created || false,
       needs_review: result.Item.needs_review !== undefined ? result.Item.needs_review : null,
       external_ids: result.Item.external_ids || [],
+      externalIds: result.Item.external_ids || [],
+      name_variants: result.Item.name_variants || [],
+      nameVariants: result.Item.name_variants || [],
       actsEnabled: result.Item.actsEnabled || false,
       acts: result.Item.acts || [],
       createdAt: result.Item.createdAt,
@@ -1219,6 +1252,18 @@ async function handleUpdateArtist(event) {
     expressionAttributeValues[':external_ids'] = mergedExternalIds;
   }
 
+  // Name variants - additive merge (Fix #3a: 2026-07-29)
+  // Known billing variations (e.g., "Danny & Friends" for "Danny Brab") accumulate
+  if (artistData.nameVariants !== undefined) {
+    // Read existing to merge (may already be loaded above for externalIds)
+    const existingRes = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();
+    const existingNameVariants = existingRes.Item?.name_variants || [];
+    const mergedNameVariants = mergeNameVariants(existingNameVariants, artistData.nameVariants);
+
+    updateParts.push('name_variants = :name_variants');
+    expressionAttributeValues[':name_variants'] = mergedNameVariants;
+  }
+
   const params = {
     TableName: 'bndy-artists',
     Key: { id: artistId },
@@ -1265,8 +1310,9 @@ async function handleUpdateArtist(event) {
     // Transform response to match frontend expectations (snake_case -> camelCase)
     const transformedArtist = {
       ...result.Attributes,
-      artistType: result.Attributes.artist_type || null, // Provide camelCase for compatibility
-      externalIds: result.Attributes.external_ids || []   // Provide camelCase for frontend (Fix #2)
+      artistType: result.Attributes.artist_type || null,  // Provide camelCase for compatibility
+      externalIds: result.Attributes.external_ids || [],  // Provide camelCase for frontend (Fix #2)
+      nameVariants: result.Attributes.name_variants || [] // Provide camelCase for frontend (Fix #3a)
     };
 
     return {
@@ -1700,7 +1746,7 @@ async function handleCreateCommunityArtist(event) {
 
   try {
     const body = JSON.parse(event.body);
-    const { name, location, locationType, locationLat, locationLng, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic, profileImageUrl, externalIds } = body;
+    const { name, location, locationType, locationLat, locationLng, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic, profileImageUrl, externalIds, nameVariants } = body;
 
     // Validation
     if (!name || name.trim().length === 0) {
@@ -1821,6 +1867,9 @@ async function handleCreateCommunityArtist(event) {
       // External IDs for cross-referencing (MCP imports)
       external_ids: externalIds || [],
 
+      // Name variants for known billing variations (Fix #3a)
+      name_variants: nameVariants || [],
+
       created_at: now,
       updated_at: now
     };
@@ -1884,7 +1933,8 @@ async function handleCreateCommunityArtist(event) {
           locationLat: newArtist.locationLat,
           locationLng: newArtist.locationLng,
           locationType: newArtist.locationType,
-          externalIds: newArtist.external_ids
+          externalIds: newArtist.external_ids,
+          nameVariants: newArtist.name_variants
         }
       })
     };
@@ -2305,7 +2355,7 @@ async function handleFindOrCreateArtist(event) {
         IndexName: 'name-search-index',
         KeyConditionExpression: 'name_prefix = :prefix',
         ExpressionAttributeValues: { ':prefix': prefix },
-        ProjectionExpression: 'id, #name, #location',
+        ProjectionExpression: 'id, #name, #location, name_variants',
         ExpressionAttributeNames: { '#name': 'name', '#location': 'location' },
         Limit: 500
       }).promise();
@@ -2324,7 +2374,33 @@ async function handleFindOrCreateArtist(event) {
 
   console.log(`[find-or-create artist] Searched ${prefixes.size} prefix(es): ${[...prefixes].join(', ')} -> ${candidates.length} candidates`);
 
+  // Fix #3b: Name variant check BEFORE similarity scoring (2026-07-29)
+  // If incoming name matches any candidate's nameVariants, return matched immediately
+  const incomingNameKey = normaliseKey(name);
+  for (const candidate of candidates) {
+    const variants = candidate.name_variants || [];
+    for (const variant of variants) {
+      if (normaliseKey(variant) === incomingNameKey) {
+        console.log(`[find-or-create artist] NAME_VARIANT MATCH: "${name}" → ${candidate.id} (${candidate.name}) via variant "${variant}"`);
+        return {
+          statusCode: 200,
+          headers: getCommunityHeaders(),
+          body: JSON.stringify({
+            action: 'matched',
+            artist: { id: candidate.id, name: candidate.name, location: candidate.location },
+            confidence: 1,
+            matchedBy: 'name_variant',
+            variant: variant
+          })
+        };
+      }
+    }
+  }
+
   // Phase 1: Score candidates by name similarity (for candidate filtering)
+  // Fix #3c: Include region bucketing for mid-band safety net
+  const incomingRegion = regionBucket(body.location || venueRegion || '');
+
   const simScored = candidates
     .map(a => {
       const slug = artistSlugNormalise(a.name);
@@ -2332,7 +2408,9 @@ async function handleFindOrCreateArtist(event) {
       const sim = slugEqual ? 100 : similarityPct(slug, querySlug);
       const aTokens = significantTokens(a.name);
       const sharedToken = queryTokens.some(t => aTokens.includes(t));
-      return { id: a.id, name: a.name, location: a.location || '', sim, sharedToken, slugEqual };
+      const candidateRegion = regionBucket(a.location || '');
+      const sameRegion = incomingRegion !== 'unknown' && candidateRegion !== 'unknown' && incomingRegion === candidateRegion;
+      return { id: a.id, name: a.name, location: a.location || '', sim, sharedToken, slugEqual, region: candidateRegion, sameRegion };
     })
     .filter(s => s.sim >= 60 || s.slugEqual) // Only consider plausible candidates
     .sort((x, y) => y.sim - x.sim)
@@ -2472,9 +2550,17 @@ async function handleFindOrCreateArtist(event) {
   // Ambiguous middle: candidates exist but no clear winner
   // - Without venueRegion: >=60% similarity
   // - With venueRegion: footprint score 70-90 (SCORE_THRESHOLD_LOW to HIGH)
+  // Fix #3c: Mid-band safety net (60-89% + sharedToken + same region → review)
   const plausible = usedFootprintScoring
     ? scored.filter(s => s.footprintScore >= SCORE_THRESHOLD_LOW).slice(0, 5)
-    : scored.filter(s => s.sim >= 60).slice(0, 5);
+    : scored.filter(s => {
+        // 60-89% band: require sharedToken AND same region (Fix #3c safety net)
+        if (s.sim >= 60 && s.sim < 90) {
+          return s.sharedToken && s.sameRegion;
+        }
+        // >=90%: should have matched above, but include if present
+        return s.sim >= 90;
+      }).slice(0, 5);
 
   if (plausible.length > 0) {
     const topScore = usedFootprintScoring ? plausible[0].footprintScore : plausible[0].sim;
@@ -3084,6 +3170,14 @@ async function handleMCPUpdateArtist(event) {
       updateParts.push('external_ids = :external_ids');
       expressionAttributeValues[':external_ids'] = mergedExternalIds;
     }
+    if (artistData.nameVariants !== undefined) {
+      // MCP nameVariants must also merge additively (Fix #3a: 2026-07-29)
+      const existingNameVariants = existingArtist.Item?.name_variants || [];
+      const mergedNameVariants = mergeNameVariants(existingNameVariants, artistData.nameVariants);
+
+      updateParts.push('name_variants = :name_variants');
+      expressionAttributeValues[':name_variants'] = mergedNameVariants;
+    }
 
     const params = {
       TableName: 'bndy-artists',
@@ -3135,7 +3229,8 @@ async function handleMCPUpdateArtist(event) {
       body: JSON.stringify({
         ...result.Attributes,
         artistType: result.Attributes.artist_type || null,
-        externalIds: result.Attributes.external_ids || []  // Provide camelCase for frontend (Fix #2)
+        externalIds: result.Attributes.external_ids || [],  // Provide camelCase for frontend (Fix #2)
+        nameVariants: result.Attributes.name_variants || [] // Provide camelCase for frontend (Fix #3a)
       })
     };
   } catch (error) {
