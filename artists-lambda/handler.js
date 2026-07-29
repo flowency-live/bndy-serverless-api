@@ -37,6 +37,35 @@ function buildArtistUniqueKeys(name, location, facebookUrl) {
   return { keys, resolvable: identity.resolvable, identity };
 }
 
+/**
+ * Merge externalIds additively (union, dedupe by source+id).
+ * Used for artist update paths to ensure externalIds accumulate rather than replace.
+ *
+ * @param {Array} existing - existing external_ids from DynamoDB
+ * @param {Array} incoming - new externalIds from request
+ * @returns {Array} merged and deduplicated array
+ */
+function mergeExternalIds(existing, incoming) {
+  const existingArr = existing || [];
+  const incomingArr = incoming || [];
+
+  // Create a Set of unique keys (source#id) from existing
+  const seen = new Set(existingArr.map(ext => `${ext.source}#${ext.id}`));
+
+  // Merge: start with existing, add new ones that aren't duplicates
+  const merged = [...existingArr];
+
+  for (const ext of incomingArr) {
+    const key = `${ext.source}#${ext.id}`;
+    if (!seen.has(key)) {
+      merged.push(ext);
+      seen.add(key);
+    }
+  }
+
+  return merged;
+}
+
 // Configuration
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
 
@@ -1178,6 +1207,18 @@ async function handleUpdateArtist(event) {
     expressionAttributeValues[':acts'] = artistData.acts || [];
   }
 
+  // External IDs - additive merge (Fix #2: 2026-07-29)
+  // MCP imports and other sources add externalIds; must merge, not replace
+  if (artistData.externalIds !== undefined) {
+    // Read existing to merge
+    const existingRes = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();
+    const existingExternalIds = existingRes.Item?.external_ids || [];
+    const mergedExternalIds = mergeExternalIds(existingExternalIds, artistData.externalIds);
+
+    updateParts.push('external_ids = :external_ids');
+    expressionAttributeValues[':external_ids'] = mergedExternalIds;
+  }
+
   const params = {
     TableName: 'bndy-artists',
     Key: { id: artistId },
@@ -1225,6 +1266,7 @@ async function handleUpdateArtist(event) {
     const transformedArtist = {
       ...result.Attributes,
       artistType: result.Attributes.artist_type || null, // Provide camelCase for compatibility
+      externalIds: result.Attributes.external_ids || []   // Provide camelCase for frontend (Fix #2)
     };
 
     return {
@@ -3035,8 +3077,12 @@ async function handleMCPUpdateArtist(event) {
       expressionAttributeValues[':profileImageUrl'] = artistData.profileImageUrl || '';
     }
     if (artistData.externalIds !== undefined) {
+      // MCP externalIds must also merge additively (Fix #2: 2026-07-29)
+      const existingExternalIds = existingArtist.Item?.external_ids || [];
+      const mergedExternalIds = mergeExternalIds(existingExternalIds, artistData.externalIds);
+
       updateParts.push('external_ids = :external_ids');
-      expressionAttributeValues[':external_ids'] = artistData.externalIds || [];
+      expressionAttributeValues[':external_ids'] = mergedExternalIds;
     }
 
     const params = {
@@ -3088,7 +3134,8 @@ async function handleMCPUpdateArtist(event) {
       headers: getCommunityHeaders(),
       body: JSON.stringify({
         ...result.Attributes,
-        artistType: result.Attributes.artist_type || null
+        artistType: result.Attributes.artist_type || null,
+        externalIds: result.Attributes.external_ids || []  // Provide camelCase for frontend (Fix #2)
       })
     };
   } catch (error) {

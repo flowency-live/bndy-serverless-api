@@ -1033,7 +1033,16 @@ async function handleBulkImport(event) {
     return createResponse(401, { error: authResult.error });
   }
 
-  const body = event.body ? JSON.parse(event.body) : null;
+  // Parse JSON with explicit error handling (Fix #1: 2026-07-29)
+  // Prevents JSON parse errors from bubbling to catch-all 500
+  let body;
+  try {
+    body = event.body ? JSON.parse(event.body) : null;
+  } catch (error) {
+    console.error('BULK_IMPORT: Invalid JSON in request body:', error.message);
+    return createResponse(400, { error: 'Invalid JSON in request body' });
+  }
+
   if (!body) {
     return createResponse(400, { error: 'Request body required' });
   }
