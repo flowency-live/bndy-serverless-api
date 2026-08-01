@@ -8,8 +8,10 @@
 
 const crypto = require('crypto');
 const ngeohash = require('ngeohash');
-const { stripPrivateFields, EVENTS_TABLE, VENUES_TABLE, getVenue, checkForDuplicateEvent, checkForDuplicateByExternalId, ensureVenueRelationship } = require('../lib/event-data');
+const { stripPrivateFields, EVENTS_TABLE, VENUES_TABLE, getVenue, checkForDuplicateEvent, checkForDuplicateByExternalId, ensureVenueRelationship, putEventGated } = require('../lib/event-data');
+const { duplicateResponseBody } = require('../lib/unique-gate');
 const { computeGeohashFields } = require('../lib/geohash');
+const { parseBbox, validateDateWindow, planBboxQuery, GH6_INDEX } = require('../lib/geo-query');
 const { verifyMembership } = require('../lib/auth');
 const { triggerNotification } = require('../lib/notifications');
 const { jsonResponse } = require('../lib/http-response');
@@ -168,60 +170,61 @@ async function handleCheckConflicts(deps, event) {
  */
 async function handleGetPublicEventsGeo(deps, event) {
   const { dynamodb, getCorsHeaders } = deps;
-  const { geohash, startDate, endDate } = event.queryStringParameters || {};
+  const { geohash, bbox: rawBbox, startDate, endDate } = event.queryStringParameters || {};
+  const corsHeaders = getCorsHeaders(event);
+  const bad = (msg) => ({ statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: msg }) });
 
-  if (!geohash || !startDate || !endDate) {
-    return {
-      statusCode: 400,
-      headers: getCorsHeaders(event),
-      body: JSON.stringify({ error: 'geohash, startDate, and endDate required' })
-    };
+  if (!rawBbox && !geohash) return bad('bbox (west,south,east,north) or geohash required');
+  const dateErr = validateDateWindow(startDate, endDate);
+  if (dateErr.error) return bad(dateErr.error);
+
+  let plan;
+  if (rawBbox) {
+    const parsed = parseBbox(rawBbox);
+    if (parsed.error) return bad(parsed.error);
+    plan = planBboxQuery(parsed.bbox);
+    console.log('PUBLIC_GEO: bbox query', { bbox: rawBbox, precision: plan.precision || 'fallback', cells: plan.cells ? plan.cells.length : 0 });
+  } else {
+    // Deprecated path: centre + 8 neighbours at gh6. Kept for existing clients.
+    plan = { precision: 6, indexName: GH6_INDEX, hashAttr: 'geohash6', cells: [geohash, ...ngeohash.neighbors(geohash)] };
+    console.log('PUBLIC_GEO: legacy geohash query', { geohash });
   }
 
-  console.log('PUBLIC_GEO: Query received', { geohash, startDate, endDate });
-
-  // Get 8 neighboring geohashes (returns array [n, ne, e, se, s, sw, w, nw])
-  const neighbors = ngeohash.neighbors(geohash);
-  const allGeohashes = [geohash, ...neighbors];
-
-  console.log('PUBLIC_GEO: Querying 9 geohashes', { center: geohash, neighbors: allGeohashes.slice(1) });
-
-  // Query all 9 geohashes in parallel
-  const queryPromises = allGeohashes.map(gh =>
-    dynamodb.query({
+  let items;
+  let truncated = false;
+  if (plan.fallback) {
+    // Country-scale viewport: never fan out hundreds of cell queries.
+    // Serve the whole-window public dataset; the shared 60s cache absorbs it.
+    truncated = true;
+    items = await scanAll(dynamodb, {
       TableName: EVENTS_TABLE,
-      IndexName: 'geohash6-date-index',
-      KeyConditionExpression: 'geohash6 = :geohash AND #date BETWEEN :start AND :end',
-      FilterExpression: 'isPublic = :isPublic',
+      FilterExpression: 'isPublic = :true AND #date BETWEEN :start AND :end',
       ExpressionAttributeNames: { '#date': 'date' },
-      ExpressionAttributeValues: {
-        ':geohash': gh,
-        ':start': startDate,
-        ':end': endDate,
-        ':isPublic': true
-      }
-    }).promise()
-  );
+      ExpressionAttributeValues: { ':true': true, ':start': startDate, ':end': endDate }
+    });
+  } else {
+    const results = await Promise.all(plan.cells.map(gh =>
+      dynamodb.query({
+        TableName: EVENTS_TABLE,
+        IndexName: plan.indexName,
+        KeyConditionExpression: `${plan.hashAttr} = :gh AND #date BETWEEN :start AND :end`,
+        FilterExpression: 'isPublic = :true',
+        ExpressionAttributeNames: { '#date': 'date' },
+        ExpressionAttributeValues: { ':gh': gh, ':start': startDate, ':end': endDate, ':true': true }
+      }).promise()
+    ));
+    items = results.flatMap(r => r.Items || []);
+  }
 
-  const results = await Promise.all(queryPromises);
-  const allEvents = results.flatMap(result => result.Items || []);
-
-  console.log('PUBLIC_GEO: Found events', { count: allEvents.length });
-
-  // Return lightweight event list (frontend will batch fetch full details)
-  const lightweightEvents = allEvents.map(e => ({
-    id: e.id,
-    artistId: e.artistId,
-    venueId: e.venueId,
-    date: e.date,
-    geoLat: e.geoLat,
-    geoLng: e.geoLng
+  // Lightweight shape — enough for map pins; details via POST /api/events/batch.
+  const events = items.map(e => ({
+    id: e.id, artistId: e.artistId, venueId: e.venueId,
+    date: e.date, startTime: e.startTime, geoLat: e.geoLat, geoLng: e.geoLng,
+    ticketed: !!e.ticketed
   }));
 
-  return jsonResponse(event, 200, { events: lightweightEvents }, {
-    corsHeaders: getCorsHeaders(event),
-    cacheControl: 'public, max-age=60'
-  });
+  console.log('PUBLIC_GEO: Found events', { count: events.length, truncated });
+  return jsonResponse(event, 200, { events, truncated }, { corsHeaders, cacheControl: 'public, max-age=60' });
 }
 
 /**
@@ -724,11 +727,19 @@ async function handleCreatePublicGig(deps, event, user) {
   // Auto-create venue relationship before creating the event
   await ensureVenueRelationship(dynamodb, artistId, gigData.venueId, gigData.date);
 
-  // Create the event
-  await dynamodb.put({
-    TableName: EVENTS_TABLE,
-    Item: newEvent
-  }).promise();
+  // Create the event — HARD GATE on (venue|artist|date), 2026-07-27 plan
+  const gateResult = await putEventGated(dynamodb, newEvent, 'public-gig');
+  if (!gateResult.written) {
+    return {
+      statusCode: 409,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        ...duplicateResponseBody('event', gateResult.existing),
+        message: `An event with this artist at this venue on ${gigData.date} already exists`,
+        existingEventId: gateResult.existing ? gateResult.existing.refId : null
+      })
+    };
+  }
 
   console.log('PUBLIC_GIG: Created successfully', {
     eventId,
@@ -781,7 +792,9 @@ async function handleCreateCommunityEvent(deps, event) {
     const {
       artistId, artistIds, venueId, date, startTime, endTime, title, isPublic, source, isOpenMic,
       // Enrichment fields (parity with edit_event)
-      price, eventUrl, ticketed, ticketInformation, ticketUrl, imageUrl, description, notes
+      price, eventUrl, ticketed, ticketInformation, ticketUrl, imageUrl, description, notes,
+      // Festival fields (Phase 1a)
+      festivalId, festivalName, stageId, billing, billingOrder
     } = body;
 
     // Support both single artistId and multiple artistIds
@@ -937,6 +950,13 @@ async function handleCreateCommunityEvent(deps, event) {
       ...(description !== undefined && { description }),
       ...(notes !== undefined && { notes }),
 
+      // Festival fields (Phase 1a)
+      ...(festivalId !== undefined && { festivalId }),
+      ...(festivalName !== undefined && { festivalName }),
+      ...(stageId !== undefined && { stageId }),
+      ...(billing !== undefined && { billing }),
+      ...(billingOrder !== undefined && { billingOrder }),
+
       // Community event flags
       source: source || 'community_wizard',
       verifiedByArtist: false,  // Ghost checkmark
@@ -951,11 +971,21 @@ async function handleCreateCommunityEvent(deps, event) {
       updatedAt: now
     };
 
-    // Write to DynamoDB
-    await dynamodb.put({
-      TableName: EVENTS_TABLE,
-      Item: newEvent
-    }).promise();
+    // Write to DynamoDB — HARD GATE on (venue|artist|date), 2026-07-27 plan.
+    // The OPENMIC key inside the gate also closes the old skip-hole where
+    // artist-less events (isOpenMic) had zero duplicate protection.
+    const gateResult = await putEventGated(dynamodb, newEvent, source || 'community');
+    if (!gateResult.written) {
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({
+          ...duplicateResponseBody('event', gateResult.existing),
+          message: 'Duplicate event: this artist/venue/date combination already exists',
+          existingEventId: gateResult.existing ? gateResult.existing.refId : null
+        })
+      };
+    }
 
     // DEFENSIVE: Read back to verify persistence (prevents silent data loss bug)
     // Addresses issue where put returns success but record not persisted (~1-3% incidence)

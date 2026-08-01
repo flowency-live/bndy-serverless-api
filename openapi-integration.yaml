@@ -1,0 +1,601 @@
+openapi: 3.0.3
+info:
+  title: BNDY Integration API
+  description: |
+    API for external tools (Zapier, n8n, Make) to create and manage BNDY data.
+
+    **Workflow:**
+    1. Find/create venue → returns `venueId`
+    2. Find/create artist → returns `artistId`
+    3. Find/create event → links artist to venue on date
+
+    Requires API key authentication via `x-api-key` header.
+
+    All entities are flagged with `ai_created: true` and `needs_review: true` for admin review.
+  version: 2.0.0
+  contact:
+    name: BNDY Support
+    url: https://bndy.co.uk
+
+servers:
+  - url: https://api.bndy.co.uk
+    description: Production
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /api/integration/venues:
+    post:
+      summary: Find or create venue
+      description: |
+        Looks up a venue by name and city using Google Places API, then either:
+        - Returns existing BNDY venue if Google Place ID matches
+        - Creates new venue if no match found
+
+        **Deduplication:** Uses Google Place ID for exact matching, falls back to
+        location + name fuzzy matching (50m radius, 80% name similarity).
+      operationId: findOrCreateVenue
+      tags:
+        - Venues
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VenueRequest'
+            examples:
+              basic:
+                summary: Basic venue lookup
+                value:
+                  name: "The Fleece"
+                  city: "Bristol"
+              withSocial:
+                summary: Venue with social URLs
+                value:
+                  name: "O2 Academy"
+                  city: "Birmingham"
+                  facebookUrl: "https://facebook.com/o2academybirmingham"
+                  instagramUrl: "https://instagram.com/o2academybirmingham"
+                  websiteUrl: "https://www.o2academybirmingham.co.uk"
+      responses:
+        '200':
+          description: Existing venue found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VenueResponse'
+        '201':
+          description: New venue created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VenueResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Venue not found in Google Places
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Venue \"Unknown Place\" not found in Google Places"
+                suggestion: "Try a more specific name or check spelling"
+
+  /api/integration/artists:
+    post:
+      summary: Find or create artist
+      description: |
+        Searches for an existing artist by name using fuzzy matching, then either:
+        - Returns existing artist if match score >= 80%
+        - Creates new artist if no match found
+
+        **Deduplication:** Uses GSI-based name prefix search with fuzzy scoring.
+        Match score considers exact match (100), starts-with (95), contains (85).
+      operationId: findOrCreateArtist
+      tags:
+        - Artists
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtistRequest'
+            examples:
+              basic:
+                summary: Basic artist lookup
+                value:
+                  name: "The Heavy Clouds"
+                  location: "Bristol"
+              withSocial:
+                summary: Artist with social URLs
+                value:
+                  name: "Sonic Youth Tribute"
+                  location: "Manchester"
+                  facebookUrl: "https://facebook.com/sonicyouthtribute"
+                  instagramUrl: "https://instagram.com/sonicyouthtribute"
+                  spotifyUrl: "https://open.spotify.com/artist/abc123"
+      responses:
+        '200':
+          description: Existing artist found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtistResponse'
+              example:
+                success: true
+                artist:
+                  id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  name: "The Heavy Clouds"
+                  location: "Bristol"
+                  matchConfidence: 100
+                isNew: false
+                matchMethod: "name_match"
+        '201':
+          description: New artist created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtistResponse'
+              example:
+                success: true
+                artist:
+                  id: "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+                  name: "New Band Name"
+                  location: "London"
+                  matchConfidence: 0
+                isNew: true
+                matchMethod: "new_artist_created"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/integration/events:
+    post:
+      summary: Find or create event
+      description: |
+        Checks for existing event by artistId + venueId + date, then either:
+        - Returns existing event if duplicate found
+        - Creates new event if no duplicate exists
+
+        **Deduplication:** Exact match on (artistId, venueId, date) combination.
+        Same artist cannot play same venue on same date twice.
+      operationId: findOrCreateEvent
+      tags:
+        - Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventRequest'
+            examples:
+              basic:
+                summary: Basic event
+                value:
+                  artistId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  venueId: "c34614a1-4a98-4c35-8757-c434fd956328"
+                  date: "2025-06-15"
+              full:
+                summary: Full event with details
+                value:
+                  artistId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  venueId: "c34614a1-4a98-4c35-8757-c434fd956328"
+                  date: "2025-06-15"
+                  title: "Summer Festival Set"
+                  startTime: "20:00"
+                  endTime: "23:00"
+                  ticketUrl: "https://tickets.example.com/event123"
+                  ticketPrice: "15.00"
+                  description: "An amazing live performance"
+      responses:
+        '200':
+          description: Existing event found (duplicate)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+              example:
+                success: true
+                event:
+                  id: "e1f2a3b4-c5d6-7890-efgh-123456789012"
+                  artistId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  venueId: "c34614a1-4a98-4c35-8757-c434fd956328"
+                  date: "2025-06-15"
+                  title: "Summer Festival Set"
+                isNew: false
+                matchMethod: "artist_venue_date"
+        '201':
+          description: New event created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+              example:
+                success: true
+                event:
+                  id: "f2g3h4i5-j6k7-8901-lmno-234567890123"
+                  artistId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  venueId: "c34614a1-4a98-4c35-8757-c434fd956328"
+                  date: "2025-06-15"
+                  title: "Summer Festival Set"
+                isNew: true
+                matchMethod: "new_event_created"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: API key for authentication
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "name and city are required"
+    Unauthorized:
+      description: Invalid or missing API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Invalid or missing API key"
+
+  schemas:
+    # ===== VENUE SCHEMAS =====
+    VenueRequest:
+      type: object
+      required:
+        - name
+        - city
+      properties:
+        name:
+          type: string
+          description: Venue name to search for
+          example: "The Fleece"
+        city:
+          type: string
+          description: City where the venue is located
+          example: "Bristol"
+        facebookUrl:
+          type: string
+          format: uri
+          description: Facebook page URL
+          example: "https://facebook.com/thefleecebristol"
+        instagramUrl:
+          type: string
+          format: uri
+          description: Instagram profile URL
+          example: "https://instagram.com/thefleecebristol"
+        websiteUrl:
+          type: string
+          format: uri
+          description: Venue website URL
+          example: "https://thefleece.co.uk"
+
+    VenueResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        venue:
+          $ref: '#/components/schemas/Venue'
+        isNew:
+          type: boolean
+          description: Whether this venue was newly created
+        matchMethod:
+          type: string
+          enum:
+            - google_place_id
+            - location_and_name
+            - name_and_address_tokens
+            - new_venue_created
+          description: How the venue was matched or created
+
+    Venue:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: BNDY venue ID
+        name:
+          type: string
+          description: Venue name
+        address:
+          type: string
+          description: Full formatted address
+        googlePlaceId:
+          type: string
+          description: Google Places ID for deduplication
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        matchConfidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Confidence score (100 = exact match)
+        matchMethod:
+          type: string
+          description: Method used to match
+
+    # ===== ARTIST SCHEMAS =====
+    ArtistRequest:
+      type: object
+      required:
+        - name
+        - location
+      properties:
+        name:
+          type: string
+          description: Artist/band name
+          example: "The Heavy Clouds"
+        location:
+          type: string
+          description: City or region where artist is based
+          example: "Bristol"
+        facebookUrl:
+          type: string
+          format: uri
+          description: Facebook page URL
+        instagramUrl:
+          type: string
+          format: uri
+          description: Instagram profile URL
+        websiteUrl:
+          type: string
+          format: uri
+          description: Artist website URL
+        spotifyUrl:
+          type: string
+          format: uri
+          description: Spotify artist URL
+        bio:
+          type: string
+          description: Artist biography
+        genres:
+          type: array
+          items:
+            type: string
+            enum:
+              - Rock
+              - Rock n Roll
+              - Grunge
+              - Metal
+              - Punk
+              - Alternative
+              - New Wave
+              - Pop
+              - Indie
+              - Britpop
+              - Mod
+              - Blues
+              - R&B
+              - Country
+              - Americana
+              - Folk
+              - Soul
+              - Funk
+              - Motown
+              - Disco
+              - Electronic
+              - Dance
+              - Jazz
+              - Classical
+              - Reggae
+              - Ska
+              - Latin
+              - '50s'
+              - '60s'
+              - '70s'
+              - '80s'
+              - '90s'
+              - '00s'
+              - Other
+          description: Music genres (normalised to canonical values)
+
+    ArtistResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        artist:
+          $ref: '#/components/schemas/Artist'
+        isNew:
+          type: boolean
+          description: Whether this artist was newly created
+        matchMethod:
+          type: string
+          enum:
+            - name_match
+            - new_artist_created
+          description: How the artist was matched or created
+
+    Artist:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: BNDY artist ID
+        name:
+          type: string
+          description: Artist/band name
+        location:
+          type: string
+          description: City or region
+        locationLat:
+          type: number
+          format: double
+          nullable: true
+        locationLng:
+          type: number
+          format: double
+          nullable: true
+        profileImageUrl:
+          type: string
+          format: uri
+          nullable: true
+        facebookUrl:
+          type: string
+          format: uri
+          nullable: true
+        instagramUrl:
+          type: string
+          format: uri
+          nullable: true
+        websiteUrl:
+          type: string
+          format: uri
+          nullable: true
+        spotifyUrl:
+          type: string
+          format: uri
+          nullable: true
+        matchConfidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Confidence score (100 = exact match)
+
+    # ===== EVENT SCHEMAS =====
+    EventRequest:
+      type: object
+      required:
+        - artistId
+        - venueId
+        - date
+      properties:
+        artistId:
+          type: string
+          format: uuid
+          description: BNDY artist ID (from /api/integration/artists)
+        venueId:
+          type: string
+          format: uuid
+          description: BNDY venue ID (from /api/integration/venues)
+        date:
+          type: string
+          format: date
+          description: Event date (YYYY-MM-DD)
+          example: "2025-06-15"
+        title:
+          type: string
+          description: Event title (auto-generated if not provided)
+        startTime:
+          type: string
+          pattern: "^\\d{2}:\\d{2}$"
+          description: Start time (HH:MM)
+          example: "20:00"
+        endTime:
+          type: string
+          pattern: "^\\d{2}:\\d{2}$"
+          description: End time (HH:MM)
+          example: "23:00"
+        ticketUrl:
+          type: string
+          format: uri
+          description: URL to purchase tickets
+        ticketPrice:
+          type: string
+          description: Ticket price (e.g., "15.00", "Free")
+        description:
+          type: string
+          description: Event description
+
+    EventResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        event:
+          $ref: '#/components/schemas/Event'
+        isNew:
+          type: boolean
+          description: Whether this event was newly created
+        matchMethod:
+          type: string
+          enum:
+            - artist_venue_date
+            - new_event_created
+          description: How the event was matched or created
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: BNDY event ID
+        artistId:
+          type: string
+          format: uuid
+        venueId:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        title:
+          type: string
+          nullable: true
+        startTime:
+          type: string
+          nullable: true
+        endTime:
+          type: string
+          nullable: true
+        ticketUrl:
+          type: string
+          format: uri
+          nullable: true
+        ticketPrice:
+          type: string
+          nullable: true
+        type:
+          type: string
+          enum:
+            - public_gig
+            - private_event
+          default: public_gig
+
+    # ===== ERROR SCHEMA =====
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        suggestion:
+          type: string
+          description: Optional suggestion for fixing the error
+
+tags:
+  - name: Venues
+    description: Venue find-or-create operations
+  - name: Artists
+    description: Artist find-or-create operations
+  - name: Events
+    description: Event find-or-create operations

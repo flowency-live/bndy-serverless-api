@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: DynamoDB tables for BNDY Builder Persona feature (white-label subdomains)
+
+Resources:
+  # Table for builder configurations
+  # Each builder represents a white-label subdomain (e.g., congleton.bndy.live)
+  BuildersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: bndy-builders
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: slug
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: slug-index
+          KeySchema:
+            - AttributeName: slug
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: user_id-index
+          KeySchema:
+            - AttributeName: user_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Project
+          Value: bndy
+        - Key: Feature
+          Value: builder-persona
+
+  # Table for builder-venue associations
+  # Tracks which venues are included/excluded from each builder's coverage
+  BuilderVenuesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: bndy-builder-venues
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: builder_id
+          AttributeType: S
+        - AttributeName: venue_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: builder_id-index
+          KeySchema:
+            - AttributeName: builder_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: venue_id-index
+          KeySchema:
+            - AttributeName: venue_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Project
+          Value: bndy
+        - Key: Feature
+          Value: builder-persona
+
+Outputs:
+  BuildersTableArn:
+    Description: ARN of the builders table
+    Value: !GetAtt BuildersTable.Arn
+    Export:
+      Name: bndy-builders-table-arn
+
+  BuilderVenuesTableArn:
+    Description: ARN of the builder-venues table
+    Value: !GetAtt BuilderVenuesTable.Arn
+    Export:
+      Name: bndy-builder-venues-table-arn

@@ -1,4 +1,15 @@
 {
+  "name": "bndy-serverless-api",
+  "version": "1.0.0",
+  "description": "BNDY Serverless API - AWS Lambda functions",
+  "scripts": {
+    "validate": "node scripts/validate-deployment.js",
+    "verify-routes": "node scripts/verify-routes.js",
+    "predeploy": "npm run validate && npm run verify-routes",
+    "deploy": "sam build && sam deploy --no-confirm-changeset",
+    "deploy:guided": "sam build && sam deploy --guided",
+    "smoke-test": "bash scripts/smoke-test.sh"
+  },
   "dependencies": {
     "aws-sdk": "^2.1692.0",
     "firebase-admin": "^13.5.0"

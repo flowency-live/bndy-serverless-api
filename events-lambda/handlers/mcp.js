@@ -6,6 +6,8 @@
  */
 
 const { createCancellationRecord } = require('../calendar-cancellations');
+const { checkForDuplicateEvent, releaseEventSentinels, eventGateKeys } = require('../lib/event-data');
+const { gateMode, rekeyUniqueKeys } = require('../lib/unique-gate');
 
 // Table constants
 const EVENTS_TABLE = 'bndy-events';
@@ -164,7 +166,13 @@ async function handleUpdateEventMcp(deps, event) {
     'date': 'date',
     'startTime': 'startTime',
     'endTime': 'endTime',
-    'artist_id': 'artist_id',  // Reassign event to different artist (for merging duplicates)
+    // AUDIT FIX F5 (2026-07-27): this map previously read 'artist_id': 'artist_id'
+    // while the actual attribute (and GSI hash key) is 'artistId'. Result:
+    // callers sending artistId were silently DROPPED (fake-success no-op that
+    // orphaned 97+ events during dedup); callers sending artist_id wrote a
+    // useless orphan attribute. Both spellings now map to the real attribute.
+    'artistId': 'artistId',    // Reassign event to different artist (for merging duplicates)
+    'artist_id': 'artistId',   // back-compat alias — same target attribute
     'venueId': 'venueId',
     'description': 'description',
     'isPublic': 'isPublic',
@@ -175,11 +183,19 @@ async function handleUpdateEventMcp(deps, event) {
     'imageUrl': 'imageUrl',
     'eventUrl': 'eventUrl',
     'notes': 'notes',
-    'externalIds': 'external_ids'
+    'externalIds': 'external_ids',
+    // Festival fields (Phase 1a)
+    'festivalId': 'festivalId',
+    'festivalName': 'festivalName',
+    'stageId': 'stageId',
+    'billing': 'billing',
+    'billingOrder': 'billingOrder'
   };
 
+  const mappedDbFields = new Set();
   Object.entries(allowedFields).forEach(([apiField, dbField]) => {
-    if (updates[apiField] !== undefined) {
+    if (updates[apiField] !== undefined && !mappedDbFields.has(dbField)) {
+      mappedDbFields.add(dbField); // guard: artistId + artist_id both target 'artistId' — first wins
       const placeholder = `#${dbField}`;
       const valuePlaceholder = `:${dbField}`;
       attributeNames[placeholder] = dbField;
@@ -187,6 +203,74 @@ async function handleUpdateEventMcp(deps, event) {
       updateExpressions.push(`${placeholder} = ${valuePlaceholder}`);
     }
   });
+
+  // AUDIT FIX F4 (2026-07-27): updates could previously edit an event INTO
+  // being a duplicate with no check. If this update changes any identity
+  // field (artist, venue, date) on a public gig, re-run the duplicate check
+  // excluding this event.
+  const effArtistId = updates.artistId !== undefined ? updates.artistId
+    : (updates.artist_id !== undefined ? updates.artist_id : existing.Item.artistId);
+  const effVenueId = updates.venueId !== undefined ? updates.venueId : existing.Item.venueId;
+  const effDate = updates.date !== undefined ? updates.date : existing.Item.date;
+  const identityChanged = effArtistId !== existing.Item.artistId
+    || effVenueId !== existing.Item.venueId
+    || effDate !== existing.Item.date;
+  const isPublicGig = existing.Item.isPublic === true || existing.Item.type === 'gig' || existing.Item.type === 'public_gig';
+
+  if (identityChanged && isPublicGig && effVenueId && effArtistId) {
+    // GATE FIX 2026-07-28: cover collaborators too, not just the primary artist
+    const effAllArtists = [effArtistId,
+      ...(existing.Item.artistIds || []),
+      ...(existing.Item.collaboratingArtistIds || [])].filter(Boolean);
+    const dup = await checkForDuplicateEvent(dynamodb, effVenueId, effDate, effAllArtists);
+    if (dup && dup.id !== id) {
+      const detail = { eventId: id, conflictsWith: dup.id, effArtistId, effVenueId, effDate };
+      if (gateMode() === 'enforce') {
+        console.warn('[MCP] UPDATE BOUNCED: would create duplicate event', JSON.stringify(detail));
+        return {
+          statusCode: 409,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({
+            error: 'Duplicate event',
+            code: 'DUPLICATE',
+            message: 'This update would make the event a duplicate of an existing event (same artist, venue, date). Merge/delete instead.',
+            existingEventId: dup.id
+          })
+        };
+      }
+      console.warn('[MCP] UPDATE WOULD_BOUNCE (log mode): duplicate event', JSON.stringify(detail));
+    }
+
+    // GATE FIX 2026-07-28: re-key sentinels — claim the new (venue|artist|date)
+    // keys + release the old ones atomically. Enforce-mode collision → 409,
+    // update NOT performed (the sentinel is the race-proof backstop behind the
+    // advisory check above).
+    const projected = {
+      ...existing.Item,
+      artistId: effArtistId,
+      venueId: effVenueId,
+      date: effDate,
+    };
+    const rekey = await rekeyUniqueKeys(dynamodb, {
+      oldKeys: eventGateKeys(existing.Item),
+      newKeys: eventGateKeys(projected),
+      refId: id,
+      entityType: 'event',
+      source: 'mcp-update'
+    });
+    if (rekey.changed && rekey.ok === false) {
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({
+          error: 'Duplicate event',
+          code: 'DUPLICATE',
+          message: 'The uniqueness gate holds a sentinel for the target (venue|artist|date) — this update would collide with an existing event.',
+          existingEventId: rekey.existing ? rekey.existing.refId : null
+        })
+      };
+    }
+  }
 
   // Always update updatedAt
   attributeNames['#updatedAt'] = 'updatedAt';
@@ -273,6 +357,9 @@ async function handleDeleteEventMcp(deps, event) {
     TableName: EVENTS_TABLE,
     Key: { id }
   }).promise();
+
+  // Release uniqueness sentinels so the (venue|artist|date) key is claimable again
+  await releaseEventSentinels(dynamodb, existingEvent);
 
   // Best-effort calendar cancellation record so calendar subscribers remove it (non-fatal)
   try {

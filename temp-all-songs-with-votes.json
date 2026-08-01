@@ -1,0 +1,3318 @@
+{
+    "Items": [
+        {
+            "song_id": {
+                "S": "7b2b8700-68b2-4154-a059-25fc0d346c58"
+            },
+            "id": {
+                "S": "8c6e81e3-67a0-4508-af7d-4b8e2c59bba5"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-20T21:22:20.255Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-22T22:48:08.000Z"
+                            },
+                            "value": {
+                                "N": "2"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-21T23:51:04.326Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "c3645121-d209-45a7-9f46-eb40b883913e"
+            },
+            "id": {
+                "S": "0678c8f9-c3b2-431d-a8be-8fd3f27e5eae"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "f479981f-3f1e-4544-888e-12465cc63477"
+            },
+            "id": {
+                "S": "cbea0031-b254-417e-86e4-03436265ac30"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-22T23:24:55.166Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-24T11:20:51.569Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "a2b37954-23e7-46c1-a980-a3e83025f0e6"
+            },
+            "id": {
+                "S": "7b54d3e3-f057-4c6f-938d-a7279ceef66e"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "1U5QgrSdvLr05j6Spo00"
+            },
+            "id": {
+                "S": "b4e356db-5d58-459f-b6fd-233a0445d4f8"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "t77wvSvZVVIbTVVwcnPG"
+            },
+            "id": {
+                "S": "524e8854-ddcd-4c6c-8733-16ad1a18f556"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-22T22:48:40.802Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-24T11:20:06.123Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "WVDYwtE8Q2AQ8XggENxA"
+            },
+            "id": {
+                "S": "d1259f9c-6332-4db5-971d-fa2390b80503"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "6e3b1f82-4f8e-4f8c-9aa2-5a4d03ea4b8d"
+            },
+            "id": {
+                "S": "43f04f99-4b68-4800-89d3-8b54b43fbef0"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_d723b56a-51ac-484b-a470-08a358772a56": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-20T23:13:15.151Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-04T16:45:24.655Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-15T21:01:16.238Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-04T23:09:05.402Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "W41x8TcjeibDJevgas6v"
+            },
+            "id": {
+                "S": "d23b2f93-6952-4cc7-b6cd-6d0ebec9853d"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "b74076a8-fd5a-424b-b9e5-799424ee1902"
+            },
+            "id": {
+                "S": "a3b40d1c-1c67-4ef7-909b-b921d78a273b"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "942b6dd0-f633-4419-85dd-7447b3446fe9"
+            },
+            "id": {
+                "S": "54abde2b-4ade-43c9-b4b5-226ac9b941ae"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-15T17:49:06.335Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-15T21:00:07.886Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-15T17:24:41.474Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_cb09da9e-f058-488a-8972-c3f6c01110f9": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T13:32:34.522Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "OaMPlJSqBDVJGbkYo22J"
+            },
+            "id": {
+                "S": "ae2a84ad-ee7c-4663-b92d-3b177647e190"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T15:31:05.110Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T20:25:10.770Z"
+                            },
+                            "value": {
+                                "N": "2"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "VyK6JeC14dV12fhWJwS1"
+            },
+            "id": {
+                "S": "9c53d48f-4541-4de1-8580-961623d51cf3"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "HeGKUbjYDsOPq3gdYvNu"
+            },
+            "id": {
+                "S": "caf11349-55c6-4a48-9052-79c66ee2a4ec"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "VIs2nTKH9nn4gu9jXK8A"
+            },
+            "id": {
+                "S": "007c0891-c35d-45d6-9cf2-a8fcae3a7eea"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "jl1eeCiiQWEFGBaOdXyd"
+            },
+            "id": {
+                "S": "f4a16279-0e96-4797-bc2b-569ad0132852"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "572831af-a859-43c7-9c2a-29f8c4884d65"
+            },
+            "id": {
+                "S": "bf21eeef-8795-41b8-a599-a0d41db2af2e"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "03b5a283-a4d0-42b0-98b9-8426d93b4c29"
+            },
+            "id": {
+                "S": "28ff12f8-8361-41cf-b048-216073a8e271"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "ECWGi9ffOddI73ytYKvS"
+            },
+            "id": {
+                "S": "0c9c9bda-0ae1-4c36-8c60-2592f044ce4c"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "80d3dda5-ed89-4870-afbe-73f461940220"
+            },
+            "id": {
+                "S": "3276e81e-a99b-4d6d-b7fd-946ffa71fc28"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "6e9131c6-5d99-4865-b380-d3bcd426e072"
+            },
+            "id": {
+                "S": "21596e98-f6fe-41cc-8067-61a371a89d05"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "RNaXGbgCWhDs8uhIKw8Z"
+            },
+            "id": {
+                "S": "44c61fbb-1758-4e7d-93b8-7fe6742965ad"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "99e89771-bf81-40bb-a77f-25f502648c19"
+            },
+            "id": {
+                "S": "3cf50ab2-0b4e-4555-9e37-bc9740441f0d"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "3i5JBxRpQ6EuSDQN9t29"
+            },
+            "id": {
+                "S": "a5129c15-b255-4f68-bcd2-169b2cf6befc"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "ECWGi9ffOddI73ytYKvS"
+            },
+            "id": {
+                "S": "34cec84b-9481-45ae-9e0c-854d5c0c3417"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "f57d0e74-67e6-4b30-a5fa-e848fa92d853"
+            },
+            "id": {
+                "S": "d7cb11dd-2b6e-44cd-a0e4-814d19b23f4e"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-22T22:49:38.037Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-24T11:20:36.935Z"
+                            },
+                            "value": {
+                                "N": "2"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "c1e6e89e-4531-4a26-8e95-779dc6eb6ab3"
+            },
+            "id": {
+                "S": "b993d906-c72f-463b-ab72-7a0e3cf802b4"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-23T08:24:16.819Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "6e3b1f82-4f8e-4f8c-9aa2-5a4d03ea4b8d"
+            },
+            "id": {
+                "S": "84b27dc6-80fc-4d86-8e05-c1ccc8ecea6b"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "Ni1B8bvQe2mRa3y1PUi0"
+            },
+            "id": {
+                "S": "9a4f3593-16ef-4027-89e3-24b8d78f13d5"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "90cbc6eb-025f-46ce-be37-6ab578823739"
+            },
+            "id": {
+                "S": "293f4eef-8c62-472d-bed2-95509e6479c1"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "discarded"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-03T18:54:32.575Z"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "Zz4tvlJxQxoPFHcB5n8b"
+            },
+            "id": {
+                "S": "2050ecd8-e0a6-420b-9f64-2a3befcabfff"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-23T08:23:46.159Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "f9806f92-c34c-4245-bd08-e640e513fd4f"
+            },
+            "id": {
+                "S": "6d4b0bea-b6f8-4281-9c07-5f1f358fa332"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T19:57:04.853Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T15:45:09.215Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "104ea54d-02d7-4f33-b188-35ffb85071ba"
+            },
+            "id": {
+                "S": "3438f38f-a9df-4bb7-bccc-5a306746c1dc"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_d723b56a-51ac-484b-a470-08a358772a56": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-20T21:12:22.996Z"
+                            },
+                            "value": {
+                                "N": "1"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T19:37:24.405Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T19:57:18.678Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T16:10:17.071Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "3ec27647-7093-4a52-a437-6c1b1ca3ad4d"
+            },
+            "id": {
+                "S": "317c3533-4cd3-4063-8a9f-4ce8bd2b90d7"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "GjnhfoI4DGJ5sz2HMyYi"
+            },
+            "id": {
+                "S": "f3a53ad1-32eb-41cd-91df-492b66fcfaf0"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "6e9131c6-5d99-4865-b380-d3bcd426e072"
+            },
+            "id": {
+                "S": "4c17636d-c112-4c68-806c-c86a385c170b"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-08T12:46:23.843Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-15T21:01:01.174Z"
+                            },
+                            "value": {
+                                "N": "1"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T20:24:48.303Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "9d071a5f-ed1a-42dc-9064-7d3689cec477"
+            },
+            "id": {
+                "S": "fa57d74c-cdd7-4bd7-aa75-2a4e0c2da685"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "cf5bf912-52ac-42dd-bc39-6b567b491842"
+            },
+            "id": {
+                "S": "f3d093f2-a92a-4c84-88fc-0f684a516ddc"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-22T14:05:58.609Z"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "WwtFOsOdB2iCzChGVDBf"
+            },
+            "id": {
+                "S": "a6f6b325-591a-4e01-b5d1-87b53a83a9d7"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "6b219094-daf2-4d8e-9365-b34eb6926f6c"
+            },
+            "id": {
+                "S": "f3740cdc-a193-44b3-bbe8-c515b5da5161"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T19:58:45.911Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T16:09:32.465Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "B0ebHM1WCDzhFIPFRJ5j"
+            },
+            "id": {
+                "S": "450c930a-d054-46ae-a090-25101fdfaf1b"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "db2c49b4-b8da-484e-acb0-9a82d17e0067"
+            },
+            "id": {
+                "S": "4bf1cf76-9f84-4af4-8ed7-03811157289b"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "MO2evLwvbV1pOjSX6tHk"
+            },
+            "id": {
+                "S": "07e55487-86a4-456f-891d-2fa2c6c68a33"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "c40b9561-0cba-470c-bc1a-f344d322c9eb"
+            },
+            "id": {
+                "S": "87427e4e-8833-4a06-9d47-c97c090c0b6a"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "e516d0e7-9867-4416-903a-e1709fc18d4d"
+            },
+            "id": {
+                "S": "748c888f-dd4c-4f2b-b416-ac92d564c5d0"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-05T22:26:37.147Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-06T00:24:20.646Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T20:20:14.590Z"
+                            },
+                            "value": {
+                                "N": "1"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "c57cbe7b-5b50-4f59-bbf4-b3ee0b9cce32"
+            },
+            "id": {
+                "S": "68551cd3-00ac-44ac-9215-4547438116a3"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-06T16:27:54.549Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-10T16:13:56.107Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T16:01:13.932Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "MO2evLwvbV1pOjSX6tHk"
+            },
+            "id": {
+                "S": "6f1366e9-8f86-481d-bb47-f1b02bfcac2e"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "4188fa4f-4afb-4ded-8f41-f409a0e781e8"
+            },
+            "id": {
+                "S": "b8726e7f-f4c3-4ebe-b9b7-de9b287cc16e"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "512cf20c-2fb0-455d-8759-5cf6ac939784"
+            },
+            "id": {
+                "S": "dbe16fe9-9a1e-4588-8df3-c3a2f64ee2b3"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "a5469838-4dcf-4e56-9430-2e445483fb29"
+            },
+            "id": {
+                "S": "9077247e-b50f-444f-91c8-666e3b8d4899"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "n6VfuoksTigZ5cRfLlhv"
+            },
+            "id": {
+                "S": "b5ff7d40-430f-4cd0-a82d-d411270c3bd6"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "d5a874e0-048c-4de1-b40c-d26f53fc4e68"
+            },
+            "id": {
+                "S": "a0fcd0c0-d9d3-4c8a-9d75-f9492dcdf417"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "lVySe1vWhjzAje3Y3V2q"
+            },
+            "id": {
+                "S": "1f13ac6c-0dc9-4b84-ae5d-fc7aa5cf8351"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "kFE4OVmaoX2dwqPaQjMy"
+            },
+            "id": {
+                "S": "4dd46037-6823-4786-853a-fda60f5573fd"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "review"
+            },
+            "votes": {
+                "M": {
+                    "phone_d723b56a-51ac-484b-a470-08a358772a56": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-20T21:10:29.281Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-03T18:54:59.905Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-05T22:18:23.630Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-03T22:14:20.859Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_cb09da9e-f058-488a-8972-c3f6c01110f9": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-04T16:17:24.379Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "lh52UHKkEyeKSToaEiRJ"
+            },
+            "id": {
+                "S": "7fa8d10b-edf0-4937-a3bb-ccc3e9cc97e0"
+            },
+            "artist_id": {
+                "S": "7be3d037-1960-4178-a7ad-ff98295f430e"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "rzV1OqB0NWXzKQW2jGKB"
+            },
+            "id": {
+                "S": "9e3def23-b694-463b-b680-1d9cbac8a5a1"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-03T22:41:01.484Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-05T22:18:32.514Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-03T22:24:14.534Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_cb09da9e-f058-488a-8972-c3f6c01110f9": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-04T16:17:15.838Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "6aefc203-a390-4445-b917-db4e7a456e07"
+            },
+            "id": {
+                "S": "9a66d96d-ca42-4b67-8ada-48e413ef595f"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "review"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-13T23:22:02.500Z"
+                            },
+                            "value": {
+                                "N": "0"
+                            }
+                        }
+                    },
+                    "96a262a4-a011-70eb-7afa-19a4c32b04c4": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-13T23:23:33.574Z"
+                            },
+                            "value": {
+                                "N": "0"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "RXU979AbOIcLtAnZ9V4y"
+            },
+            "id": {
+                "S": "52fe206e-383e-402e-baef-1043c70c2bf5"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "P2bAy9z6CFn5QwkFJ71b"
+            },
+            "id": {
+                "S": "bdd10dfa-e7d6-4cd4-9306-3bbe6b7ee84f"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "6dc6903d-0c2d-4a5f-abf1-b2a957173044"
+            },
+            "id": {
+                "S": "94655297-4682-47fa-a6e8-25bd893aaf8b"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-10T16:15:18.857Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-13T00:06:22.744Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T15:56:21.825Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "eCzLF5UEYk6GfZIq1bqd"
+            },
+            "id": {
+                "S": "4c94ec7c-9ed9-4a1b-8109-1129c224eccf"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "8a04f951-52e3-4583-b24b-ab8db16e3937"
+            },
+            "id": {
+                "S": "40eb79ee-dbc3-4439-8d98-55057faff957"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "review"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-13T12:05:50.096Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "96a262a4-a011-70eb-7afa-19a4c32b04c4": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-13T22:38:56.104Z"
+                            },
+                            "value": {
+                                "N": "0"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "myzYFxTIYx2zWW49UpEF"
+            },
+            "id": {
+                "S": "3a968158-a72e-4830-ab1c-13c1371decff"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "lh52UHKkEyeKSToaEiRJ"
+            },
+            "id": {
+                "S": "be65efbc-16f4-4952-94e4-6ab9e284d912"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "0ebfdead-b26c-450b-b2fc-e4fe6c920567"
+            },
+            "id": {
+                "S": "4e73c025-515e-4955-8b12-306f364ea036"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-05T22:23:41.394Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-06T00:23:57.446Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T20:19:33.841Z"
+                            },
+                            "value": {
+                                "N": "2"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "d33c6938-58e8-4a11-9faa-56f29c20c165"
+            },
+            "id": {
+                "S": "03c452cf-4cc8-477c-b0f8-a12ec747264c"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "06a4c83d-33f1-4021-b272-b8f44a437f62"
+            },
+            "id": {
+                "S": "eabc6938-a454-4fcc-8630-38a0b356f735"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "2e2a4348-5fa8-47fe-a792-1ec12c522ff8"
+            },
+            "id": {
+                "S": "97bf7e8f-40d8-4876-aa78-ac5ef7c0913e"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "AVN2HJEHkM1AAxhGhjGt"
+            },
+            "id": {
+                "S": "29f702f4-e9a4-484c-b1bc-15405c0438de"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T19:59:10.337Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T18:42:09.561Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "c57cbe7b-5b50-4f59-bbf4-b3ee0b9cce32"
+            },
+            "id": {
+                "S": "aab48197-960f-47de-84ad-cfbac4498bf4"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "yCJNk17ECflgM6yWgCMi"
+            },
+            "id": {
+                "S": "16787c31-96de-434e-9cde-c4a7359f848b"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-06T16:27:25.613Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-10T16:14:21.464Z"
+                            },
+                            "value": {
+                                "N": "2"
+                            }
+                        }
+                    },
+                    "phone_cb09da9e-f058-488a-8972-c3f6c01110f9": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T13:32:51.300Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T15:56:30.204Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "7221da9a-5da3-4e42-905a-fbb6ebba8428"
+            },
+            "id": {
+                "S": "58550d24-dbc0-4158-8a25-8d1951ca35d8"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "RNaXGbgCWhDs8uhIKw8Z"
+            },
+            "id": {
+                "S": "796fd90a-267b-4299-a204-064ad3b7102b"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "CiV1CQquPYGMBGLsTSAY"
+            },
+            "id": {
+                "S": "b5068205-f5cb-45bd-b456-f48b6c029bd5"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "ODfN9Ikw1rDOsvIJl1co"
+            },
+            "id": {
+                "S": "f3971a98-9824-477c-b4ff-87a157525bbb"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T19:57:11.626Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T15:56:06.449Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "wKtmFBxvJ7Vorw38zW6S"
+            },
+            "id": {
+                "S": "aa36aaaa-0a1f-4b8f-b077-83b1ab4fe71b"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "OErMtZNdB7Lq9VoLvoFj"
+            },
+            "id": {
+                "S": "78a7edc2-ebbe-4e51-96bc-53e58c57a8b4"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "62c4d903-2097-4929-86e8-dcb8cafac690"
+            },
+            "id": {
+                "S": "5fc28ef6-a7d6-45a3-b80d-98d20c733a7b"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-03T16:05:20.523Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_6e71be7a-2688-4516-8685-a290b19d9cb2": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-03T16:06:21.642Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "9YPCNDTvUCSqGCKHaRK4"
+            },
+            "id": {
+                "S": "a13c1516-f650-458e-a282-0cff863a69e0"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "NZb1jNd2n5hAaVfmSn32"
+            },
+            "id": {
+                "S": "1a8e5f91-a6c5-4c33-b0fe-81d9c952be86"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "673d122f-f050-45ab-bdee-e4b0d1a5049f"
+            },
+            "id": {
+                "S": "48c1dfeb-6335-4206-bbc5-427553b64c06"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "xshCgOZScN6OXt4rYBQy"
+            },
+            "id": {
+                "S": "c4a11151-2aa0-4396-8dca-b3f71d9a0dea"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "161a2b10-7382-4126-bcc2-59a175535462"
+            },
+            "id": {
+                "S": "83bfd538-bbc5-4cba-861e-dde2fac4e96a"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "6f385edc-474b-4999-ba62-ff2746aaa873"
+            },
+            "id": {
+                "S": "0ecc1db4-c947-4522-943f-cdb5641bb821"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-22T23:24:33.572Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-24T11:20:46.833Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "QG9ztunUhgVZYhHYVkkR"
+            },
+            "id": {
+                "S": "0288aac1-5b0a-4033-97bc-02bc287637b7"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "uSMbHj8Cgp37LyoxNfcn"
+            },
+            "id": {
+                "S": "65f06241-00fc-432a-94c3-3cf97b1afe80"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "571506f9-57ae-4088-933e-27e3c0617857"
+            },
+            "id": {
+                "S": "0f03071f-6c9e-4228-a1b7-3337e0c1f01d"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "RfFJZroUuzpJtnyCDk59"
+            },
+            "id": {
+                "S": "d23e6298-9688-4676-9f8c-dbc9c9c1ff99"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "OMTYa2wxY4XAGjqUDS12"
+            },
+            "id": {
+                "S": "dfb5a7e0-a679-4e4f-a1d4-dc4503e89861"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-06T16:36:17.508Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-10T16:14:13.444Z"
+                            },
+                            "value": {
+                                "N": "0"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T15:56:14.823Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "jl1eeCiiQWEFGBaOdXyd"
+            },
+            "id": {
+                "S": "111f7764-bde4-4ddb-9f77-04ceb0e7cc04"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "c3645121-d209-45a7-9f46-eb40b883913e"
+            },
+            "id": {
+                "S": "b0f44196-0a35-4528-88f2-f3b6330e4482"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "a28745b9-961e-483d-bb3a-9a7c47e02ca8"
+            },
+            "id": {
+                "S": "61fb4ea7-d23e-41ef-ac76-3554c7c909ef"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "Hn6PlzaJTUHrYwyHxJyy"
+            },
+            "id": {
+                "S": "57e91629-c554-4c7c-8118-7cd0ed40cc58"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "cfc41d44-0b74-426d-a040-9e35cc78429a"
+            },
+            "id": {
+                "S": "e0ff8213-94d3-40cb-bf0e-059d0d10f044"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-24T11:19:38.594Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-21T23:27:31.188Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "fKwasvoQXDFp1MdJMDNV"
+            },
+            "id": {
+                "S": "5158bbb6-016f-4851-97e7-3078bfc89000"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "uvOvsOeU5qde92HPW1FG"
+            },
+            "id": {
+                "S": "86c26462-ee2a-4e61-8bfa-1c3627c1716b"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "0d9d3194-b593-4990-bb05-60979ac9308d"
+            },
+            "id": {
+                "S": "48743e64-b65b-499f-abea-2feb87681781"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "V4r5kwIOryalbEUltLwM"
+            },
+            "id": {
+                "S": "93564a81-2f09-4cc2-bcef-0e642c7d037c"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "Hsyb7MM7asnZQV8KtgXB"
+            },
+            "id": {
+                "S": "2a612c30-9e77-4966-82d2-3d06a59e847c"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "9200bc09-4243-434d-9ba6-f0276f59ec03"
+            },
+            "id": {
+                "S": "a9d6c1c7-12f4-4bad-9508-735cd697249f"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "db7bc4e0-d096-4118-870e-c5369eb25da7"
+            },
+            "id": {
+                "S": "7a4b9ee5-e0b1-4f6a-873a-0f41c12f9db4"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "7OtEpYEQWwPKGqi6sETF"
+            },
+            "id": {
+                "S": "5866a463-437a-4821-b383-2bf256c22cf1"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "id": {
+                "S": "c9ced85f-220f-428e-9e7b-ff5d610422de"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "09e5afa7-5502-4269-983f-f450ed7f0976"
+            },
+            "id": {
+                "S": "bca9be26-8326-43ec-9509-062e8dd733ec"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_d723b56a-51ac-484b-a470-08a358772a56": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-20T21:10:58.247Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-05T22:20:34.050Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-24T11:21:07.593Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T16:01:01.858Z"
+                            },
+                            "value": {
+                                "N": "2"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "WVDYwtE8Q2AQ8XggENxA"
+            },
+            "id": {
+                "S": "c4062a9a-8f14-4f53-a44d-38146bff81f1"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "ACu0XUS96wEk7FaZcXNl"
+            },
+            "id": {
+                "S": "8084f5b5-763b-4745-8545-f0245a03d08b"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "5263fd4a-83ba-4756-8bba-6bb17996c019"
+            },
+            "id": {
+                "S": "f8353edb-fab1-4dd8-9a97-c5c49bcf18d1"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "92f56077-8473-4027-885c-f0bdfc22ab7d"
+            },
+            "id": {
+                "S": "f0cc7b79-01a2-4444-92fa-f224295e82ee"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-05T22:26:58.908Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-06T00:22:55.168Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T20:20:39.619Z"
+                            },
+                            "value": {
+                                "N": "1"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "lh52UHKkEyeKSToaEiRJ"
+            },
+            "id": {
+                "S": "6831110e-075a-4146-879a-ca1c6d70ec59"
+            },
+            "artist_id": {
+                "S": "7be3d037-1960-4178-a7ad-ff98295f430e"
+            },
+            "status": {
+                "S": "discarded"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-14T16:55:01.100Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "c29e88cd-1374-42a3-8855-2c97393dbeca"
+            },
+            "id": {
+                "S": "ed2814ca-4fb1-4433-84fb-c7093bdf6169"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T19:36:55.387Z"
+                            },
+                            "value": {
+                                "N": "0"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-24T11:21:21.196Z"
+                            },
+                            "value": {
+                                "N": "2"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T18:55:31.536Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "35747dd7-caa4-4c8f-88a8-0cc20aa4745d"
+            },
+            "id": {
+                "S": "b8e0e919-cce8-45b6-9b65-0e16944a955e"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-05T22:18:54.142Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-06T00:24:02.058Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T20:19:00.144Z"
+                            },
+                            "value": {
+                                "N": "2"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "0d1c4239-f14e-472f-9ca6-43a7a6d66f78"
+            },
+            "id": {
+                "S": "cbbedd50-3612-462f-b500-edecf3738e35"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "cndzbfNUJ9B5kr2MJmnv"
+            },
+            "id": {
+                "S": "b2832ee2-de92-4570-8f51-557e1d34c9f5"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "udVUrMXBmW4flqsJBb8A"
+            },
+            "id": {
+                "S": "57a75172-c690-43dd-94a5-3458825a06bb"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-06T10:20:53.531Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-10T16:13:50.305Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_cb09da9e-f058-488a-8972-c3f6c01110f9": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T13:33:05.130Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T20:21:58.245Z"
+                            },
+                            "value": {
+                                "N": "2"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "uSMbHj8Cgp37LyoxNfcn"
+            },
+            "id": {
+                "S": "5c10fd87-c47c-43e4-9a5d-291977e83bab"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "0e06df33-e2ba-4d1a-ab1a-4c8ee1fe060b"
+            },
+            "id": {
+                "S": "83374660-1d6a-487c-907e-8beec596f1c5"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T19:59:45.449Z"
+                            },
+                            "value": {
+                                "N": "0"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T19:01:55.833Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "9179ff79-adcc-4340-a235-6a5d6ad59d5d"
+            },
+            "id": {
+                "S": "108d85dd-78d4-42d5-bda5-65b837ac8a2a"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-22T14:05:40.569Z"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "PdtP3aP1WN0nJNOwCzSi"
+            },
+            "id": {
+                "S": "eaf8d66d-7a8b-4cee-90f8-e98e6cd5c22d"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "review"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-13T12:05:27.619Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "96a262a4-a011-70eb-7afa-19a4c32b04c4": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-13T22:45:41.520Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "OaMPlJSqBDVJGbkYo22J"
+            },
+            "id": {
+                "S": "f60246f6-b907-46c8-9ddf-8e31aa3485a4"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "Y5iDMLyU4JHBDjp8W2sD"
+            },
+            "id": {
+                "S": "abcca67f-b5f6-404d-8512-3ec03cc5a029"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "41CNKGOP2eniPwVYZUCn"
+            },
+            "id": {
+                "S": "529f96ab-a2df-4d83-a0da-cd651aa96cf2"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "9e4d33b2-cfd8-40ee-81e0-f6bb14b08221"
+            },
+            "id": {
+                "S": "8034cd00-88ad-4cc6-aab3-cd52da381b50"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T19:58:05.871Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T15:38:26.849Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "7412d6fd-bf9f-41b0-b2ff-779cd4dbe0a1"
+            },
+            "id": {
+                "S": "f0d1c2a0-ccfa-42f8-b221-eb2d345ef0e6"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T19:31:37.454Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T20:26:10.827Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "e7d8b3d9-ab60-44e0-a4b7-05e8531cf79b"
+            },
+            "id": {
+                "S": "bb5f6046-fb12-455f-bf9d-8fdb4a3a13b7"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "2ac809e2-2e09-4afa-804a-260cd59563f4"
+            },
+            "id": {
+                "S": "5b0d61b9-4c5d-42ae-9b86-c05d243d7c39"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "104ea54d-02d7-4f33-b188-35ffb85071ba"
+            },
+            "id": {
+                "S": "a312ab16-7d3b-4fa3-a1ef-19e931f28d9a"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "IRhTsxAVbsovdwNixymY"
+            },
+            "id": {
+                "S": "579a68e9-412b-4408-8448-9913fc84f4a9"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "0d8d94d6-e188-41fc-a928-c7beafec3936"
+            },
+            "id": {
+                "S": "2650515d-34c0-4b95-82cc-254ef75102f2"
+            },
+            "artist_id": {
+                "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-17T11:28:42.499Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    },
+                    "phone_fc310af6-5774-4183-b7cb-daa79979d0be": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-22T22:48:00.805Z"
+                            },
+                            "value": {
+                                "N": "4"
+                            }
+                        }
+                    },
+                    "phone_2336e01b-311b-4ea5-89cc-91bd732eb74b": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-16T20:36:36.682Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "song_id": {
+                "S": "52f39386-9ff2-43b1-a688-584c849fa75c"
+            },
+            "id": {
+                "S": "90e7a4fe-e235-44f4-adda-1286804d22ae"
+            },
+            "artist_id": {
+                "S": "15a8c00c-8c8c-4942-a0c0-6a0348f5f6c8"
+            },
+            "status": {
+                "S": "playbook"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "x3g5CMekIrgMinOcdqrw"
+            },
+            "id": {
+                "S": "ff159230-edc1-4cca-87a1-93dc5e3b82f1"
+            },
+            "artist_id": {
+                "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2025-11-23T08:23:30.549Z"
+                            },
+                            "value": {
+                                "N": "5"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "Count": 130,
+    "ScannedCount": 130,
+    "ConsumedCapacity": null
+}

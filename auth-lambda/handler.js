@@ -16,9 +16,53 @@ const CLIENT_ID = process.env.COGNITO_USER_POOL_CLIENT_ID;
 const CLIENT_SECRET = process.env.COGNITO_USER_POOL_CLIENT_SECRET;
 const JWT_SECRET = process.env.JWT_SECRET;
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://backstage.bndy.co.uk';
+// Allowed CORS origins for frontend access
+const ALLOWED_ORIGINS = [
+  'https://www.bndy.co.uk',       // Primary domain
+  'https://backstage.bndy.co.uk', // Legacy domain
+  'https://bndy.co.uk',            // Apex domain
+  'https://live.bndy.co.uk',      // Frontstage
+  'https://gigmap.bndy.co.uk',    // GigMap
+  'http://localhost:3000'          // Local development
+];
+
 const API_URL = 'https://api.bndy.co.uk';
 const REDIRECT_URI = `${API_URL}/auth/callback`;
+
+// Module-level variable to store current request event for CORS
+let currentEvent = null;
+
+// Get appropriate origin for CORS based on request origin
+const getAllowedOrigin = () => {
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
+
+// Get frontend URL for redirects (checks referer, then origin, then defaults to primary)
+const getFrontendUrl = () => {
+  // Check referer first (OAuth callbacks have referer from the originating page)
+  const referer = currentEvent?.headers?.referer || currentEvent?.headers?.Referer;
+  if (referer) {
+    try {
+      const refererUrl = new URL(referer);
+      const refererOrigin = refererUrl.origin;
+      if (ALLOWED_ORIGINS.includes(refererOrigin)) {
+        return refererOrigin;
+      }
+    } catch (e) {
+      // Invalid referer URL, continue
+    }
+  }
+
+  // Fall back to origin header
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  if (ALLOWED_ORIGINS.includes(requestOrigin)) {
+    return requestOrigin;
+  }
+
+  // Default to primary domain
+  return ALLOWED_ORIGINS[0];
+};
 
 // DynamoDB Tables
 const USERS_TABLE = 'bndy-users';
@@ -75,12 +119,13 @@ const verifyOAuthState = async (state) => {
   }
 };
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': FRONTEND_URL,
+// Generate CORS headers with dynamic origin
+const getCorsHeaders = () => ({
+  'Access-Control-Allow-Origin': getAllowedOrigin(),
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Credentials': 'true'
-};
+});
 
 // Parse cookies from event
 const parseCookies = (cookieHeader) => {
@@ -98,7 +143,7 @@ const createResponse = (statusCode, body, cookies = null) => {
     statusCode,
     headers: {
       'Content-Type': 'application/json',
-      ...corsHeaders
+      ...getCorsHeaders()
     },
     body: JSON.stringify(body)
   };
@@ -149,7 +194,7 @@ const requireAuth = (event) => {
 // Route handlers
 const handleGoogleAuth = async (event) => {
   const state = generateState();
-  const origin = event.headers.referer || FRONTEND_URL;
+  const origin = getFrontendUrl();
 
   // Store state in DynamoDB
   await storeOAuthState(state, origin);
@@ -171,7 +216,7 @@ const handleGoogleAuth = async (event) => {
     statusCode: 302,
     headers: {
       Location: authUrl,
-      ...corsHeaders
+      ...getCorsHeaders()
     },
     body: ''
   };
@@ -194,7 +239,7 @@ const handleOAuthCallback = async (event) => {
       console.error('AUTH CALLBACK: Invalid or expired state');
       return {
         statusCode: 302,
-        headers: { Location: `${FRONTEND_URL}/login?error=invalid_state` },
+        headers: { Location: `${getFrontendUrl()}/login?error=invalid_state` },
         body: ''
       };
     }
@@ -203,7 +248,7 @@ const handleOAuthCallback = async (event) => {
       console.error('AUTH CALLBACK: OAuth error:', error);
       return {
         statusCode: 302,
-        headers: { Location: `${FRONTEND_URL}/login?error=${encodeURIComponent(error)}` },
+        headers: { Location: `${getFrontendUrl()}/login?error=${encodeURIComponent(error)}` },
         body: ''
       };
     }
@@ -212,7 +257,7 @@ const handleOAuthCallback = async (event) => {
       console.error('AUTH CALLBACK: No authorization code received');
       return {
         statusCode: 302,
-        headers: { Location: `${FRONTEND_URL}/login?error=no_code` },
+        headers: { Location: `${getFrontendUrl()}/login?error=no_code` },
         body: ''
       };
     }
@@ -293,9 +338,9 @@ const handleOAuthCallback = async (event) => {
     const pendingInvite = localStorage.getItem('pendingInvite');
     if (pendingInvite) {
       console.log('AUTH CALLBACK: Found pending invite, redirecting to invite page');
-      window.location.href = '${FRONTEND_URL}/invite/' + pendingInvite;
+      window.location.href = '${getFrontendUrl()}/invite/' + pendingInvite;
     } else {
-      window.location.href = '${FRONTEND_URL}/dashboard';
+      window.location.href = '${getFrontendUrl()}/dashboard';
     }
   </script>
 </body>
@@ -314,7 +359,7 @@ const handleOAuthCallback = async (event) => {
     console.error('AUTH CALLBACK: Token exchange failed:', error.message);
     return {
       statusCode: 302,
-      headers: { Location: `${FRONTEND_URL}/login?error=token_exchange_failed` },
+      headers: { Location: `${getFrontendUrl()}/login?error=token_exchange_failed` },
       body: ''
     };
   }
@@ -385,7 +430,7 @@ const handleLogout = (event) => {
     headers: {
       'Content-Type': 'application/json',
       'Set-Cookie': clearCookie,
-      ...corsHeaders
+      ...getCorsHeaders()
     },
     body: JSON.stringify({ success: true })
   };
@@ -563,7 +608,7 @@ const handlePhoneVerifyOTP = async (event) => {
         headers: {
           'Content-Type': 'application/json',
           'Set-Cookie': cookieOptions,
-          ...corsHeaders
+          ...getCorsHeaders()
         },
         body: JSON.stringify({
           success: true,
@@ -626,7 +671,7 @@ const handlePhoneVerifyOTP = async (event) => {
       headers: {
         'Content-Type': 'application/json',
         'Set-Cookie': cookieOptions,
-        ...corsHeaders
+        ...getCorsHeaders()
       },
       body: JSON.stringify({
         success: true,
@@ -758,7 +803,7 @@ const handlePhoneVerifyAndOnboard = async (event) => {
       headers: {
         'Content-Type': 'application/json',
         'Set-Cookie': cookieOptions,
-        ...corsHeaders
+        ...getCorsHeaders()
       },
       body: JSON.stringify({
         success: true,
@@ -938,7 +983,7 @@ const handleMagicLinkAuth = async (event) => {
       console.log('[EMAIL_AUTH] Token not found');
       return {
         statusCode: 302,
-        headers: { Location: `${FRONTEND_URL}/login?error=invalid_token` },
+        headers: { Location: `${getFrontendUrl()}/login?error=invalid_token` },
         body: ''
       };
     }
@@ -954,7 +999,7 @@ const handleMagicLinkAuth = async (event) => {
       }).promise();
       return {
         statusCode: 302,
-        headers: { Location: `${FRONTEND_URL}/login?error=token_expired` },
+        headers: { Location: `${getFrontendUrl()}/login?error=token_expired` },
         body: ''
       };
     }
@@ -1008,9 +1053,9 @@ const handleMagicLinkAuth = async (event) => {
     const pendingInvite = localStorage.getItem('pendingInvite');
     if (pendingInvite) {
       console.log('EMAIL AUTH: Found pending invite, redirecting to invite page');
-      window.location.href = '${FRONTEND_URL}/invite/' + pendingInvite;
+      window.location.href = '${getFrontendUrl()}/invite/' + pendingInvite;
     } else {
-      window.location.href = '${FRONTEND_URL}/dashboard';
+      window.location.href = '${getFrontendUrl()}/dashboard';
     }
   </script>
 </body>
@@ -1072,7 +1117,7 @@ const handleMagicLinkAuth = async (event) => {
 <body>
   <p>Welcome to bndy! Redirecting...</p>
   <script>
-    window.location.href = '${FRONTEND_URL}/dashboard';
+    window.location.href = '${getFrontendUrl()}/dashboard';
   </script>
 </body>
 </html>`;
@@ -1090,7 +1135,7 @@ const handleMagicLinkAuth = async (event) => {
     console.error('[EMAIL_AUTH] Magic link validation error:', error);
     return {
       statusCode: 302,
-      headers: { Location: `${FRONTEND_URL}/login?error=authentication_failed` },
+      headers: { Location: `${getFrontendUrl()}/login?error=authentication_failed` },
       body: ''
     };
   }
@@ -1158,7 +1203,7 @@ const handleCheckIdentity = async (event) => {
 // Handler: GET /auth/apple
 const handleAppleAuth = async (event) => {
   const state = generateState();
-  const origin = event.headers.referer || FRONTEND_URL;
+  const origin = getFrontendUrl();
 
   // Store state in DynamoDB
   await storeOAuthState(state, origin);
@@ -1180,7 +1225,7 @@ const handleAppleAuth = async (event) => {
     statusCode: 302,
     headers: {
       Location: authUrl,
-      ...corsHeaders
+      ...getCorsHeaders()
     },
     body: ''
   };
@@ -1200,11 +1245,14 @@ exports.handler = async (event, context) => {
     eventVersion: event.version || 'v1'
   });
 
+  // Store event for CORS headers
+  currentEvent = event;
+
   // Handle CORS preflight
   if (method === 'OPTIONS') {
     return {
       statusCode: 200,
-      headers: corsHeaders,
+      headers: getCorsHeaders(),
       body: ''
     };
   }

@@ -14,6 +14,8 @@ const mockDynamoDB = {
   put: jest.fn(),
   update: jest.fn(),
   get: jest.fn(),
+  transactWrite: jest.fn().mockResolvedValue({}),
+  delete: jest.fn().mockResolvedValue({})
 };
 
 const mockPlacesClient = {
@@ -27,6 +29,8 @@ jest.mock('aws-sdk', () => ({
       put: (params) => ({ promise: () => mockDynamoDB.put(params) }),
       update: (params) => ({ promise: () => mockDynamoDB.update(params) }),
       get: (params) => ({ promise: () => mockDynamoDB.get(params) }),
+      transactWrite: (params) => ({ promise: () => mockDynamoDB.transactWrite(params) }),
+      delete: (params) => ({ promise: () => mockDynamoDB.delete(params) })
     })),
   },
   Lambda: jest.fn(() => ({
@@ -133,13 +137,19 @@ describe('Geocode-based Venue Deduplication (ADR-018)', () => {
       expect(body.longitude).toBe(-2.1);
 
       // Verify venue was created WITH place_id and coords
-      expect(mockDynamoDB.put).toHaveBeenCalledWith(
+      expect(mockDynamoDB.transactWrite).toHaveBeenCalledWith(
         expect.objectContaining({
-          Item: expect.objectContaining({
-            google_place_id: 'ChIJ_new_venue',
-            latitude: 53.0,
-            longitude: -2.1,
-          }),
+          TransactItems: expect.arrayContaining([
+            expect.objectContaining({
+              Put: expect.objectContaining({
+                Item: expect.objectContaining({
+                  google_place_id: 'ChIJ_new_venue',
+                  latitude: 53.0,
+                  longitude: -2.1,
+                })
+              })
+            })
+          ])
         })
       );
     });

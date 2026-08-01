@@ -1,0 +1,15 @@
+{
+  "name": "bndy-issues-lambda",
+  "version": "1.0.0",
+  "description": "BNDY Issues Lambda - Issue tracking and bug reporting",
+  "main": "handler.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1000.0",
+    "jsonwebtoken": "^9.0.0"
+  },
+  "author": "BNDY Platform",
+  "license": "ISC"
+}

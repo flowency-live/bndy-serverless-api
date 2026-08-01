@@ -8,10 +8,11 @@ const crypto = require('crypto');
 // AWS Services
 const s3 = new AWS.S3({ region: 'eu-west-2' });
 const ssm = new AWS.SSM({ region: 'eu-west-2' });
+const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 
 // Configuration
 const BUCKET_NAME = 'bndy-images';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://bndy.co.uk';
+const USERS_TABLE = 'bndy-users';
 
 // JWT Secret - cached after first retrieval
 let JWT_SECRET = null;
@@ -45,19 +46,39 @@ async function getJWTSecret() {
   }
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': FRONTEND_URL,
+// Allowed CORS origins for frontend access
+const ALLOWED_ORIGINS = [
+  'https://www.bndy.co.uk',       // Primary domain
+  'https://backstage.bndy.co.uk', // Legacy domain
+  'https://bndy.co.uk',            // Apex domain
+  'https://live.bndy.co.uk',      // Frontstage
+  'https://gigmap.bndy.co.uk',    // GigMap
+  'http://localhost:3000'          // Local development
+];
+
+// Module-level variable to store current request event for CORS
+let currentEvent = null;
+
+// Get appropriate origin for CORS based on request origin
+const getAllowedOrigin = () => {
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
+
+// Generate CORS headers with dynamic origin
+const getCorsHeaders = () => ({
+  'Access-Control-Allow-Origin': getAllowedOrigin(),
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Credentials': 'true'
-};
+});
 
 // Create response
 const createResponse = (statusCode, body) => ({
   statusCode,
   headers: {
     'Content-Type': 'application/json',
-    ...corsHeaders
+    ...getCorsHeaders()
   },
   body: JSON.stringify(body)
 });
@@ -99,10 +120,26 @@ const requireAuth = async (event) => {
   try {
     const jwtSecret = await getJWTSecret();
     const session = jwt.verify(sessionToken, jwtSecret);
+
+    // Fetch user to check platformAdmin flag
+    const userResult = await dynamodb.get({
+      TableName: USERS_TABLE,
+      Key: { cognito_id: session.userId }
+    }).promise();
+
+    const platformAdmin = userResult.Item?.platform_admin || false;
+
     console.log('UPLOADS: User authenticated via session', {
-      userId: session.userId.substring(0, 8) + '...'
+      userId: session.userId.substring(0, 8) + '...',
+      platformAdmin
     });
-    return { user: session };
+
+    return {
+      user: {
+        ...session,
+        platformAdmin
+      }
+    };
   } catch (error) {
     console.error('UPLOADS: Invalid session token:', error.message);
     return { error: 'Invalid session' };
@@ -217,6 +254,9 @@ const handleGenerateUploadUrl = async (event) => {
 
 // Main handler
 exports.handler = async (event, context) => {
+  // Store event for CORS headers
+  currentEvent = event;
+
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
   const routeKey = `${method} ${path}`;
@@ -232,7 +272,7 @@ exports.handler = async (event, context) => {
   if (method === 'OPTIONS') {
     return {
       statusCode: 200,
-      headers: corsHeaders,
+      headers: getCorsHeaders(),
       body: ''
     };
   }

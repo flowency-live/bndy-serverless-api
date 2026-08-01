@@ -1,0 +1,5162 @@
+{
+    "Items": [
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "f5df7a8f-bbfd-44c4-9858-ec2da014f496"
+            },
+            "id": {
+                "S": "56c2af34-3cee-43e5-841b-b9409a5d5f3b"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:00:00.228Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:00:00.228Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:04:46.103Z"
+            },
+            "votes": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:41.151Z"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T22:19:29.387Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "song_id": {
+                "S": "V4pHiixA9UugGv5qH1zR"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "created_at": {
+                "S": "2026-05-12T22:19:29.387Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "id": {
+                "S": "69aade61-bef3-47e3-8a1f-916df3ee23cc"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:41.314Z"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:04:49.997Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "created_at": {
+                "S": "2026-05-12T22:11:22.328Z"
+            },
+            "song_id": {
+                "S": "0ead08ce-31bb-4d79-9c5b-50a612563eb4"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:41.410Z"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:00.462Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "id": {
+                "S": "0654af51-1200-4772-b7fc-896a9e40d384"
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T22:11:22.328Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:55:44.728Z"
+            },
+            "song_id": {
+                "S": "8f58e71d-dd37-4364-a733-3c4f4ff96373"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:03.325Z"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "created_at": {
+                "S": "2026-05-12T20:55:44.728Z"
+            },
+            "id": {
+                "S": "399458af-adab-44aa-b05d-81ba45e50521"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:41.579Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "d01b491c-bc2f-42fc-b805-a53a525b3771"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:52:51.873Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:41.715Z"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "id": {
+                "S": "ea402105-9012-4cb1-b507-b7327e54e215"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:07.789Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "created_at": {
+                "S": "2026-05-12T20:52:51.873Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "created_at": {
+                "S": "2026-05-12T20:52:38.475Z"
+            },
+            "song_id": {
+                "S": "9b3aa807-bd54-43e2-9274-c52789d298dd"
+            },
+            "notes": {
+                "S": ""
+            },
+            "id": {
+                "S": "b9703f6a-6119-478f-bc83-a47a167da622"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:15.524Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:41.820Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:52:38.475Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:15:46.123Z"
+            },
+            "id": {
+                "S": "0bd0dc0e-5427-4f5b-b4c8-aa70c78ee87c"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "song_id": {
+                "S": "85afcd07-d877-4de8-9e0f-1afdef7aff8d"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:42.177Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:15:46.123Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:18.616Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "created_at": {
+                "S": "2026-05-12T20:51:47.913Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "song_id": {
+                "S": "3f913ce0-5bf7-4342-ac68-2365b8649e90"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:22.764Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:51:47.913Z"
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "id": {
+                "S": "5803c57c-32f0-43ca-8cf5-d9ef72552f0e"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:42.271Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:17:53.209Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "updated_at": {
+                "S": "2026-05-20T09:30:30.767Z"
+            },
+            "song_id": {
+                "S": "801f5b63-438e-43ed-af58-092269bc52af"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:17:53.209Z"
+            },
+            "id": {
+                "S": "b487f6a7-d80b-49a7-b26e-71bcf16c738e"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:42.350Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:42.461Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "id": {
+                "S": "c2f54a2d-a3cb-4196-9117-a9e43e95ab9c"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T22:20:37.860Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:28.658Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "song_id": {
+                "S": "bbe8afe7-e424-4257-9c7d-ae7bd3462721"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "created_at": {
+                "S": "2026-05-12T22:20:37.860Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:42.550Z"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:10:42.426Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "song_id": {
+                "S": "40ff1fb2-8008-4abd-8291-76c2f59ff487"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "id": {
+                "S": "6b8be3c1-efdf-4cde-8fd1-7d43affa5057"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:10:42.426Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:31.935Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "suggested_comment": {
+                "S": ""
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:04:18.345Z"
+            },
+            "added_by_membership_id": {
+                "S": "ecb6a360-b0f6-4445-99ce-b496c743a617"
+            },
+            "id": {
+                "S": "c5e8dd5b-467a-4772-a78d-15391723e726"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "vote_score_percentage": {
+                "N": "33"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2026-05-19T12:28:49.123Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    },
+                    "phone_a494734a-9283-46b8-a4ed-77a6047cbcae": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2026-05-19T21:04:18.345Z"
+                            },
+                            "value": {
+                                "N": "1"
+                            }
+                        }
+                    }
+                }
+            },
+            "notes": {
+                "S": ""
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "song_id": {
+                "S": "16660766-3503-4517-9b69-5b24a4f475d6"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "created_at": {
+                "S": "2026-05-19T12:28:49.123Z"
+            },
+            "suggested_by_user_id": {
+                "S": "0682c2c4-80a1-7012-baa4-3dea14948ee3"
+            },
+            "rag_status": {
+                "M": {}
+            },
+            "promoted_to_playbook_at": {
+                "NULL": true
+            },
+            "last_status_change_at": {
+                "S": "2026-05-19T12:28:49.123Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "voting_scale": {
+                "N": "3"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "song_id": {
+                "S": "d472ea51-4c2e-4340-9aeb-9a6da336d822"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "created_at": {
+                "S": "2026-05-12T21:18:56.296Z"
+            },
+            "readiness": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:36.724Z"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "id": {
+                "S": "947836a6-bfd7-4d25-be04-50690d535a26"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:18:56.296Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:42.643Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "song_id": {
+                "S": "774bd1be-3e81-471b-8e39-29bf3f104129"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:42.748Z"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:39.260Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:00:44.009Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "id": {
+                "S": "d461747b-ee77-42f4-bb7a-6fa38414c282"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:00:44.009Z"
+            }
+        },
+        {
+            "created_at": {
+                "S": "2026-05-12T21:14:02.143Z"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "1b63fcd5-b920-4d1c-89c6-ca01563fadd5"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:14:02.143Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:42.843Z"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:46.789Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "id": {
+                "S": "77b91516-2691-4faf-9741-4074ff7b5670"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "updated_at": {
+                "S": "2026-05-19T21:05:50.673Z"
+            },
+            "song_id": {
+                "S": "dbab5a5b-cdc5-4f0f-8214-6b9ce88a48cc"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:02:22.566Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:02:22.566Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "id": {
+                "S": "40a5c7d1-a4f2-4813-986f-e2932d34df08"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:42.931Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:54.419Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:43.034Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:44:55.270Z"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "song_id": {
+                "S": "ba5594eb-4749-429b-af26-eae8c41fb872"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "created_at": {
+                "S": "2026-05-12T20:44:55.270Z"
+            },
+            "vetos": {
+                "L": []
+            },
+            "id": {
+                "S": "24a158b8-eaca-455a-a8d3-59cfe8e20668"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "id": {
+                "S": "c0acb52d-8089-4851-b1ed-994e89dae29b"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:01:27.231Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:43.481Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:05:57.324Z"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:01:27.231Z"
+            },
+            "song_id": {
+                "S": "7a31f031-66fb-4033-a754-81935094fca5"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:00.742Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:43.577Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:03:12.352Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "id": {
+                "S": "80de00d2-5809-4e18-a8bb-22d51cfbc79b"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "song_id": {
+                "S": "778c6cac-d957-469a-92a9-0b4b47eead19"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "created_at": {
+                "S": "2026-05-12T21:03:12.352Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:43.669Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "created_at": {
+                "S": "2026-05-12T21:11:13.583Z"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:03.539Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "song_id": {
+                "S": "e34b6156-bfe9-4832-b9b2-c3cf13931af9"
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:11:13.583Z"
+            },
+            "id": {
+                "S": "4e2e3442-d1ad-4bad-89ab-17ab3fa15ecc"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "created_at": {
+                "S": "2026-05-06T21:07:59.571Z"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "id": {
+                "S": "5dc23286-aa8f-46a4-a4e9-cad9798679ab"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:43.775Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "song_id": {
+                "S": "7a1ee434-17ae-46aa-bd9f-d9380977fe26"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-06T21:07:59.571Z"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:07.242Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:55:00.446Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:43.879Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "id": {
+                "S": "45fd03e9-84f5-4f64-ba16-0c7b89cd1c16"
+            },
+            "song_id": {
+                "S": "cdcbb1d5-d173-4f7f-ab79-8aa3a2719452"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:55:00.446Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:10.747Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:28:23.551Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "id": {
+                "S": "02fdf74d-8305-4c0a-a463-2cc9fc163b6f"
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:28:23.551Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:14.838Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:43.976Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "song_id": {
+                "S": "adf6ca36-fba6-4792-841a-5984264031ac"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:21.116Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:44.066Z"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T22:06:33.048Z"
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "id": {
+                "S": "f84f10aa-f7a9-4029-ad25-6997262497d1"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            },
+            "created_at": {
+                "S": "2026-05-12T22:06:33.048Z"
+            },
+            "song_id": {
+                "S": "fb8e82d5-fe67-41f7-af21-c7753bd82131"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:44.273Z"
+            },
+            "id": {
+                "S": "33f890a5-6b91-4de9-a00e-10bd055509ae"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "created_at": {
+                "S": "2026-05-12T21:17:06.171Z"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:24.248Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:17:06.171Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "song_id": {
+                "S": "6027ab48-8930-4670-83e4-b69fe3383a44"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:23:16.628Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:44.386Z"
+            },
+            "id": {
+                "S": "6225cc37-a8e6-4512-bc4f-69e0a2679ccc"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:29.443Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:23:16.628Z"
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "song_id": {
+                "S": "926a4270-1415-4d55-9430-60f081a3d50b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:33.044Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "song_id": {
+                "S": "c6bb440c-679e-43b4-9703-42b32879446e"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:13:01.146Z"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "id": {
+                "S": "c31db892-3204-4b4c-a372-3178112f7a6b"
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:13:01.146Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:44.581Z"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:44.681Z"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:16:41.872Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "id": {
+                "S": "ff908099-cfcd-49b7-9b62-e038017b0d9e"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:37.606Z"
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:16:41.872Z"
+            },
+            "song_id": {
+                "S": "a9ab694e-c2eb-4ea6-9abe-26a4d9737a42"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "id": {
+                "S": "044048b3-d059-413c-81e6-d08123bbffc1"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:44.802Z"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:04:30.956Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "song_id": {
+                "S": "73e21147-7d78-4df2-827a-bf5b8ea4ec15"
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:04:30.956Z"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:40.616Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:05:13.230Z"
+            },
+            "id": {
+                "S": "d191cdc0-c4a4-45f7-be0c-cc06e382ea6a"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:43.099Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:44.949Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "song_id": {
+                "S": "b64fb798-713c-4c27-aa1a-1044a4981528"
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:05:13.230Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "13b33a3f-61bd-4acb-896c-6c8ae3d40ccb"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T22:27:32.763Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:45.057Z"
+            },
+            "id": {
+                "S": "c11dabcf-499b-4bd6-9d00-cb3b95aa9081"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "created_at": {
+                "S": "2026-05-12T22:27:32.763Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:46.120Z"
+            }
+        },
+        {
+            "suggested_comment": {
+                "S": ""
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "added_by_membership_id": {
+                "S": "ecb6a360-b0f6-4445-99ce-b496c743a617"
+            },
+            "song_id": {
+                "S": "Hsyb7MM7asnZQV8KtgXB"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "vote_score_percentage": {
+                "N": "33"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2026-05-14T18:12:23.331Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    },
+                    "phone_a494734a-9283-46b8-a4ed-77a6047cbcae": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2026-05-19T21:03:48.500Z"
+                            },
+                            "value": {
+                                "N": "1"
+                            }
+                        }
+                    }
+                }
+            },
+            "notes": {
+                "S": ""
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:03:48.500Z"
+            },
+            "created_at": {
+                "S": "2026-05-14T18:12:23.331Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "suggested_by_user_id": {
+                "S": "0682c2c4-80a1-7012-baa4-3dea14948ee3"
+            },
+            "id": {
+                "S": "ea0e5cca-dab4-42af-b6b5-c46731f73b63"
+            },
+            "rag_status": {
+                "M": {}
+            },
+            "promoted_to_playbook_at": {
+                "NULL": true
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "voting_scale": {
+                "N": "3"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T18:12:23.331Z"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:50.847Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:45.149Z"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:23:57.159Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "id": {
+                "S": "7193fc09-ee27-45e0-b24e-9d2c0a0f8342"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "created_at": {
+                "S": "2026-05-12T21:23:57.159Z"
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "song_id": {
+                "S": "5541cb5d-5085-40da-aacf-606dc41efce3"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "suggested_comment": {
+                "S": ""
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "0e910e0a-92c1-435d-ae99-a26461e66788"
+            },
+            "added_by_membership_id": {
+                "S": "ecb6a360-b0f6-4445-99ce-b496c743a617"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2026-05-14T18:12:40.916Z"
+                            },
+                            "value": {
+                                "N": "2"
+                            }
+                        }
+                    },
+                    "phone_a494734a-9283-46b8-a4ed-77a6047cbcae": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2026-05-19T21:04:00.108Z"
+                            },
+                            "value": {
+                                "N": "2"
+                            }
+                        }
+                    }
+                }
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:04:00.108Z"
+            },
+            "id": {
+                "S": "9ba157ac-c42b-4d7e-b093-90e0f95001f3"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "vote_score_percentage": {
+                "N": "33"
+            },
+            "notes": {
+                "S": ""
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "suggested_by_user_id": {
+                "S": "0682c2c4-80a1-7012-baa4-3dea14948ee3"
+            },
+            "rag_status": {
+                "M": {}
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T18:12:40.916Z"
+            },
+            "promoted_to_playbook_at": {
+                "NULL": true
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "created_at": {
+                "S": "2026-05-14T18:12:40.916Z"
+            },
+            "voting_scale": {
+                "N": "3"
+            }
+        },
+        {
+            "created_at": {
+                "S": "2026-05-12T21:13:14.511Z"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "id": {
+                "S": "46aecfb0-b85e-4fdd-b934-5e586cabe168"
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:13:14.511Z"
+            },
+            "song_id": {
+                "S": "5385c5d6-1f03-4057-8579-a128446e62ee"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:54.016Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:45.365Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "id": {
+                "S": "1e4f5c0d-be21-450c-81dc-cffdf05fe3d6"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:56:33.422Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "song_id": {
+                "S": "2f6b70fc-7ded-40a9-b622-180e0db0c002"
+            },
+            "created_at": {
+                "S": "2026-05-12T20:56:33.422Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:45.445Z"
+            },
+            "votes": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:57.475Z"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "id": {
+                "S": "bc2a2b7b-0e60-4743-a25f-9cd6d5ab2478"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:45.549Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T22:26:44.046Z"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:06:59.726Z"
+            },
+            "song_id": {
+                "S": "0cb20fd0-d47e-43a2-a64e-8cb1f0b19180"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "created_at": {
+                "S": "2026-05-12T22:26:44.046Z"
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:45.668Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "song_id": {
+                "S": "c1d15f1f-e3d7-41a4-9c75-8c1db071241a"
+            },
+            "notes": {
+                "S": ""
+            },
+            "id": {
+                "S": "82d2d238-8649-4516-ab9c-b4d7346f7dd1"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:10:19.572Z"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:10:19.572Z"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:02.897Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:11:51.091Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:45.764Z"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:07.433Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "song_id": {
+                "S": "4077bba1-1523-449e-aa16-9eb6b2b4c5a2"
+            },
+            "id": {
+                "S": "403b2192-5486-4be6-bb05-672c49f26455"
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:11:51.091Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:53:09.946Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "id": {
+                "S": "68e41a66-3522-45b1-9890-aa4a2786e5ad"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:10.647Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "created_at": {
+                "S": "2026-05-12T20:53:09.946Z"
+            },
+            "song_id": {
+                "S": "16cdcf24-142a-489f-a513-3df0a0c50ff8"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:45.851Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:22:19.579Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "song_id": {
+                "S": "voTj41VYjtJihLocsxCF"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:45.949Z"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:22:19.579Z"
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "id": {
+                "S": "c0902e76-cc4e-4a61-b098-29020a8f5323"
+            },
+            "votes": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:15.229Z"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "id": {
+                "S": "cf17d160-ea4a-4326-b554-026ad3696bb8"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:12:16.993Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:17.675Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "song_id": {
+                "S": "88d0ca9b-5f54-4b85-a7a0-6da6560ffaaa"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:46.048Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:12:16.993Z"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "id": {
+                "S": "36b3b74a-da34-4312-9c99-7a0a997eebbb"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:19.935Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:46.153Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "created_at": {
+                "S": "2026-05-12T20:49:42.593Z"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "song_id": {
+                "S": "cf61b8e8-ddd4-4f61-8d27-add194c41b28"
+            },
+            "votes": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:49:42.593Z"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "77bfbb19-2ec4-4153-aa89-8d3d5e352ed1"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:46.246Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T22:14:03.556Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "id": {
+                "S": "8cead943-dec2-42f9-b548-78558fa57b2b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "created_at": {
+                "S": "2026-05-12T22:14:03.556Z"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:22.496Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "suggested_comment": {
+                "S": ""
+            },
+            "created_at": {
+                "S": "2026-05-14T18:13:49.262Z"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2026-05-14T18:13:49.262Z"
+                            },
+                            "value": {
+                                "N": "2"
+                            }
+                        }
+                    },
+                    "phone_a494734a-9283-46b8-a4ed-77a6047cbcae": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2026-05-19T21:04:03.355Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    }
+                }
+            },
+            "added_by_membership_id": {
+                "S": "ecb6a360-b0f6-4445-99ce-b496c743a617"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T18:13:49.262Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "id": {
+                "S": "fc8a7fcf-5770-427b-9965-160ecb8de78e"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:04:03.355Z"
+            },
+            "suggested_by_user_id": {
+                "S": "0682c2c4-80a1-7012-baa4-3dea14948ee3"
+            },
+            "song_id": {
+                "S": "4e8036b6-9510-4a75-9f7d-ee55e281924d"
+            },
+            "rag_status": {
+                "M": {}
+            },
+            "promoted_to_playbook_at": {
+                "NULL": true
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vote_score_percentage": {
+                "N": "42"
+            },
+            "voting_scale": {
+                "N": "3"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:20:30.977Z"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:25.042Z"
+            },
+            "song_id": {
+                "S": "11bab8c4-e92a-42f9-8560-09f8740a6f43"
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "id": {
+                "S": "daa1aa43-983e-4795-b352-c546df325f3d"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:46.344Z"
+            },
+            "votes": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:20:30.977Z"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:22:12.386Z"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "song_id": {
+                "S": "4592337c-0957-45d2-9f42-bd760bf3b89e"
+            },
+            "notes": {
+                "S": ""
+            },
+            "id": {
+                "S": "5b0c3c2c-8c8e-4104-91cc-10c7f59c3582"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:46.442Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:27.847Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:22:12.386Z"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "10bbf947-0405-449e-a01a-4b6637e74280"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:25:34.079Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "id": {
+                "S": "87956f96-707c-4b86-8271-4226fc6a8571"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:25:34.079Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:46.517Z"
+            },
+            "votes": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:30.522Z"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:33.260Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:20:19.860Z"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:46.621Z"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:20:19.860Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "song_id": {
+                "S": "83863c0e-07d3-4a98-8cd1-c1cb254c36d8"
+            },
+            "id": {
+                "S": "90e57c7c-1d42-4c24-91de-65586ecd0cac"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:35.573Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:13:32.349Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "id": {
+                "S": "00f8dc5f-4c15-4f6a-9ffb-21f108ed2b1a"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:46.712Z"
+            },
+            "votes": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:13:32.349Z"
+            },
+            "song_id": {
+                "S": "817b7064-64c4-45ec-adc7-02ca9539dab2"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:38.338Z"
+            },
+            "id": {
+                "S": "e281ee43-5901-4924-a251-209357cbb318"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "song_id": {
+                "S": "edee45f2-d9cd-4a79-aa80-6600cf9a5eef"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:56:11.118Z"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:46.802Z"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:56:11.118Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "song_id": {
+                "S": "d5851baa-00d1-4493-8476-1f76a0821ddc"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "id": {
+                "S": "34a911bd-07d4-4927-9c37-7fd3b0c515e0"
+            },
+            "created_at": {
+                "S": "2026-05-12T20:47:24.600Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:46.926Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:47:24.600Z"
+            },
+            "votes": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:41.536Z"
+            }
+        },
+        {
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:47.104Z"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:24:45.056Z"
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "id": {
+                "S": "45b43b73-1970-4d7e-af06-6b786c031c70"
+            },
+            "notes": {
+                "S": ""
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:44.741Z"
+            },
+            "readiness": {
+                "L": []
+            },
+            "song_id": {
+                "S": "4e245eb3-f2a4-4013-8e8c-be8f2a32529f"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            },
+            "created_at": {
+                "S": "2026-05-12T21:24:45.056Z"
+            }
+        },
+        {
+            "created_at": {
+                "S": "2026-05-14T18:12:08.547Z"
+            },
+            "suggested_comment": {
+                "S": ""
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "5b4031f8-35c9-4a95-85c7-8cd9c3ad4387"
+            },
+            "added_by_membership_id": {
+                "S": "ecb6a360-b0f6-4445-99ce-b496c743a617"
+            },
+            "votes": {
+                "M": {
+                    "0682c2c4-80a1-7012-baa4-3dea14948ee3": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2026-05-14T18:12:08.547Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    },
+                    "phone_a494734a-9283-46b8-a4ed-77a6047cbcae": {
+                        "M": {
+                            "updated_at": {
+                                "S": "2026-05-19T21:03:56.643Z"
+                            },
+                            "value": {
+                                "N": "3"
+                            }
+                        }
+                    }
+                }
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:03:56.643Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T18:12:08.547Z"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "suggested_by_user_id": {
+                "S": "0682c2c4-80a1-7012-baa4-3dea14948ee3"
+            },
+            "rag_status": {
+                "M": {}
+            },
+            "promoted_to_playbook_at": {
+                "NULL": true
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "voting_scale": {
+                "N": "3"
+            },
+            "id": {
+                "S": "03a92bab-185e-4b5d-95fc-f9b9e62896f9"
+            },
+            "vote_score_percentage": {
+                "N": "50"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "743d8422-62ca-431b-8e18-4a84c82090d6"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "created_at": {
+                "S": "2026-05-12T21:13:44.072Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "id": {
+                "S": "8b0eb015-ad42-4fde-b769-925c20b7b35a"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:47.423Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:13:44.072Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:47.200Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:47.288Z"
+            },
+            "song_id": {
+                "S": "3118d756-da82-4766-a922-42f6a686fe1f"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:03:42.940Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:03:42.940Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "id": {
+                "S": "2a164886-78d9-4890-b108-3423dc339e5e"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:51.231Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "id": {
+                "S": "c9be65e7-f54a-458b-9372-95b3323add21"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:47.379Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:02:34.300Z"
+            },
+            "song_id": {
+                "S": "ed1dab09-2b62-41df-a807-7b63605949fa"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:54.168Z"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:02:34.300Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:15:21.992Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "created_at": {
+                "S": "2026-05-12T21:15:21.992Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:47.479Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:07:57.618Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "id": {
+                "S": "68aacb9b-260a-4db0-b4fc-ed36b2e2f6be"
+            },
+            "vetos": {
+                "L": []
+            },
+            "song_id": {
+                "S": "0e08dce1-cc4c-4254-b05e-aabfc7ceb87b"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:47.575Z"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "id": {
+                "S": "b62e1d6a-22ef-4f41-b336-138ecb31f504"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:00.755Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "created_at": {
+                "S": "2026-05-12T22:13:15.795Z"
+            },
+            "song_id": {
+                "S": "ecb97c30-102f-48c9-af3a-56f6b590406b"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T22:13:15.795Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "aec892a1-1532-4780-9aae-e44489c483bf"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:47.660Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "created_at": {
+                "S": "2026-05-12T21:03:31.775Z"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:05.717Z"
+            },
+            "id": {
+                "S": "30fa8dbb-d313-4d49-84ca-70357fdf2d78"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:03:31.775Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "f992c42f-1430-4f69-b4f8-cce33078d1f9"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:29:46.330Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "id": {
+                "S": "7ff70169-6c35-4e16-9e24-4f2dd93938b4"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:29:46.330Z"
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:08.476Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:47.756Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "created_at": {
+                "S": "2026-05-12T21:01:12.460Z"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:11.154Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "id": {
+                "S": "4a39e795-f007-45fe-910a-59fe46b3f3b2"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:47.854Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:01:12.460Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "song_id": {
+                "S": "2abc38f0-3a6a-45bc-afce-6e01951e7de4"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:47.949Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "id": {
+                "S": "25e78966-3353-456b-843a-d717b07c2cd1"
+            },
+            "readiness": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:48:27.141Z"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:12.878Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "song_id": {
+                "S": "80a70210-79f1-46ae-ac79-7b6b3c2f813e"
+            },
+            "created_at": {
+                "S": "2026-05-12T20:48:27.141Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "8b95ed26-8039-4fe0-bef0-0a8be979cb35"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:48.073Z"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:22:57.673Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "id": {
+                "S": "27dbc75a-3daf-4787-8c2c-f6f0378b68bc"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:17.245Z"
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:22:57.673Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:48.158Z"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:50:14.542Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "created_at": {
+                "S": "2026-05-12T20:50:14.542Z"
+            },
+            "id": {
+                "S": "41a903f8-5b44-49d3-aaff-19d6b35be63c"
+            },
+            "song_id": {
+                "S": "3500ae0c-0c1f-453c-99b3-1e1a01c3f41c"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:20.429Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:14:16.731Z"
+            },
+            "id": {
+                "S": "faeeac27-ff59-460a-9fea-b2d5a1da9e59"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "song_id": {
+                "S": "6ee62168-3652-4023-b52b-f603f419760d"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:24.037Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:14:16.731Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:48.245Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "a0df2944-9f30-4b96-84eb-8002b7188bda"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:05:55.347Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:26.750Z"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "id": {
+                "S": "f8c0e4ea-3f46-4253-80a8-3c2bc0d91b16"
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:05:55.347Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:48.326Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "id": {
+                "S": "709d0c4b-d821-4909-8951-e2f48a469126"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:47:55.243Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:28.865Z"
+            },
+            "created_at": {
+                "S": "2026-05-12T20:47:55.243Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:48.406Z"
+            },
+            "song_id": {
+                "S": "2c566bda-b8ce-4dfd-bc58-d37388c61770"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "id": {
+                "S": "c8392847-4bb0-4a4a-9071-1cf008a4f14b"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:48.494Z"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:21:03.773Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "8"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:38.226Z"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:21:03.773Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "song_id": {
+                "S": "4bdd7e21-d7b2-474b-8dd2-8b6088c92ff0"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "created_at": {
+                "S": "2026-05-12T20:49:01.069Z"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:44.974Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "song_id": {
+                "S": "d6f75de2-af09-4594-a3a4-9f68c4cabce2"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:49:01.069Z"
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:48.659Z"
+            },
+            "id": {
+                "S": "40d43b90-80ad-41ed-b6bb-b7834f780f63"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:08:18.746Z"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:08:47.222Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:48.749Z"
+            },
+            "votes": {
+                "L": []
+            },
+            "song_id": {
+                "S": "e8c3cb72-0dd7-4b4c-8f09-3bc9346ccabd"
+            },
+            "id": {
+                "S": "5ed024cb-b71a-4e07-8ff6-b212d05615ff"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:08:18.746Z"
+            }
+        },
+        {
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:48.920Z"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "id": {
+                "S": "d43061b3-d354-40bb-a9aa-0cf4d5d47b25"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:09:07.280Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "created_at": {
+                "S": "2026-05-12T22:18:53.735Z"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "song_id": {
+                "S": "a0c95ade-db92-4769-bdca-f38c42296a6a"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T22:18:53.735Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "id": {
+                "S": "32b11bc3-9c41-46cb-8983-bfd13c34113c"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "created_at": {
+                "S": "2026-05-12T21:12:28.248Z"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "song_id": {
+                "S": "dc0b7e1b-5ae8-4907-9aa3-002f5b00616f"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:09:10.460Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:48.993Z"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:12:28.248Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:49.091Z"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T22:04:22.814Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "created_at": {
+                "S": "2026-05-12T22:04:22.814Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "id": {
+                "S": "dc831f55-eec7-4833-bc0b-b4c152773e5f"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:09:12.923Z"
+            },
+            "votes": {
+                "L": []
+            },
+            "song_id": {
+                "S": "10e0157c-d249-422a-a7e0-6406da93d510"
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "created_at": {
+                "S": "2026-05-12T20:50:43.627Z"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "updated_at": {
+                "S": "2026-05-19T21:09:19.493Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:49.179Z"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T20:50:43.627Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "song_id": {
+                "S": "2133c030-fe87-43bd-8bbc-32d94a7e5e08"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "id": {
+                "S": "24e5a5fb-fd77-4110-92dd-9cfbd58b7c1f"
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "updated_at": {
+                "S": "2026-05-19T21:09:23.492Z"
+            },
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "song_id": {
+                "S": "d0f2e918-f563-4e59-bebc-6d4e37413a8d"
+            },
+            "id": {
+                "S": "740715c0-b62c-4110-8865-cb909039a102"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:49.256Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "notes": {
+                "S": ""
+            },
+            "created_at": {
+                "S": "2026-05-12T22:18:26.876Z"
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "vote_score_percentage": {
+                "N": "17"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T22:18:26.876Z"
+            },
+            "votes": {
+                "L": []
+            }
+        },
+        {
+            "performance_count": {
+                "N": "0"
+            },
+            "tuning": {
+                "S": "standard"
+            },
+            "created_at": {
+                "S": "2026-05-12T21:19:40.291Z"
+            },
+            "last_status_change_at": {
+                "S": "2026-05-14T17:00:49.356Z"
+            },
+            "id": {
+                "S": "031fbf8d-d162-40a4-a954-110555e2f2b2"
+            },
+            "vote_score_percentage": {
+                "N": "25"
+            },
+            "status": {
+                "S": "voting"
+            },
+            "youtube_url": {
+                "S": ""
+            },
+            "last_performed_at": {
+                "S": "1970-01-01T00:00:00.000Z"
+            },
+            "has_disagreement": {
+                "BOOL": false
+            },
+            "song_id": {
+                "S": "d2d43822-c0fb-4f9d-9764-38e53181f2b3"
+            },
+            "notes": {
+                "S": ""
+            },
+            "readiness": {
+                "L": []
+            },
+            "reference_url": {
+                "S": ""
+            },
+            "updated_at": {
+                "S": "2026-05-20T09:37:34.235Z"
+            },
+            "custom_key": {
+                "NULL": true
+            },
+            "artist_id": {
+                "S": "6aeb2182-dc82-4be8-bbe5-81413c43de6b"
+            },
+            "promoted_to_playbook_at": {
+                "S": "2026-05-12T21:19:40.291Z"
+            },
+            "custom_tempo": {
+                "NULL": true
+            },
+            "vetos": {
+                "L": []
+            },
+            "votes": {
+                "L": []
+            }
+        }
+    ],
+    "Count": 77,
+    "ScannedCount": 77,
+    "ConsumedCapacity": null
+}

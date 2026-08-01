@@ -4,7 +4,24 @@
 const AWS = require('aws-sdk');
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 
+const ALLOWED_ORIGINS = [
+  'https://www.bndy.co.uk',       // Primary domain
+  'https://backstage.bndy.co.uk', // Legacy domain
+  'https://bndy.co.uk',            // Apex domain
+  'https://live.bndy.co.uk',      // Frontstage
+  'https://gigmap.bndy.co.uk',    // GigMap
+  'http://localhost:3000'          // Local development
+];
+
+let currentEvent = null;
+
+const getAllowedOrigin = () => {
+  const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
+
 exports.handler = async (event, context) => {
+  currentEvent = event;
   // HTTP API v2 payload format compatibility
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path;
@@ -414,7 +431,7 @@ async function handleForceDeleteSong(songId) {
 function getCorsHeaders() {
   return {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': getAllowedOrigin(),
     'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
     'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
     'Access-Control-Allow-Credentials': 'true'

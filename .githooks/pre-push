@@ -1,0 +1,51 @@
+#!/bin/bash
+#
+# Pre-push hook for BNDY Serverless API
+#
+# This hook runs validation before pushing to master/main to prevent
+# the deployment failures that caused the 2026-05-01 production incident.
+#
+# To install:
+#   git config core.hooksPath .githooks
+#
+# Or copy to .git/hooks/pre-push
+
+# Only run checks when pushing to master or main
+while read local_ref local_sha remote_ref remote_sha
+do
+  if [[ "$remote_ref" == "refs/heads/master" ]] || [[ "$remote_ref" == "refs/heads/main" ]]; then
+    echo "=========================================="
+    echo "  Pre-push validation (pushing to master)"
+    echo "=========================================="
+    echo ""
+
+    # Run validation script
+    echo "Running pre-deployment validation..."
+    if ! node scripts/validate-deployment.js; then
+      echo ""
+      echo "ERROR: Pre-deployment validation failed!"
+      echo "Fix the issues above before pushing to master."
+      echo ""
+      exit 1
+    fi
+
+    echo ""
+
+    # Run route verification
+    echo "Running route verification..."
+    cd scripts && npm install --silent && cd ..
+    if ! node scripts/verify-routes.js; then
+      echo ""
+      echo "ERROR: Route verification failed!"
+      echo "Fix the issues above before pushing to master."
+      echo ""
+      exit 1
+    fi
+
+    echo ""
+    echo "All validations passed. Proceeding with push."
+    echo ""
+  fi
+done
+
+exit 0

@@ -6,11 +6,14 @@
  */
 
 const crypto = require('crypto');
+const { eventUniqueKeys, eventNaturalKeys } = require('./identity');
+const { gatedPut, releaseUniqueKeys, duplicateResponseBody } = require('./unique-gate');
 
 // Configuration
 const EVENTS_TABLE = 'bndy-events';
 const VENUES_TABLE = 'bndy-venues';
 const ARTIST_VENUES_TABLE = 'bndy-artist-venues';
+const ARTISTS_TABLE = 'bndy-artists';
 
 // Private fee fields to strip from public endpoints
 const PRIVATE_FEE_FIELDS = ['agreedFee', 'actualFee', 'datePaid', 'paymentMethod', 'splitBetweenMembers', 'noFee', 'distributed'];
@@ -32,6 +35,62 @@ const subtractDays = (dateStr, days) => {
  * @returns {string|null} Error message or null if valid
  */
 function validateRecurring(recurring) {
+  return validateRecurringInner(recurring);
+}
+
+/**
+ * Sentinel keys for an event, or [] when the event class isn't gated.
+ * Gated: any event with a venueId that is a public-facing gig
+ * (type gig/public_gig, or isPublic) — the classes automated importers
+ * create. Private calendar entries (practice, availability, unavailability)
+ * are NOT gated: two practices at one venue on one day are legitimate.
+ * Artist-less public events (open-mic class) get the OPENMIC key — closes
+ * the community-route skip-hole from the 2026-07-27 audit.
+ */
+function eventGateKeys(ev) {
+  if (!ev || !ev.venueId) return [];
+  const isGig = ev.type === 'gig' || ev.type === 'public_gig' || ev.isPublic === true;
+  if (!isGig) return [];
+  try {
+    return eventUniqueKeys({
+      venueId: ev.venueId,
+      date: ev.date,
+      startTime: ev.startTime,
+      artistId: ev.artistId,
+      artistIds: ev.artistIds,
+      collaboratingArtistIds: ev.collaboratingArtistIds,
+    });
+  } catch (err) {
+    // Unparseable date — surface loudly; silent string-drift is exactly how
+    // the old advisory check was bypassed.
+    throw new Error(`Event uniqueness key failed: ${err.message}`);
+  }
+}
+
+/**
+ * HARD GATE (2026-07-27): write an event + its (venue|artist|date) sentinels
+ * in one transaction. Returns the gatedPut result; when .written is false the
+ * caller must return 409 using duplicateResponseBody('event', result.existing).
+ */
+async function putEventGated(dynamodb, newEvent, source) {
+  return gatedPut(dynamodb, {
+    tableName: EVENTS_TABLE,
+    item: newEvent,
+    keys: eventGateKeys(newEvent),
+    entityType: 'event',
+    source: source || newEvent.source || 'events-lambda',
+  });
+}
+
+/** Best-effort sentinel release for delete/merge paths. */
+async function releaseEventSentinels(dynamodb, eventItem) {
+  try {
+    const keys = eventGateKeys(eventItem);
+    if (keys.length) await releaseUniqueKeys(dynamodb, keys, eventItem.id);
+  } catch (e) { /* never block a delete on sentinel cleanup */ }
+}
+
+function validateRecurringInner(recurring) {
   if (!recurring) return null;
 
   const validTypes = ['day', 'week', 'month', 'year'];
@@ -302,6 +361,51 @@ async function ensureVenueRelationship(dynamodb, artistId, venueId, gigDate) {
 }
 
 /**
+ * Update event count for one or more artists (non-blocking side effect)
+ * Uses atomic ADD operation for thread safety
+ * @param {Object} dynamodb - DynamoDB DocumentClient
+ * @param {Array<string>} artistIds - Artist IDs to update
+ * @param {number} delta - Change amount (+1 for create, -1 for delete)
+ * @param {string} eventDate - Event date (YYYY-MM-DD) to determine future/past
+ */
+async function updateArtistEventCounts(dynamodb, artistIds, delta, eventDate) {
+  if (!artistIds || artistIds.length === 0) return;
+
+  const uniqueArtistIds = [...new Set(artistIds.filter(Boolean))];
+  const today = new Date().toISOString().split('T')[0];
+  const isFuture = eventDate >= today;
+  const countField = isFuture ? 'futureEventCount' : 'pastEventCount';
+
+  for (const artistId of uniqueArtistIds) {
+    try {
+      const params = {
+        TableName: ARTISTS_TABLE,
+        Key: { id: artistId },
+        UpdateExpression: `ADD ${countField} :delta`,
+        ConditionExpression: 'attribute_exists(id)'
+      };
+
+      if (delta > 0) {
+        params.ExpressionAttributeValues = { ':delta': delta };
+      } else {
+        // Prevent negative counts
+        params.ConditionExpression = `attribute_exists(id) AND (attribute_not_exists(${countField}) OR ${countField} >= :min)`;
+        params.ExpressionAttributeValues = { ':delta': delta, ':min': 1 };
+      }
+
+      await dynamodb.update(params).promise();
+      console.log('EVENT_COUNT: Updated', { artistId, delta, countField, eventDate });
+    } catch (error) {
+      if (error.code === 'ConditionalCheckFailedException') {
+        console.log('EVENT_COUNT: Skipped (artist not found or count already zero)', { artistId, delta, countField });
+      } else {
+        console.error('EVENT_COUNT: Failed (non-blocking)', { artistId, delta, countField, error: error.message });
+      }
+    }
+  }
+}
+
+/**
  * Strip private fee fields from events for public endpoints
  * @param {Object} event - Event object
  * @returns {Object} Sanitized event
@@ -371,9 +475,15 @@ module.exports = {
   addDays,
   subtractDays,
   validateRecurring,
+  // Hard uniqueness gate (2026-07-27 plan)
+  putEventGated,
+  releaseEventSentinels,
+  eventGateKeys,
   // Venue operations
   getVenue,
   ensureVenueRelationship,
+  // Artist event counts
+  updateArtistEventCounts,
   // Duplicate detection
   checkForDuplicateByExternalId,
   checkForDuplicateEvent,

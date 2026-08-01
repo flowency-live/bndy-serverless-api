@@ -2,9 +2,9 @@
 
 ## Incident Summary
 
-**Duration:** April 30 evening through May 1
-**Severity:** Critical - Complete authentication failure, data loss
-**Impact:** All users unable to log in, band memberships lost, multiple API routes missing
+**Duration:** April 30 evening through May 1 (~18:30)
+**Severity:** Critical - Complete authentication failure, data loss, deployment failures
+**Impact:** All users unable to log in, band memberships lost, multiple API routes missing, repeated deployment failures
 
 ---
 
@@ -111,6 +111,101 @@
 
 ---
 
+### Issue 6: Lambda Code Size Exceeded (AuthFunction)
+**Discovered:** May 1, ~16:00 PM
+**Root Cause:** Backup files accidentally included in SAM deployment package
+
+**What happened:**
+- `auth-lambda/` folder contained 106MB of backup files:
+  - `backup-extracted/` folder with full node_modules
+  - Various `*.backup`, `*.broken-*` files
+  - `handler-FAILED.js` file
+- SAM build included these files, exceeding 262MB Lambda limit (311MB actual)
+- Deployment failed with: `Unzipped size must be smaller than 262144000 bytes`
+
+**Fix applied:**
+- Moved all backup files to `_archived_backups/auth-lambda/`
+- Created `.samignore` to exclude backup patterns from builds
+- Updated `.gitignore` to prevent backup files from being committed
+
+---
+
+### Issue 7: Lambda Code Size Exceeded (ArtistsFunction)
+**Discovered:** May 1, ~16:30 PM
+**Root Cause:** Old deployment zip files left in lambda folders
+
+**What happened:**
+- `artists-lambda/` contained deployment zips from manual deployments:
+  - `artists-lambda-deploy.zip` (21MB)
+  - `function.zip` (41MB)
+- Similar zips existed in `venues-lambda/` and `events-lambda/`
+- SAM build included these, exceeding limits
+
+**Fix applied:**
+- Deleted all `*.zip` files from lambda folders
+- Added `*.zip` and `*.tar.gz` to `.gitignore`
+
+---
+
+### Issue 8: Lambda Policy Size Exceeded
+**Discovered:** May 1, ~17:00 PM
+**Root Cause:** Too many routes on single Lambda function
+
+**What happened:**
+- EventsFunction had 28 routes attached
+- Each route creates a Lambda permission in CloudFormation
+- Total policy size: 20,605 bytes (limit: 20,480 bytes)
+- Deployment failed with: `The final policy size is bigger than the limit`
+
+**Fix applied:**
+- Split 6 calendar routes to new `CalendarFunction`
+- CalendarFunction uses same `events-lambda/` code but handles calendar-specific routes
+- Manually deleted orphaned Lambda permissions from previous failed deployments
+
+---
+
+### Issue 9: Missing Dependencies (NotificationsFunction)
+**Discovered:** May 1, ~17:30 PM
+**Root Cause:** Lambda relied on layer for aws-sdk but SAM build doesn't resolve layer dependencies
+
+**What happened:**
+- `notifications-lambda/package.json` had NO runtime dependencies
+- Code required `aws-sdk`, `jsonwebtoken`, `uuid`
+- Assumed bndy-jwt layer would provide these
+- SAM build creates isolated packages - layer deps not resolved at build time
+- Lambda crashed with: `Cannot find module 'aws-sdk'`
+
+**Fix applied:**
+- Added explicit dependencies to `notifications-lambda/package.json`:
+  ```json
+  "dependencies": {
+    "aws-sdk": "^2.1692.0",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^9.0.0"
+  }
+  ```
+
+**Lesson:** Never rely on Lambda layers for dependencies that code requires at runtime. Always declare dependencies explicitly in package.json.
+
+---
+
+### Issue 10: Routes on Wrong Lambda Functions
+**Discovered:** May 1, ~18:00 PM
+**Root Cause:** Routes defined in template.yaml but pointing to Lambda with no handler
+
+**What happened:**
+- `/api/artists/{artistId}/members` route was on ArtistsFunction
+- `/api/artists/{artistId}/crm/venues` route was on ArtistsFunction
+- But handlers were in `memberships-lambda/` and `venue-crm-lambda/`
+- Resulted in 404 errors
+
+**Fix applied:**
+- Moved `/api/artists/{artistId}/members` routes to MembershipsFunction
+- Moved `/api/artists/{artistId}/crm/venues/*` routes to VenueCRMFunction
+- Added 15 CRM routes (venues, contacts, gigs, notes CRUD)
+
+---
+
 ## Root Cause Analysis
 
 ### The Core Problem: Incomplete IaC Migration
@@ -136,6 +231,10 @@ Every change to the infrastructure was initiated by Claude Code:
 2. Claude did not verify all Lambda functions were in the SAM template
 3. Claude did not verify all routes existed before/after deployments
 4. Claude deleted the CDK stack without ensuring SAM had all resources
+5. Claude did not run validation scripts before deploying
+6. Claude did not check Lambda package sizes before deploying
+7. Claude did not verify route-to-handler mappings
+8. Claude assumed layer dependencies would work without explicit package.json entries
 
 ---
 
@@ -164,28 +263,65 @@ Every change to the infrastructure was initiated by Claude Code:
 - Actual routes dropped to 57, then 65
 - Should have an automated check for route count
 
+### 6. Never Trust Filesystem Cleanliness
+- Lambda folders accumulate garbage: backup files, zips, old node_modules
+- Always use `.samignore` to exclude non-essential files
+- Run size checks before every deployment
+
+### 7. Never Rely on Lambda Layers for Core Dependencies
+- SAM builds each Lambda independently
+- Layer contents are NOT available at build time
+- Always declare dependencies explicitly in package.json
+- Layers should only supplement, never replace, package.json deps
+
+### 8. Validate Route-to-Handler Mappings
+- Routes in template.yaml MUST have corresponding handlers in Lambda code
+- Create automated checks that verify:
+  - Every route path has a matching handler
+  - Routes point to the correct Lambda function
+
+### 9. Limit Routes Per Lambda
+- AWS Lambda policy limit: 20KB
+- Each route creates ~750 bytes of policy
+- Practical limit: ~25 routes per Lambda
+- Split large Lambdas into focused functions (e.g., CalendarFunction)
+
+### 10. No Deploy Without Validation
+- Every deployment MUST be preceded by:
+  - `sam validate`
+  - Size check (each Lambda < 250MB)
+  - Route count check (< 25 per Lambda)
+  - Dependency verification
+  - Route-to-handler mapping check
+
 ---
 
 ## Action Items
 
-### Immediate (Today)
+### Completed (May 1)
 - [x] Fix auth routes
 - [x] Fix Cognito env vars
-- [ ] Add all 9 missing Lambda functions to SAM template
-- [ ] Add all missing routes
-- [ ] Verify all 140 routes exist
+- [x] Add all 9 missing Lambda functions to SAM template
+- [x] Add all missing routes
+- [x] Clean up backup files from lambda folders
+- [x] Create `.samignore` file
+- [x] Fix Lambda policy size limit (split CalendarFunction)
+- [x] Add missing dependencies to notifications-lambda
+- [x] Fix route-to-handler mappings (members, crm/venues)
 
 ### Short-term (This Week)
 - [ ] Enable deletion protection on ALL DynamoDB tables
 - [ ] Enable PITR on ALL DynamoDB tables
-- [ ] Create pre-deployment validation script
-- [ ] Add route count smoke test to CI/CD
+- [x] Create pre-deployment validation script (`scripts/validate-deployment.js`)
+- [x] Add route verification to CI/CD (`scripts/verify-routes.js`)
+- [ ] Add pre-commit hooks for deployment validation
 
 ### Long-term
 - [ ] Document all required environment variables
 - [ ] Create infrastructure inventory document
 - [ ] Add CloudWatch alarms for critical failures
 - [ ] Consider implementing canary deployments
+- [ ] Upgrade all Lambdas to nodejs24.x
 
 ---
 
@@ -196,10 +332,14 @@ Every change to the infrastructure was initiated by Claude Code:
 | bndy-artist-memberships table | Recreated | Yes - partial |
 | Auth routes | Fixed | No |
 | Auth env vars | Fixed | No |
-| Issues routes | Missing | N/A |
-| Uploads routes | Missing | N/A |
-| Users routes | Missing | N/A |
+| Issues routes | Fixed | No |
+| Uploads routes | Fixed | No |
+| Users routes | Fixed | No |
 | Event coordinates | Fixed | No |
+| Notifications endpoint | Fixed | No |
+| Calendar endpoint | Fixed | No |
+| CRM venues endpoint | Fixed | No |
+| Artist members endpoint | Fixed | No |
 
 ---
 
@@ -208,3 +348,35 @@ Every change to the infrastructure was initiated by Claude Code:
 1. `feat: cascade venue location changes to events`
 2. `fix: add missing auth routes for OAuth and phone login`
 3. `fix: add missing Cognito env vars to auth lambda`
+4. `fix: clean up backup files and create .samignore`
+5. `fix: split CalendarFunction to resolve policy size limit`
+6. `fix: add missing dependencies to notifications-lambda`
+7. `fix: move routes to correct Lambda functions`
+
+---
+
+## Guardrails Implemented
+
+### 1. Pre-Deployment Validation Script
+**File:** `scripts/validate-deployment.js`
+- Checks Lambda folder sizes (must be < 250MB)
+- Verifies all dependencies in package.json
+- Validates route count per Lambda (< 25)
+- Verifies route-to-handler mappings
+
+### 2. Route Verification Script
+**File:** `scripts/verify-routes.js`
+- Extracts all routes from template.yaml
+- Verifies handlers exist for each route
+- Checks for orphaned routes
+
+### 3. .samignore File
+**File:** `.samignore`
+- Excludes backup files, zips, test files
+- Prevents accidental inclusion of large files
+
+### 4. CI/CD Pipeline Updates
+**File:** `.github/workflows/deploy.yml`
+- Runs validation script before deployment
+- Runs route verification
+- Fails fast on validation errors

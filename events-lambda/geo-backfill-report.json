@@ -1,0 +1,929 @@
+{
+  "timestamp": "2026-07-27T12:34:49.840Z",
+  "mode": "execute",
+  "candidates": 196,
+  "updated": 12,
+  "failed": [],
+  "missingVenue": [
+    {
+      "eventId": "1e166277-528a-41e3-a26b-b1f29ae7d864",
+      "venueId": null,
+      "date": "2026-03-24"
+    },
+    {
+      "eventId": "45ddd15c-32db-49b9-92fa-43194be53d68",
+      "venueId": null,
+      "date": "2026-08-20"
+    },
+    {
+      "eventId": "56cc679d-256a-46f9-9215-48a59a71426a",
+      "venueId": null,
+      "date": "2026-05-03"
+    },
+    {
+      "eventId": "b4a9d428-f8e2-4c27-86e1-aebc9823dbb7",
+      "venueId": null,
+      "date": "2026-09-18"
+    },
+    {
+      "eventId": "e9396b1b-8d21-4480-b3ef-1758e28314a5",
+      "venueId": null,
+      "date": "2026-02-21"
+    },
+    {
+      "eventId": "858257d1-3829-4998-ba5d-e595f158e501",
+      "venueId": null,
+      "date": "2026-05-10"
+    },
+    {
+      "eventId": "dc34751b-3051-41bb-a5d4-0183f741ca14",
+      "venueId": null,
+      "date": "2026-09-19"
+    },
+    {
+      "eventId": "442b0df0-3d77-4be5-8052-e6bd97a567bf",
+      "venueId": null,
+      "date": "2026-02-13"
+    },
+    {
+      "eventId": "ca865ab6-2fa7-427f-8e4a-06974fedd9aa",
+      "venueId": null,
+      "date": "2026-06-15"
+    },
+    {
+      "eventId": "0e1ff771-d225-46fa-834c-51e2e78d1887",
+      "venueId": null,
+      "date": "2025-11-10"
+    },
+    {
+      "eventId": "9f22db31-d7d9-4ee3-8de6-9cbfedb2443a",
+      "venueId": null,
+      "date": "2026-05-22"
+    },
+    {
+      "eventId": "f3e0da2a-a744-41d4-89da-e40d6bd81933",
+      "venueId": null,
+      "date": "2026-09-09"
+    },
+    {
+      "eventId": "560e47c1-bb29-41c1-9c40-46db1b222263",
+      "venueId": null,
+      "date": "2026-05-11"
+    },
+    {
+      "eventId": "c186b772-efe7-43bd-976f-b6c6d1bf907d",
+      "venueId": null,
+      "date": "2026-09-20"
+    },
+    {
+      "eventId": "92470e72-7640-4d21-a058-7a742dc4ac60",
+      "venueId": null,
+      "date": "2026-01-21"
+    },
+    {
+      "eventId": "a706b233-224f-4ee7-8a7b-66bb3316c378",
+      "venueId": null,
+      "date": "2026-06-19"
+    },
+    {
+      "eventId": "35ad1bc6-4c78-4ffc-a199-f507f9fb4c13",
+      "venueId": null,
+      "date": "2026-11-15"
+    },
+    {
+      "eventId": "167eb689-ee8d-411f-ae10-ede60e64d5cd",
+      "venueId": null,
+      "date": "2026-02-27"
+    },
+    {
+      "eventId": "1173bffa-39d2-4ae2-895a-7d45131fa1d6",
+      "venueId": null,
+      "date": "2025-12-06"
+    },
+    {
+      "eventId": "300418c4-da88-4d9a-98c0-9beeaf1031e6",
+      "venueId": null,
+      "date": "2025-11-30"
+    },
+    {
+      "eventId": "bcd0c201-5200-41f3-9524-5954bc9402da",
+      "venueId": null,
+      "date": "2025-12-12"
+    },
+    {
+      "eventId": "1067d925-37a2-40c2-b580-78146e6aa269",
+      "venueId": null,
+      "date": "2026-01-30"
+    },
+    {
+      "eventId": "36110b86-436a-440e-8be7-71a12d7c7806",
+      "venueId": null,
+      "date": "2026-04-11"
+    },
+    {
+      "eventId": "34a84067-ac45-45ef-b4de-267124601964",
+      "venueId": null,
+      "date": "2025-12-21"
+    },
+    {
+      "eventId": "00bd27af-0d4c-4578-a172-dc0e694bf159",
+      "venueId": null,
+      "date": "2027-03-11"
+    },
+    {
+      "eventId": "40e15e1d-28e3-4dde-b95a-34a980dc2c5b",
+      "venueId": null,
+      "date": "2026-12-30"
+    },
+    {
+      "eventId": "0324c451-3a39-4838-b2db-f9c229335e91",
+      "venueId": null,
+      "date": "2026-05-09"
+    },
+    {
+      "eventId": "13232f64-a821-4ccb-b845-c45e40a88265",
+      "venueId": null
+    },
+    {
+      "eventId": "a41628d1-90f9-4ccd-8297-ed8af2f46ece",
+      "venueId": null,
+      "date": "2026-07-12"
+    },
+    {
+      "eventId": "f9bae29a-8ed8-4409-9e68-d28cb0cc7ad5",
+      "venueId": null,
+      "date": "2026-01-20"
+    },
+    {
+      "eventId": "31b966a4-14fb-4074-89f7-c83f98b90918",
+      "venueId": null,
+      "date": "2026-04-16"
+    },
+    {
+      "eventId": "7c3e4b75-7c6b-4735-abd6-c332ce679250",
+      "venueId": null,
+      "date": "2026-05-20"
+    },
+    {
+      "eventId": "c83f6482-cfce-4471-840e-6b87beb3ab45",
+      "venueId": null,
+      "date": "2026-09-06"
+    },
+    {
+      "eventId": "61f14b28-41d7-4034-99b7-27861ce2daab",
+      "venueId": null,
+      "date": "2026-11-27"
+    },
+    {
+      "eventId": "6ded20e0-1f13-4954-93c6-59f897ca4866",
+      "venueId": null,
+      "date": "2026-09-04"
+    },
+    {
+      "eventId": "4f51b798-cab9-4cac-a2c2-9b26600d39ee",
+      "venueId": null,
+      "date": "2025-12-14"
+    },
+    {
+      "eventId": "5544236a-6a00-48b5-990c-aad1d08025e8",
+      "venueId": null,
+      "date": "2026-06-30"
+    },
+    {
+      "eventId": "c5f3dd0f-1b21-43a7-864c-6d64fe8b6866",
+      "venueId": null,
+      "date": "2026-09-11"
+    },
+    {
+      "eventId": "e3f3519e-8753-419c-8b61-5930ccd308da",
+      "venueId": null,
+      "date": "2026-07-04"
+    },
+    {
+      "eventId": "6e8e83f2-82e6-4179-93a8-6c4ffa288a5b",
+      "venueId": null,
+      "date": "2026-06-16"
+    },
+    {
+      "eventId": "4b00c5a4-7560-49e4-b80f-55066150d46a",
+      "venueId": null,
+      "date": "2025-11-28"
+    },
+    {
+      "eventId": "5db83c25-e97b-44f0-9546-290316b2e734",
+      "venueId": null,
+      "date": "2026-09-14"
+    },
+    {
+      "eventId": "4d49257a-c987-446a-a603-94b504371ec2",
+      "venueId": null,
+      "date": "2026-09-12"
+    },
+    {
+      "eventId": "f5ff5af0-c13c-432e-9bf2-66067ef6d342",
+      "venueId": null,
+      "date": "2026-03-17"
+    },
+    {
+      "eventId": "5276b543-101f-4a03-bb53-086fa7d44177",
+      "venueId": null,
+      "date": "2026-05-06"
+    },
+    {
+      "eventId": "9cd10785-d2a4-45f3-8eef-5b3dedeb965d",
+      "venueId": null,
+      "date": "2026-07-03"
+    },
+    {
+      "eventId": "cd663e2d-1791-4593-957a-165e1a99b216",
+      "venueId": null,
+      "date": "2026-05-27"
+    },
+    {
+      "eventId": "46f5551c-b89d-49e9-be45-7252a5ca44e5",
+      "venueId": null,
+      "date": "2026-07-04"
+    },
+    {
+      "eventId": "b64e3f2b-0c92-42f6-b4b4-0a3661473abe",
+      "venueId": null,
+      "date": "2026-06-13"
+    },
+    {
+      "eventId": "7e2b9863-0013-4604-8257-0265fa7a12ee",
+      "venueId": null,
+      "date": "2026-04-04"
+    },
+    {
+      "eventId": "73998d19-daa9-4316-b478-1fabbf79e333",
+      "venueId": null,
+      "date": "2026-06-20"
+    },
+    {
+      "eventId": "40d417e3-ab19-4708-90a7-c249bb9b993e",
+      "venueId": null,
+      "date": "2026-07-07"
+    },
+    {
+      "eventId": "d607b596-fb0f-4cc8-a7d3-63cc1061b1ab",
+      "venueId": null,
+      "date": "2026-09-10"
+    },
+    {
+      "eventId": "0df26771-38d0-4e3c-aca7-9e910a76885f",
+      "venueId": null,
+      "date": "2025-12-05"
+    },
+    {
+      "eventId": "3eba1c63-6cdb-4c87-af5b-fcebf19be76d",
+      "venueId": null,
+      "date": "2026-02-20"
+    },
+    {
+      "eventId": "16137187-929e-4128-b932-c813414ab586",
+      "venueId": null,
+      "date": "2026-03-18"
+    },
+    {
+      "eventId": "c9b6759d-4a56-4bfe-b4de-b91e6b86a250",
+      "venueId": null,
+      "date": "2026-01-16"
+    },
+    {
+      "eventId": "e017eb5d-f475-412e-9956-d58da84068a6",
+      "venueId": null,
+      "date": "2025-11-28"
+    },
+    {
+      "eventId": "f49ab48e-1e5a-4831-9fc3-bfbb48be892d",
+      "venueId": null,
+      "date": "2026-07-19"
+    },
+    {
+      "eventId": "3e2158a2-bd37-4c65-9022-fbc3f88c98c9",
+      "venueId": null,
+      "date": "2026-03-07"
+    },
+    {
+      "eventId": "e26359b2-74cc-4cc6-9966-cf59bfc154e4",
+      "venueId": null,
+      "date": "2026-05-01"
+    },
+    {
+      "eventId": "e99f1208-4151-44a7-8c08-e676c6a90e9e",
+      "venueId": null,
+      "date": "2026-11-14"
+    },
+    {
+      "eventId": "a0c5da73-b82c-4b28-bf86-8bda34f68b91",
+      "venueId": null,
+      "date": "2026-07-01"
+    },
+    {
+      "eventId": "7a04fb4a-18cd-4f0f-9dec-67d0446e430b",
+      "venueId": null,
+      "date": "2026-06-05"
+    },
+    {
+      "eventId": "5a5338c3-a5c7-4b77-90f3-60a193c2ec98",
+      "venueId": null,
+      "date": "2026-08-24"
+    },
+    {
+      "eventId": "15a710a3-4eba-4df4-b78e-b6edb499021a",
+      "venueId": null,
+      "date": "2026-09-16"
+    },
+    {
+      "eventId": "49fda09e-9637-4116-b6a8-a8d6f1b472e6",
+      "venueId": null,
+      "date": "2026-06-20"
+    },
+    {
+      "eventId": "966a2f4c-5e6b-4cad-957b-54f2df36d921",
+      "venueId": null,
+      "date": "2026-03-17"
+    },
+    {
+      "eventId": "d0d6c555-7ef9-44df-aed3-40ee6fb1c9f1",
+      "venueId": null,
+      "date": "2026-03-21"
+    },
+    {
+      "eventId": "46cb1f6c-911d-4819-a818-1ab31f7e212f",
+      "venueId": null,
+      "date": "2026-05-02"
+    },
+    {
+      "eventId": "79d74e82-75b4-4041-bbf0-4f47b7f1de66",
+      "venueId": null,
+      "date": "2026-01-19"
+    },
+    {
+      "eventId": "7f22501b-fd91-450c-bf5c-103c01939304",
+      "venueId": null,
+      "date": "2026-05-08"
+    },
+    {
+      "eventId": "ff631683-e6bf-4f7a-8a11-890e0ad480a5",
+      "venueId": null,
+      "date": "2026-02-20"
+    },
+    {
+      "eventId": "949389ab-fdd8-4dc3-9b26-77e8d0584453",
+      "venueId": null,
+      "date": "2025-11-29"
+    },
+    {
+      "eventId": "945b3b2f-f566-434c-945e-642c6e4381db",
+      "venueId": null,
+      "date": "2026-11-20"
+    },
+    {
+      "eventId": "9ab9854e-7d6c-4bad-80a3-35cddbb08b6d",
+      "venueId": null,
+      "date": "2026-04-14"
+    },
+    {
+      "eventId": "c1c5470b-e75a-493a-a701-4419a08bc69d",
+      "venueId": null,
+      "date": "2025-12-20"
+    },
+    {
+      "eventId": "1a2d599b-8443-43c2-8880-a0ecab9c7acd",
+      "venueId": null,
+      "date": "2026-12-27"
+    },
+    {
+      "eventId": "c9dea252-8b1f-4769-839c-9b35a2c19cc1",
+      "venueId": null,
+      "date": "2026-06-11"
+    },
+    {
+      "eventId": "7d4fa7b1-c1fe-47e7-9e6a-33baec3f6688",
+      "venueId": null,
+      "date": "2025-11-28"
+    },
+    {
+      "eventId": "4abed662-922d-44ef-be2a-ca84cdfa9322",
+      "venueId": null,
+      "date": "2026-09-07"
+    },
+    {
+      "eventId": "95803182-4f20-4161-841a-26921d21b8c6",
+      "venueId": null,
+      "date": "2026-03-27"
+    },
+    {
+      "eventId": "da479226-c1f8-4945-a6c2-36bbb8b74110",
+      "venueId": null,
+      "date": "2025-12-13"
+    },
+    {
+      "eventId": "fb4b4b19-e626-4781-b9ed-ce4e25d554ad",
+      "venueId": null,
+      "date": "2025-12-12"
+    },
+    {
+      "eventId": "ffb06e2e-5b5a-4a4a-8cd9-19e3f791adac",
+      "venueId": null,
+      "date": "2026-07-24"
+    },
+    {
+      "eventId": "eb2da2d0-5adf-4b85-8313-c9c8ca4620d4",
+      "venueId": null,
+      "date": "2026-08-01"
+    },
+    {
+      "eventId": "c8c6b366-86c0-49e1-9825-424753202e8f",
+      "venueId": null,
+      "date": "2026-01-08"
+    },
+    {
+      "eventId": "eab333b9-2030-4adc-8e84-5b7f482cdb75",
+      "venueId": null,
+      "date": "2026-03-14"
+    },
+    {
+      "eventId": "d693f7e1-836b-4d8c-a2cb-a9f26950a78d",
+      "venueId": null,
+      "date": "2026-06-24"
+    },
+    {
+      "eventId": "85f544b9-3356-4dcc-9944-154839bd4b79",
+      "venueId": null,
+      "date": "2025-12-14"
+    },
+    {
+      "eventId": "ee5e403a-7403-4a7b-a0c0-1c094e9a55a0",
+      "venueId": null,
+      "date": "2026-07-24"
+    },
+    {
+      "eventId": "afd6b2de-eff6-4889-9c11-1aad3058ee59",
+      "venueId": null,
+      "date": "2026-01-22"
+    },
+    {
+      "eventId": "f3f5f6a0-8cc3-4a25-8490-bf2e058ee4c9",
+      "venueId": null,
+      "date": "2026-11-12"
+    },
+    {
+      "eventId": "e407ebd8-9ee6-4973-9171-2b326a0c9602",
+      "venueId": null,
+      "date": "2026-02-14"
+    },
+    {
+      "eventId": "04e8a38b-cabd-4231-8a2b-2a0f08ec95f2",
+      "venueId": null,
+      "date": "2026-01-23"
+    },
+    {
+      "eventId": "1ed4cbbd-ab00-476a-a5bf-9e37ce5564a8",
+      "venueId": null,
+      "date": "2026-06-19"
+    },
+    {
+      "eventId": "e1649827-dec4-409b-aab2-3d21b8fffb8f",
+      "venueId": null,
+      "date": "2025-11-24"
+    },
+    {
+      "eventId": "358ce2d4-bd24-4593-9f8c-799aa278dab8",
+      "venueId": null,
+      "date": "2026-06-22"
+    },
+    {
+      "eventId": "ce27072b-33f5-48c1-9cb1-172eb08981ef",
+      "venueId": null,
+      "date": "2026-09-17"
+    },
+    {
+      "eventId": "ad5b490e-11ae-4ece-904e-08f0a6f1db20",
+      "venueId": null,
+      "date": "2026-07-11"
+    },
+    {
+      "eventId": "6499a593-86e0-4a9a-be5e-9d2245595540",
+      "venueId": null,
+      "date": "2026-06-12"
+    },
+    {
+      "eventId": "dd697672-9dae-43ea-89c9-957cc1f71ff7",
+      "venueId": null,
+      "date": "2026-09-15"
+    },
+    {
+      "eventId": "55b0a52c-2856-4a9f-a875-3c59577f3402",
+      "venueId": null,
+      "date": "2026-05-02"
+    },
+    {
+      "eventId": "a51e39b7-95b9-49d7-94b9-b1fd58b064a1",
+      "venueId": null,
+      "date": "2026-05-24"
+    },
+    {
+      "eventId": "64a45088-5958-4d03-9a3f-f46b0725d63b",
+      "venueId": null,
+      "date": "2026-07-14"
+    },
+    {
+      "eventId": "e2859287-090e-49fa-a3e2-cc20b1536ae2",
+      "venueId": null,
+      "date": "2026-03-23"
+    },
+    {
+      "eventId": "fd03cd76-dd1d-48f8-b8f7-05a54c7ba011",
+      "venueId": null,
+      "date": "2026-05-17"
+    },
+    {
+      "eventId": "bdbf551a-730c-4116-8a27-bf8a385ef175",
+      "venueId": null,
+      "date": "2026-01-23"
+    },
+    {
+      "eventId": "36fb0e20-2bc8-4187-8d28-cc738472e484",
+      "venueId": null,
+      "date": "2025-12-28"
+    },
+    {
+      "eventId": "5107d816-1969-44a3-b423-636eab9589bb",
+      "venueId": "d3a9f7e5-a335-4a43-8f83-44c71bef86b2",
+      "date": "2099-12-31"
+    },
+    {
+      "eventId": "093c8972-ffc7-4a5d-a25e-74a2681b2af1",
+      "venueId": null,
+      "date": "2026-03-13"
+    },
+    {
+      "eventId": "fbd6facd-36a1-4f11-a949-0c1f51e0d842",
+      "venueId": null,
+      "date": "2026-06-20"
+    },
+    {
+      "eventId": "182539c6-9b9f-4bf7-b290-2bce3c8b633c",
+      "venueId": null,
+      "date": "2026-01-17"
+    },
+    {
+      "eventId": "be9ad79c-8c96-4b9d-851d-4cc3d33e5a94",
+      "venueId": null,
+      "date": "2026-02-06"
+    },
+    {
+      "eventId": "644d2b8e-4881-4876-a980-6b78208fc479",
+      "venueId": null,
+      "date": "2026-06-27"
+    },
+    {
+      "eventId": "9d342799-a7a2-4fc7-9e20-3487a8e63f33",
+      "venueId": null,
+      "date": "2026-10-04"
+    },
+    {
+      "eventId": "ee2e27cd-7b83-4298-abc2-718472b13c3a",
+      "venueId": null,
+      "date": "2026-08-27"
+    },
+    {
+      "eventId": "48f5d8c7-5397-40fc-bf1d-d4ce045e58eb",
+      "venueId": null,
+      "date": "2026-09-13"
+    },
+    {
+      "eventId": "74ec5e04-9aef-48e3-b239-9ca7afd3abfc",
+      "venueId": null,
+      "date": "2026-10-18"
+    },
+    {
+      "eventId": "06ceba5e-30b2-42eb-8f00-5717f2619cf1",
+      "venueId": null,
+      "date": "2026-07-05"
+    },
+    {
+      "eventId": "60a71910-4b08-4efa-af89-eb22aa3f2af6",
+      "venueId": null,
+      "date": "2025-11-29"
+    },
+    {
+      "eventId": "39147ebe-89c4-4575-8b6b-a9c38cc0059c",
+      "venueId": null,
+      "date": "2026-05-17"
+    },
+    {
+      "eventId": "2cda79af-e2b9-47c7-8ea0-31abe2717bf2",
+      "venueId": null,
+      "date": "2026-08-28"
+    },
+    {
+      "eventId": "ecafb375-836c-4bd9-a071-f3cec2a9d4d2",
+      "venueId": null,
+      "date": "2026-11-16"
+    },
+    {
+      "eventId": "2bf56cae-944f-41d2-a6a0-5be3d46e2d90",
+      "venueId": null,
+      "date": "2026-09-12"
+    },
+    {
+      "eventId": "a6a537c4-abbf-4664-9528-c02caa117e68",
+      "venueId": null,
+      "date": "2026-06-19"
+    },
+    {
+      "eventId": "e50471cc-59bf-4e92-91c6-e9610cde1038",
+      "venueId": null,
+      "date": "2026-04-04"
+    },
+    {
+      "eventId": "23dbbd06-8d6e-4635-a85d-6cf6cc1f7bf8",
+      "venueId": null,
+      "date": "2026-06-26"
+    },
+    {
+      "eventId": "771cda06-6012-4960-90ae-eb3a5483ab6e",
+      "venueId": null,
+      "date": "2026-05-16"
+    },
+    {
+      "eventId": "22aeb45b-6916-4ebc-afd5-96c020d3d4eb",
+      "venueId": null,
+      "date": "2026-02-05"
+    },
+    {
+      "eventId": "60e0fca5-436b-49ce-beb4-fccb0fe3bb59",
+      "venueId": null,
+      "date": "2026-01-20"
+    },
+    {
+      "eventId": "2be9f893-120b-423a-906d-5095b3a60118",
+      "venueId": null,
+      "date": "2026-04-10"
+    },
+    {
+      "eventId": "4e046732-7384-4433-9ab6-ab0a1a3c5757",
+      "venueId": null,
+      "date": "2026-04-26"
+    },
+    {
+      "eventId": "b0c433bc-6312-4cb5-b6f5-74f457a8f141",
+      "venueId": null,
+      "date": "2026-10-09"
+    },
+    {
+      "eventId": "e8c134a0-84b2-41c6-b9f4-c1aeeb22de92",
+      "venueId": null,
+      "date": "2026-06-23"
+    },
+    {
+      "eventId": "137b2bd8-9c5f-4ae6-9ad0-0e15c30c5e12",
+      "venueId": null,
+      "date": "2026-01-17"
+    },
+    {
+      "eventId": "79d150e0-64bf-43ab-a40e-f7f6d3e0d257",
+      "venueId": null,
+      "date": "2026-08-24"
+    },
+    {
+      "eventId": "f4c25e7f-57b3-4d6a-a68e-3e0f8ae7b04f",
+      "venueId": null,
+      "date": "2026-07-02"
+    },
+    {
+      "eventId": "3d82a2b2-e765-498d-95bc-28647c4e4cf1",
+      "venueId": null,
+      "date": "2025-12-06"
+    },
+    {
+      "eventId": "f3c6da50-2691-49cd-aac4-602db5bbda1d",
+      "venueId": null,
+      "date": "2026-06-04"
+    },
+    {
+      "eventId": "1ce96e21-12fa-4874-a507-9fef927bf9c1",
+      "venueId": null,
+      "date": "2026-09-18"
+    },
+    {
+      "eventId": "6cdd476e-67db-4576-a74b-c57e53e24457",
+      "venueId": null,
+      "date": "2026-04-04"
+    },
+    {
+      "eventId": "fb0c3a11-f635-452e-b752-c49a027eafe8",
+      "venueId": null,
+      "date": "2025-12-19"
+    },
+    {
+      "eventId": "8104e9ad-d545-4faa-961a-89e679e20248",
+      "venueId": null,
+      "date": "2026-04-05"
+    },
+    {
+      "eventId": "6649ad9c-dcb9-487e-b7d5-1c97e94e2429",
+      "venueId": null,
+      "date": "2026-11-17"
+    },
+    {
+      "eventId": "3b3525f4-e7aa-4ac0-b1a9-18611cd3fa50",
+      "venueId": null,
+      "date": "2026-09-17"
+    },
+    {
+      "eventId": "b267a4cc-d2a8-43f3-a4fb-4d5f5c2a158a",
+      "venueId": null,
+      "date": "2026-07-24"
+    },
+    {
+      "eventId": "df9e4ce6-cb3b-434e-9166-9408b91483c6",
+      "venueId": null,
+      "date": "2026-05-13"
+    },
+    {
+      "eventId": "641e562a-fe95-4299-b5f6-46398b307794",
+      "venueId": null,
+      "date": "2026-12-28"
+    },
+    {
+      "eventId": "2315e4c2-7735-4e2a-a8f6-31769178cc8b",
+      "venueId": null,
+      "date": "2026-12-29"
+    },
+    {
+      "eventId": "5c461c29-2f14-4632-bfdd-9f72c386dfa0",
+      "venueId": null,
+      "date": "2026-06-12"
+    },
+    {
+      "eventId": "e5997629-ad63-49cd-a9ff-da5ea706c007",
+      "venueId": null,
+      "date": "2026-09-19"
+    },
+    {
+      "eventId": "02a4028b-70aa-428c-99d9-e44921f8c48d",
+      "venueId": null,
+      "date": "2026-03-02"
+    },
+    {
+      "eventId": "20c76f5d-7b75-4568-9858-dcfec93d76c7",
+      "venueId": null,
+      "date": "2025-10-29"
+    },
+    {
+      "eventId": "dfd7f399-8680-4628-9097-d731bdd99252",
+      "venueId": null,
+      "date": "2026-06-20"
+    },
+    {
+      "eventId": "54ce5bf4-c01e-4bff-9c0e-8830c9c7368b",
+      "venueId": null,
+      "date": "2026-08-22"
+    },
+    {
+      "eventId": "b3e6cd60-ee7d-4aba-b92d-3e54f5e725d4",
+      "venueId": null,
+      "date": "2026-07-22"
+    },
+    {
+      "eventId": "f409ad25-0d9b-48de-ae12-305c68c4b97f",
+      "venueId": null,
+      "date": "2025-11-11"
+    },
+    {
+      "eventId": "85349e28-5867-459a-a96d-68b9e673641d",
+      "venueId": null,
+      "date": "2025-11-30"
+    },
+    {
+      "eventId": "3e0a9fac-ef34-4cd7-b4b7-afcea2bfb6eb",
+      "venueId": null,
+      "date": "2025-12-19"
+    },
+    {
+      "eventId": "4902a28b-4270-4b62-a047-5b3c6a0a652d",
+      "venueId": null,
+      "date": "2026-07-11"
+    },
+    {
+      "eventId": "bc4d0d00-501a-4638-955e-0693558e55d6",
+      "venueId": null,
+      "date": "2025-11-25"
+    },
+    {
+      "eventId": "1a1369d6-c673-472a-9fd9-b1197a3be8c1",
+      "venueId": null,
+      "date": "2026-05-10"
+    },
+    {
+      "eventId": "bca0f710-a486-4bfc-a555-4fca1b77e3cf",
+      "venueId": null,
+      "date": "2026-03-28"
+    },
+    {
+      "eventId": "b40135ba-e6b6-434d-b821-0c0df01ba565",
+      "venueId": null,
+      "date": "2026-05-23"
+    },
+    {
+      "eventId": "268c0e4b-4e00-4726-a7b7-3de76429efcb",
+      "venueId": null,
+      "date": "2026-08-02"
+    },
+    {
+      "eventId": "5bd60daf-608a-4209-a56e-9434f0170417",
+      "venueId": null,
+      "date": "2026-06-20"
+    },
+    {
+      "eventId": "bedc1bbd-9504-4061-a350-cec134d6ea66",
+      "venueId": null,
+      "date": "2026-12-05"
+    },
+    {
+      "eventId": "58be5916-2b4e-4a5b-bf7a-19880a84237c",
+      "venueId": null,
+      "date": "2026-06-26"
+    },
+    {
+      "eventId": "9a074e24-8736-4d06-8c73-8518f0f79da7",
+      "venueId": null,
+      "date": "2026-09-25"
+    },
+    {
+      "eventId": "b8da14c5-ba07-41dd-b192-6015fdb150f5",
+      "venueId": null,
+      "date": "2026-04-11"
+    },
+    {
+      "eventId": "d2c36efe-6e64-440c-9f39-19c4fc6ed89f",
+      "venueId": null,
+      "date": "2026-06-19"
+    },
+    {
+      "eventId": "f91543be-ed01-47a3-978b-1b5e19a906bc",
+      "venueId": null,
+      "date": "2026-01-30"
+    },
+    {
+      "eventId": "206b39b4-9ac8-4ddb-b2e2-e23f8ae26427",
+      "venueId": null,
+      "date": "2026-01-16"
+    },
+    {
+      "eventId": "6c4e27a2-c30d-42f9-b579-d38ba2714f21",
+      "venueId": null,
+      "date": "2025-11-06"
+    },
+    {
+      "eventId": "87740d54-814c-4575-bc08-ae8c9ede9bbe",
+      "venueId": null,
+      "date": "2026-09-08"
+    },
+    {
+      "eventId": "be17f745-2d81-4284-af20-ee63f5ab0917",
+      "venueId": null,
+      "date": "2026-07-03"
+    },
+    {
+      "eventId": "c0b30f35-0573-4028-95aa-ef8d97efb07d",
+      "venueId": null,
+      "date": "2025-12-09"
+    },
+    {
+      "eventId": "81d38fb7-43c2-4f27-bdec-4eaf2f01392c",
+      "venueId": null,
+      "date": "2026-02-12"
+    },
+    {
+      "eventId": "d5f044ad-05bf-4fc9-b226-ffd6991f0a06",
+      "venueId": null,
+      "date": "2026-08-30"
+    },
+    {
+      "eventId": "9bd08620-b3b0-4790-a454-ddbc6d6f8a0d",
+      "venueId": null,
+      "date": "2026-03-06"
+    },
+    {
+      "eventId": "3725e870-e8d5-4a57-acc7-aa9feae81479",
+      "venueId": null,
+      "date": "2026-07-21"
+    },
+    {
+      "eventId": "8f714a6c-929d-49b0-978a-5874febbb0e7",
+      "venueId": null,
+      "date": "2026-07-03"
+    },
+    {
+      "eventId": "8c87c4f5-ad18-4cdf-b13e-d430c9967e92",
+      "venueId": null,
+      "date": "2026-03-29"
+    }
+  ],
+  "missingCoords": []
+}

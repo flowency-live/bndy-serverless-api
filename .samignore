@@ -1,0 +1,56 @@
+# SAM Build Ignore File
+# Excludes files from being packaged into Lambda deployment
+
+# Node modules - dependencies are installed fresh during build
+node_modules/
+*/node_modules/
+**/node_modules/
+
+# Backup files and folders
+*.backup
+*.backup-*
+backup-*/
+backups/
+*-backup-*/
+*-backups/
+
+# Specific backup patterns in auth-lambda
+auth-lambda/backup-extracted/
+auth-lambda/backups/
+auth-lambda/*.backup*
+auth-lambda/*.broken-*
+auth-lambda/handler-FAILED.js
+*.broken-*
+
+# Test files
+*.test.js
+*.spec.js
+__tests__/
+
+# Development files
+*.log
+.env
+.env.*
+
+# Documentation
+*.md
+README*
+docs/
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# AWS SAM artifacts
+.aws-sam/
+samconfig.toml

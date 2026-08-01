@@ -14,6 +14,87 @@ const ssm = new AWS.SSM({ region: 'eu-west-2' });
 const s3 = new AWS.S3({ region: 'eu-west-2' });
 const { jsonResponse } = require('./lib/http-response');
 const { scanAll } = require('./lib/scan-all');
+const { artistIdentityKey, artistUniqueKey, facebookKey, normaliseKey, regionBucket } = require('./lib/identity');
+const { gatedPut, rekeyUniqueKeys, releaseUniqueKeys, duplicateResponseBody, gateMode } = require('./lib/unique-gate');
+const { validateArtistData } = require('./lib/data-quality');
+const { deleteArtistEvents } = require('./lib/cascade-delete-events');
+const { hasEventsForArtist } = require('./lib/artist-event-guard');
+
+/**
+ * Sentinel keys for an artist record (2026-07-27 gate plan):
+ *  - identity key: normalise(name) + '#' + regionBucket(location) — Jason's
+ *    ruling that name + performing location IS the artist UID
+ *  - facebook key: exact FB URL is the strongest identity signal — two
+ *    records may never share one
+ * Returns { keys, resolvable } — resolvable=false means the location can't be
+ * bucketed; in enforce mode such artists must NOT be created (review instead).
+ */
+function buildArtistUniqueKeys(name, location, facebookUrl) {
+  const identity = artistIdentityKey(name, location);
+  const keys = [];
+  if (identity.resolvable) keys.push(`artist#${identity.key}`);
+  const fbKey = facebookKey(facebookUrl);
+  if (fbKey) keys.push(`artist#fb#${fbKey}`);
+  return { keys, resolvable: identity.resolvable, identity };
+}
+
+/**
+ * Merge externalIds additively (union, dedupe by source+id).
+ * Used for artist update paths to ensure externalIds accumulate rather than replace.
+ *
+ * @param {Array} existing - existing external_ids from DynamoDB
+ * @param {Array} incoming - new externalIds from request
+ * @returns {Array} merged and deduplicated array
+ */
+function mergeExternalIds(existing, incoming) {
+  const existingArr = existing || [];
+  const incomingArr = incoming || [];
+
+  // Create a Set of unique keys (source#id) from existing
+  const seen = new Set(existingArr.map(ext => `${ext.source}#${ext.id}`));
+
+  // Merge: start with existing, add new ones that aren't duplicates
+  const merged = [...existingArr];
+
+  for (const ext of incomingArr) {
+    const key = `${ext.source}#${ext.id}`;
+    if (!seen.has(key)) {
+      merged.push(ext);
+      seen.add(key);
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Merge nameVariants additively (union, dedupe by normalized key).
+ * Used for artist update paths to ensure known billing variations accumulate.
+ *
+ * @param {Array} existing - existing name_variants from DynamoDB
+ * @param {Array} incoming - new nameVariants from request
+ * @returns {Array} merged and deduplicated array (case-insensitive dedup)
+ */
+function mergeNameVariants(existing, incoming) {
+  const existingArr = existing || [];
+  const incomingArr = incoming || [];
+
+  // Dedupe by normalized key (case-insensitive, whitespace normalized)
+  const seen = new Set(existingArr.map(variant => normaliseKey(variant)));
+
+  // Merge: start with existing, add new ones that aren't duplicates
+  const merged = [...existingArr];
+
+  for (const variant of incomingArr) {
+    const key = normaliseKey(variant);
+    if (!seen.has(key)) {
+      merged.push(variant);
+      seen.add(key);
+    }
+  }
+
+  return merged;
+}
 
 // Configuration
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
@@ -24,6 +105,7 @@ const ALLOWED_ORIGINS = [
   'https://backstage.bndy.co.uk', // Legacy domain
   'https://bndy.co.uk',            // Apex domain
   'https://live.bndy.co.uk',      // Frontstage
+  'https://gigmap.bndy.co.uk',    // GigMap
   'http://localhost:3000'          // Local development
 ];
 
@@ -414,7 +496,7 @@ exports.handler = async (event, context) => {
       return await handleDeleteAct(event);
     }
 
-    if (method === 'PUT' && event.pathParameters?.id) {
+    if ((method === 'PUT' || method === 'PATCH') && event.pathParameters?.id) {
       // Check if this is an MCP update request (public, no auth)
       if (path.includes('/mcp')) {
         return await handleMCPUpdateArtist(event);
@@ -451,7 +533,7 @@ async function handleGetAllArtists(event) {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
+    ProjectionExpression: 'id, #name, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, availabilityMode, contactMethod, phoneNumber, whatsappNumber, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
@@ -477,6 +559,10 @@ async function handleGetAllArtists(event) {
       actType: artist.actType || null,
       acoustic: artist.acoustic || false,
       publishAvailability: artist.publishAvailability || false,
+      availabilityMode: artist.availabilityMode || 'selected_dates_only',
+      contactMethod: artist.contactMethod || 'phone',
+      phoneNumber: artist.phoneNumber || null,
+      whatsappNumber: artist.whatsappNumber || null,
       showMemberVotes: artist.showMemberVotes || false,
       autoDiscardThreshold: artist.autoDiscardThreshold ?? null,
       facebookUrl: artist.facebookUrl || '',
@@ -485,6 +571,7 @@ async function handleGetAllArtists(event) {
       socialMediaUrls: artist.socialMediaUrls || [],
       profileImageUrl: artist.profileImageUrl || '',
       externalIds: artist.external_ids || [],
+      nameVariants: artist.name_variants || [],
       isVerified: artist.isVerified || false,
       followerCount: artist.followerCount || 0,
       claimedByUserId: artist.claimedByUserId || null,
@@ -544,6 +631,10 @@ async function handleGetArtistById(artistId) {
       actType: result.Item.actType || null,
       acoustic: result.Item.acoustic || false,
       publishAvailability: result.Item.publishAvailability || false,
+      availabilityMode: result.Item.availabilityMode || 'selected_dates_only',
+      contactMethod: result.Item.contactMethod || 'phone',
+      phoneNumber: result.Item.phoneNumber || null,
+      whatsappNumber: result.Item.whatsappNumber || null,
       showMemberVotes: result.Item.showMemberVotes || false,
       autoDiscardThreshold: result.Item.autoDiscardThreshold ?? null,
       facebookUrl: result.Item.facebookUrl || '',
@@ -564,6 +655,9 @@ async function handleGetArtistById(artistId) {
       ai_created: result.Item.ai_created || false,
       needs_review: result.Item.needs_review !== undefined ? result.Item.needs_review : null,
       external_ids: result.Item.external_ids || [],
+      externalIds: result.Item.external_ids || [],
+      name_variants: result.Item.name_variants || [],
+      nameVariants: result.Item.name_variants || [],
       actsEnabled: result.Item.actsEnabled || false,
       acts: result.Item.acts || [],
       createdAt: result.Item.createdAt,
@@ -794,6 +888,20 @@ async function handleCreateArtist(event) {
   const { user } = authResult;
   const artistData = JSON.parse(event.body);
 
+  // Data quality validation (2026-07-27 audit follow-up)
+  const validation = validateArtistData(artistData);
+  if (!validation.valid) {
+    console.log(`DATA_QUALITY_REJECT: Artist creation blocked - ${validation.errors.join('; ')}`);
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        error: 'data_quality_validation_failed',
+        details: validation.errors
+      })
+    };
+  }
+
   const now = new Date().toISOString();
   const artistId = crypto.randomUUID();
 
@@ -851,11 +959,38 @@ async function handleCreateArtist(event) {
   };
 
   try {
-    // Create artist record
-    await dynamodb.put({
-      TableName: 'bndy-artists',
-      Item: artist
-    }).promise();
+    // HARD GATE (2026-07-27): same rule as every other create path — the
+    // authenticated Backstage route was previously a zero-dedup blind put.
+    const { keys: uniqueKeys, resolvable } = buildArtistUniqueKeys(
+      artist.name, artist.location, artist.facebookUrl
+    );
+    if (!resolvable && gateMode() === 'enforce') {
+      return {
+        statusCode: 422,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'A resolvable location (town/county) is required to create an artist — it is part of the artist\'s identity.',
+          code: 'LOCATION_UNRESOLVABLE'
+        })
+      };
+    }
+    const gateResult = await gatedPut(dynamodb, {
+      tableName: 'bndy-artists',
+      item: artist,
+      keys: uniqueKeys,
+      entityType: 'artist',
+      source: 'backstage'
+    });
+    if (!gateResult.written) {
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          ...duplicateResponseBody('artist', gateResult.existing),
+          message: 'An artist with this name already exists in this region. Claim or edit the existing record instead.'
+        })
+      };
+    }
 
     // Create owner membership automatically
     const membershipId = crypto.randomUUID();
@@ -934,6 +1069,25 @@ async function handleUpdateArtist(event) {
 
   const { user } = authResult;
 
+  // Validate enum fields
+  if (artistData.availabilityMode !== undefined &&
+      !['selected_dates_only', 'free_weekends'].includes(artistData.availabilityMode)) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Invalid availabilityMode. Must be "selected_dates_only" or "free_weekends".' })
+    };
+  }
+
+  if (artistData.contactMethod !== undefined &&
+      !['phone', 'whatsapp'].includes(artistData.contactMethod)) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Invalid contactMethod. Must be "phone" or "whatsapp".' })
+    };
+  }
+
   // Check access - platform admin OR member
   if (!user.platformAdmin) {
     const membershipResult = await dynamodb.query({
@@ -1004,8 +1158,23 @@ async function handleUpdateArtist(event) {
     expressionAttributeValues[':locationType'] = artistData.locationType;
   }
   if (artistData.genres !== undefined) {
+    // Genre validation (2026-07-31): normalise and reject off-list values
+    const { normaliseGenres, GENRES } = require('./lib/genres');
+    const genreResult = normaliseGenres(artistData.genres);
+    if (genreResult.invalid.length > 0) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'Invalid genres',
+          code: 'INVALID_GENRES',
+          invalidGenres: genreResult.invalid,
+          validGenres: GENRES
+        })
+      };
+    }
     updateParts.push('genres = :genres');
-    expressionAttributeValues[':genres'] = artistData.genres || [];
+    expressionAttributeValues[':genres'] = genreResult.valid;
   }
   if (artistData.artistType !== undefined) {
     updateParts.push('artist_type = :artist_type');
@@ -1083,6 +1252,24 @@ async function handleUpdateArtist(event) {
     expressionAttributeValues[':twitterUrl'] = artistData.twitterUrl || null;
   }
 
+  // Availability settings (2026-07-31)
+  if (artistData.availabilityMode !== undefined) {
+    updateParts.push('availabilityMode = :availabilityMode');
+    expressionAttributeValues[':availabilityMode'] = artistData.availabilityMode;
+  }
+  if (artistData.contactMethod !== undefined) {
+    updateParts.push('contactMethod = :contactMethod');
+    expressionAttributeValues[':contactMethod'] = artistData.contactMethod;
+  }
+  if (artistData.phoneNumber !== undefined) {
+    updateParts.push('phoneNumber = :phoneNumber');
+    expressionAttributeValues[':phoneNumber'] = artistData.phoneNumber;
+  }
+  if (artistData.whatsappNumber !== undefined) {
+    updateParts.push('whatsappNumber = :whatsappNumber');
+    expressionAttributeValues[':whatsappNumber'] = artistData.whatsappNumber;
+  }
+
   // Allow updating needs_review (for admin review workflow)
   if (artistData.needs_review !== undefined) {
     updateParts.push('needs_review = :needs_review');
@@ -1114,6 +1301,30 @@ async function handleUpdateArtist(event) {
     expressionAttributeValues[':acts'] = artistData.acts || [];
   }
 
+  // External IDs - additive merge (Fix #2: 2026-07-29)
+  // MCP imports and other sources add externalIds; must merge, not replace
+  if (artistData.externalIds !== undefined) {
+    // Read existing to merge
+    const existingRes = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();
+    const existingExternalIds = existingRes.Item?.external_ids || [];
+    const mergedExternalIds = mergeExternalIds(existingExternalIds, artistData.externalIds);
+
+    updateParts.push('external_ids = :external_ids');
+    expressionAttributeValues[':external_ids'] = mergedExternalIds;
+  }
+
+  // Name variants - additive merge (Fix #3a: 2026-07-29)
+  // Known billing variations (e.g., "Danny & Friends" for "Danny Brab") accumulate
+  if (artistData.nameVariants !== undefined) {
+    // Read existing to merge (may already be loaded above for externalIds)
+    const existingRes = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();
+    const existingNameVariants = existingRes.Item?.name_variants || [];
+    const mergedNameVariants = mergeNameVariants(existingNameVariants, artistData.nameVariants);
+
+    updateParts.push('name_variants = :name_variants');
+    expressionAttributeValues[':name_variants'] = mergedNameVariants;
+  }
+
   const params = {
     TableName: 'bndy-artists',
     Key: { id: artistId },
@@ -1124,12 +1335,45 @@ async function handleUpdateArtist(event) {
   };
 
   try {
+    // GATE FIX 2026-07-28: renames/relocations must re-key sentinels — a name/
+    // location/FB change alters the artist's identity keys. Claim new + release
+    // old atomically; enforce-mode collision = this update would create a
+    // duplicate identity → 409, update NOT performed.
+    if (artistData.name !== undefined || artistData.location !== undefined || artistData.facebookUrl !== undefined) {
+      const existingRes = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();
+      if (existingRes.Item) {
+        const cur = existingRes.Item;
+        const effName = artistData.name !== undefined ? artistData.name : cur.name;
+        const effLocation = artistData.location !== undefined ? artistData.location : cur.location;
+        const effFb = artistData.facebookUrl !== undefined ? artistData.facebookUrl : cur.facebookUrl;
+        const rekey = await rekeyUniqueKeys(dynamodb, {
+          oldKeys: buildArtistUniqueKeys(cur.name, cur.location, cur.facebookUrl).keys,
+          newKeys: buildArtistUniqueKeys(effName, effLocation, effFb).keys,
+          refId: artistId,
+          entityType: 'artist',
+          source: 'backstage-update'
+        });
+        if (rekey.changed && rekey.ok === false) {
+          return {
+            statusCode: 409,
+            headers: getCorsHeaders(),
+            body: JSON.stringify({
+              ...duplicateResponseBody('artist', rekey.existing),
+              message: 'This rename/relocation would make the artist a duplicate of an existing record. Merge instead.'
+            })
+          };
+        }
+      }
+    }
+
     const result = await dynamodb.update(params).promise();
 
     // Transform response to match frontend expectations (snake_case -> camelCase)
     const transformedArtist = {
       ...result.Attributes,
-      artistType: result.Attributes.artist_type || null, // Provide camelCase for compatibility
+      artistType: result.Attributes.artist_type || null,  // Provide camelCase for compatibility
+      externalIds: result.Attributes.external_ids || [],  // Provide camelCase for frontend (Fix #2)
+      nameVariants: result.Attributes.name_variants || [] // Provide camelCase for frontend (Fix #3a)
     };
 
     return {
@@ -1282,7 +1526,24 @@ async function handleDeleteArtist(artistId) {
   console.log(` Artists Lambda: Deleting artist: ${artistId}`);
 
   try {
-    // Step 1: Query all memberships for this artist
+    // Step 1: Check if any events reference this artist (Fix #6b, 2026-07-29)
+    // Refuse deletion to prevent orphan events with dead artistIds
+    const hasEvents = await hasEventsForArtist(dynamodb, artistId);
+    if (hasEvents) {
+      console.log(` ✗ Artist ${artistId} has events - refusing deletion`);
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'Artist has events',
+          code: 'ARTIST_HAS_EVENTS',
+          message: 'Cannot delete artist while events reference it. Delete or reassign events first.',
+          artistId
+        })
+      };
+    }
+
+    // Step 2: Query all memberships for this artist
     const membershipQueryParams = {
       TableName: MEMBERSHIPS_TABLE,
       IndexName: 'artist_id-index',
@@ -1295,7 +1556,7 @@ async function handleDeleteArtist(artistId) {
     const membershipsResult = await dynamodb.query(membershipQueryParams).promise();
     console.log(` Found ${membershipsResult.Items.length} memberships to delete`);
 
-    // Step 2: Delete all memberships (cascade delete)
+    // Step 3: Delete all memberships (cascade delete)
     for (const membership of membershipsResult.Items) {
       await dynamodb.delete({
         TableName: MEMBERSHIPS_TABLE,
@@ -1304,13 +1565,19 @@ async function handleDeleteArtist(artistId) {
       console.log(` Deleted membership: ${membership.membership_id} for user: ${membership.user_id}`);
     }
 
-    // Step 3: Delete the artist record
+    // Step 4: Delete the artist record (fetch first so the uniqueness
+    // sentinels can be released — gate plan 2026-07-27)
     const artistParams = {
       TableName: 'bndy-artists',
       Key: { id: artistId }
     };
 
+    const artistRecord = await dynamodb.get(artistParams).promise();
     await dynamodb.delete(artistParams).promise();
+    if (artistRecord.Item) {
+      const { keys } = buildArtistUniqueKeys(artistRecord.Item.name, artistRecord.Item.location, artistRecord.Item.facebookUrl);
+      await releaseUniqueKeys(dynamodb, keys, artistId);
+    }
     console.log(` Artist deleted successfully with ${membershipsResult.Items.length} cascaded membership deletions`);
 
     return {
@@ -1344,7 +1611,25 @@ async function handleMCPDeleteArtist(artistId) {
       };
     }
 
-    // Step 2: Delete memberships (cascade)
+    // Step 2: Check if any events reference this artist (Fix #6b, 2026-07-29)
+    // CHANGED: No longer cascade-deletes events - refuses deletion instead
+    // to prevent orphan events with dead artistIds
+    const hasEvents = await hasEventsForArtist(dynamodb, artistId);
+    if (hasEvents) {
+      console.log(` ✗ MCP: Artist ${artistId} has events - refusing deletion`);
+      return {
+        statusCode: 409,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'Artist has events',
+          code: 'ARTIST_HAS_EVENTS',
+          message: 'Cannot delete artist while events reference it. Delete or reassign events first.',
+          artistId
+        })
+      };
+    }
+
+    // Step 3: Delete memberships (cascade)
     const membershipQueryParams = {
       TableName: MEMBERSHIPS_TABLE,
       IndexName: 'artist_id-index',
@@ -1364,11 +1649,17 @@ async function handleMCPDeleteArtist(artistId) {
       }).promise();
     }
 
-    // Step 4: Delete the artist record
+    // Step 4: Delete the artist record + release uniqueness sentinels
+    // (artistResult.Item was fetched in Step 1)
     await dynamodb.delete({
       TableName: 'bndy-artists',
       Key: { id: artistId }
     }).promise();
+
+    if (artistResult.Item) {
+      const { keys } = buildArtistUniqueKeys(artistResult.Item.name, artistResult.Item.location, artistResult.Item.facebookUrl);
+      await releaseUniqueKeys(dynamodb, keys, artistId);
+    }
 
     console.log(` MCP: Artist ${artistId} deleted successfully`);
 
@@ -1542,7 +1833,7 @@ async function handleCreateCommunityArtist(event) {
 
   try {
     const body = JSON.parse(event.body);
-    const { name, location, locationType, locationLat, locationLng, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic, profileImageUrl, externalIds } = body;
+    const { name, location, locationType, locationLat, locationLng, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic, profileImageUrl, externalIds, nameVariants, verifiedSourceName } = body;
 
     // Validation
     if (!name || name.trim().length === 0) {
@@ -1558,6 +1849,49 @@ async function handleCreateCommunityArtist(event) {
         statusCode: 400,
         headers: getCommunityHeaders(),
         body: JSON.stringify({ error: 'Location is required to prevent duplicates' })
+      };
+    }
+
+    // GATE VERIFICATION FIX 2026-07-28: this unauthenticated route was the ONLY
+    // create path not running data-quality validation — lineup names ("A + B"),
+    // placeholders ("TBC") and listing-copy names could still be created here.
+    // Same check as handleCreateArtist (:821) and find-or-create (:2123).
+    //
+    // Fix #7 (2026-07-30): §2A.5 verified-source-name exception.
+    // If verifiedSourceName=true AND facebookUrl is provided, bypass the
+    // listing-copy detector. The caller asserts the name was taken from the
+    // act's own Facebook page — e.g., "NU CALL - Nu-Metal Tribute Band".
+    const dataQualityCheck = validateArtistData({ name }, {
+      verifiedSourceName: verifiedSourceName === true,
+      facebookUrl: facebookUrl || ''
+    });
+    if (!dataQualityCheck.valid) {
+      console.warn(`[Artists] Community create rejected by data-quality gate: ${JSON.stringify(dataQualityCheck.errors)}`);
+      return {
+        statusCode: 422,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          error: 'Artist name failed data-quality validation',
+          code: 'DATA_QUALITY',
+          errors: dataQualityCheck.errors
+        })
+      };
+    }
+
+    // Genre validation (2026-07-31): normalise and reject off-list values
+    const { normaliseGenres, GENRES } = require('./lib/genres');
+    const genreResult = normaliseGenres(genres);
+    if (genreResult.invalid.length > 0) {
+      console.warn(`[Artists] Community create rejected: invalid genres ${JSON.stringify(genreResult.invalid)}`);
+      return {
+        statusCode: 400,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          error: 'Invalid genres',
+          code: 'INVALID_GENRES',
+          invalidGenres: genreResult.invalid,
+          validGenres: GENRES
+        })
       };
     }
 
@@ -1626,7 +1960,7 @@ async function handleCreateCommunityArtist(event) {
       claimedByUserId: null,  // Available for claiming
       socialMediaUrls: [],
       followerCount: 0,
-      genres: Array.isArray(genres) ? genres : [],
+      genres: genreResult.valid,  // Normalised by genre validation above
 
       // Backstage-compatible fields
       owner_user_id: null,  // Community-created = no owner
@@ -1645,16 +1979,66 @@ async function handleCreateCommunityArtist(event) {
       // External IDs for cross-referencing (MCP imports)
       external_ids: externalIds || [],
 
+      // Name variants for known billing variations (Fix #3a)
+      name_variants: nameVariants || [],
+
+      // Fix #7: Record if name passed via verified-source-name exception (§2A.5)
+      // Allows reviewers to see why a listing-copy-looking name was accepted
+      ...(dataQualityCheck.verifiedSourceName ? {
+        verifiedSourceName: true,
+        verifiedSourceUrl: dataQualityCheck.verifiedSourceUrl
+      } : {}),
+
       created_at: now,
       updated_at: now
     };
 
-    await dynamodb.put({
-      TableName: 'bndy-artists',
-      Item: newArtist
-    }).promise();
+    // HARD GATE (2026-07-27): artist UID = normalise(name) + region bucket.
+    // Even when a caller's "this is a new artist" logic is wrong, the
+    // sentinel transaction bounces the write.
+    const { keys: uniqueKeys, resolvable } = buildArtistUniqueKeys(name, location, facebookUrl);
 
-    console.log(` Community artist created: ${artistId} (${name}) with ${locationType || 'unknown'} location`);
+    if (!resolvable && gateMode() === 'enforce') {
+      // A location that can't be bucketed can't participate in identity —
+      // creating would make an unmatchable record (the 331-blank-location
+      // problem). Route to review instead of creating.
+      return {
+        statusCode: 422,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          error: `Location "${location}" cannot be resolved to a region. Artist identity requires a resolvable performing location — supply a town/county (e.g. "Stoke-on-Trent"), not "${location}".`,
+          code: 'LOCATION_UNRESOLVABLE',
+          action: 'review'
+        })
+      };
+    }
+    if (!resolvable) {
+      console.warn(`UNIQUE-GATE: artist "${name}" location "${location}" unresolvable — creating UNGATED (log mode)`);
+    }
+
+    const gateResult = await gatedPut(dynamodb, {
+      tableName: 'bndy-artists',
+      item: newArtist,
+      keys: uniqueKeys,
+      entityType: 'artist',
+      source: newArtist.source
+    });
+
+    if (!gateResult.written) {
+      const existingId = gateResult.existing && gateResult.existing.refId;
+      console.log(`[Artists] Gate bounced community create of "${name}" — duplicate of ${existingId}`);
+      return {
+        statusCode: 409,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          ...duplicateResponseBody('artist', gateResult.existing),
+          message: `An artist with this name already exists in this region (or shares this Facebook page). Use the existing record.`,
+          existingArtistId: existingId
+        })
+      };
+    }
+
+    console.log(` Community artist created: ${artistId} (${name}) with ${locationType || 'unknown'} location [gate: ${gateResult.gate}]`);
 
     return {
       statusCode: 201,
@@ -1668,7 +2052,8 @@ async function handleCreateCommunityArtist(event) {
           locationLat: newArtist.locationLat,
           locationLng: newArtist.locationLng,
           locationType: newArtist.locationType,
-          externalIds: newArtist.external_ids
+          externalIds: newArtist.external_ids,
+          nameVariants: newArtist.name_variants
         }
       })
     };
@@ -1984,7 +2369,61 @@ async function handleFindOrCreateArtist(event) {
   const body = JSON.parse(event.body || '{}');
   // canCreate defaults true (Cowork path); runner passes false
   // venueRegion is the listing's venue region for footprint scoring (Batch 3)
-  const { name, canCreate = true, venueRegion } = body;
+  // verifiedSourceName: §2A.5 exception for acts whose FB page name IS the billing (Fix #7)
+  // resolveTo: when action:review was returned, caller can pick a candidate id
+  // confirmNew: when action:review was returned, caller confirms this is genuinely new
+  const { name, canCreate = true, venueRegion, verifiedSourceName, resolveTo, confirmNew } = body;
+
+  // RESOLUTION HANDLING (Blocker #1 fix): resolveTo + confirmNew params
+  // When action:review was previously returned, caller can resolve via these params
+  if (resolveTo && confirmNew) {
+    return {
+      statusCode: 400,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({
+        error: 'Cannot provide both resolveTo and confirmNew - pick one resolution method'
+      })
+    };
+  }
+
+  // resolveTo: Link to existing artist (manual resolution from review candidates)
+  if (resolveTo) {
+    try {
+      const resolved = await dynamodb.get({
+        TableName: 'bndy-artists',
+        Key: { id: resolveTo }
+      }).promise();
+
+      if (!resolved.Item) {
+        return {
+          statusCode: 400,
+          headers: getCommunityHeaders(),
+          body: JSON.stringify({
+            error: `resolveTo artist not found: ${resolveTo}. Use a valid candidate id from the review response.`
+          })
+        };
+      }
+
+      console.log(`[find-or-create artist] MANUAL_RESOLUTION: "${name}" -> "${resolved.Item.name}" (${resolveTo})`);
+      return {
+        statusCode: 200,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          action: 'matched',
+          artist: { id: resolved.Item.id, name: resolved.Item.name, location: resolved.Item.location || '' },
+          confidence: 1,
+          matchedBy: 'manual_resolution'
+        })
+      };
+    } catch (err) {
+      console.error('[find-or-create artist] resolveTo lookup failed:', err.message);
+      return {
+        statusCode: 500,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({ error: 'Failed to resolve artist: ' + err.message })
+      };
+    }
+  }
 
   if (!name || name.trim().length === 0) {
     return {
@@ -1992,6 +2431,74 @@ async function handleFindOrCreateArtist(event) {
       headers: getCommunityHeaders(),
       body: JSON.stringify({ error: 'Artist name is required' })
     };
+  }
+
+  // Data quality validation (2026-07-27 audit follow-up)
+  // Fix #7 (2026-07-30): Pass verifiedSourceName + facebookUrl for §2A.5 exception
+  const validation = validateArtistData({ name }, {
+    verifiedSourceName: verifiedSourceName === true,
+    facebookUrl: body.facebookUrl || ''
+  });
+  if (!validation.valid) {
+    console.log(`DATA_QUALITY_REJECT: Artist creation blocked - ${validation.errors.join('; ')}`);
+    return {
+      statusCode: 400,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({
+        error: 'data_quality_validation_failed',
+        details: validation.errors
+      })
+    };
+  }
+
+  // confirmNew: Bypass all matching and create directly (manual resolution after review)
+  // Caller has seen the candidates and confirms this is genuinely a new, distinct artist
+  if (confirmNew === true) {
+    console.log(`[find-or-create artist] CONFIRM_NEW: "${name}" - bypassing matching per caller confirmation`);
+    const created = await handleCreateCommunityArtist(event);
+    try {
+      const parsed = JSON.parse(created.body);
+      return {
+        statusCode: created.statusCode,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({ action: created.statusCode === 201 ? 'created' : 'create_failed', ...parsed })
+      };
+    } catch (e) {
+      return created;
+    }
+  }
+
+  // GATE FIX 2026-07-28 (verification finding c): FB-FIRST MATCH.
+  // Exact facebook_key match = same artist regardless of name spelling
+  // (runbook §1A.2 Step 0 — the strongest identity signal). O(1) via the
+  // sentinel table, which covers every artist with an FB URL post-backfill.
+  const inputFbUrl = body.facebookUrl || '';
+  const inputFbKey = facebookKey(inputFbUrl);
+  if (inputFbKey) {
+    try {
+      const fbSentinel = await dynamodb.get({
+        TableName: process.env.UNIQUE_KEYS_TABLE || 'bndy-unique-keys',
+        Key: { key: `artist#fb#${inputFbKey}` }
+      }).promise();
+      if (fbSentinel.Item && fbSentinel.Item.refId) {
+        const fbMatch = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: fbSentinel.Item.refId } }).promise();
+        if (fbMatch.Item) {
+          console.log(`[find-or-create artist] FB-FIRST MATCH: "${name}" → ${fbMatch.Item.id} (${fbMatch.Item.name}) via facebook key`);
+          return {
+            statusCode: 200,
+            headers: getCommunityHeaders(),
+            body: JSON.stringify({
+              action: 'matched',
+              artist: { id: fbMatch.Item.id, name: fbMatch.Item.name, location: fbMatch.Item.location },
+              confidence: 1,
+              matchedBy: 'facebook'
+            })
+          };
+        }
+      }
+    } catch (fbErr) {
+      console.warn(`[find-or-create artist] FB-first lookup failed (non-fatal): ${fbErr.code || fbErr.message}`);
+    }
   }
 
   // ADR-023: Extract act qualifier if present (e.g., "The Vanz Acoustic Duo" → act: "Acoustic Duo")
@@ -2042,7 +2549,7 @@ async function handleFindOrCreateArtist(event) {
         IndexName: 'name-search-index',
         KeyConditionExpression: 'name_prefix = :prefix',
         ExpressionAttributeValues: { ':prefix': prefix },
-        ProjectionExpression: 'id, #name, #location',
+        ProjectionExpression: 'id, #name, #location, name_variants',
         ExpressionAttributeNames: { '#name': 'name', '#location': 'location' },
         Limit: 500
       }).promise();
@@ -2061,7 +2568,33 @@ async function handleFindOrCreateArtist(event) {
 
   console.log(`[find-or-create artist] Searched ${prefixes.size} prefix(es): ${[...prefixes].join(', ')} -> ${candidates.length} candidates`);
 
+  // Fix #3b: Name variant check BEFORE similarity scoring (2026-07-29)
+  // If incoming name matches any candidate's nameVariants, return matched immediately
+  const incomingNameKey = normaliseKey(name);
+  for (const candidate of candidates) {
+    const variants = candidate.name_variants || [];
+    for (const variant of variants) {
+      if (normaliseKey(variant) === incomingNameKey) {
+        console.log(`[find-or-create artist] NAME_VARIANT MATCH: "${name}" → ${candidate.id} (${candidate.name}) via variant "${variant}"`);
+        return {
+          statusCode: 200,
+          headers: getCommunityHeaders(),
+          body: JSON.stringify({
+            action: 'matched',
+            artist: { id: candidate.id, name: candidate.name, location: candidate.location },
+            confidence: 1,
+            matchedBy: 'name_variant',
+            variant: variant
+          })
+        };
+      }
+    }
+  }
+
   // Phase 1: Score candidates by name similarity (for candidate filtering)
+  // Fix #3c: Include region bucketing for mid-band safety net
+  const incomingRegion = regionBucket(body.location || venueRegion || '');
+
   const simScored = candidates
     .map(a => {
       const slug = artistSlugNormalise(a.name);
@@ -2069,7 +2602,9 @@ async function handleFindOrCreateArtist(event) {
       const sim = slugEqual ? 100 : similarityPct(slug, querySlug);
       const aTokens = significantTokens(a.name);
       const sharedToken = queryTokens.some(t => aTokens.includes(t));
-      return { id: a.id, name: a.name, location: a.location || '', sim, sharedToken, slugEqual };
+      const candidateRegion = regionBucket(a.location || '');
+      const sameRegion = incomingRegion !== 'unknown' && candidateRegion !== 'unknown' && incomingRegion === candidateRegion;
+      return { id: a.id, name: a.name, location: a.location || '', sim, sharedToken, slugEqual, region: candidateRegion, sameRegion };
     })
     .filter(s => s.sim >= 60 || s.slugEqual) // Only consider plausible candidates
     .sort((x, y) => y.sim - x.sim)
@@ -2209,9 +2744,17 @@ async function handleFindOrCreateArtist(event) {
   // Ambiguous middle: candidates exist but no clear winner
   // - Without venueRegion: >=60% similarity
   // - With venueRegion: footprint score 70-90 (SCORE_THRESHOLD_LOW to HIGH)
+  // Fix #3c: Mid-band safety net (60-89% + sharedToken + same region → review)
   const plausible = usedFootprintScoring
     ? scored.filter(s => s.footprintScore >= SCORE_THRESHOLD_LOW).slice(0, 5)
-    : scored.filter(s => s.sim >= 60).slice(0, 5);
+    : scored.filter(s => {
+        // 60-89% band: require sharedToken AND same region (Fix #3c safety net)
+        if (s.sim >= 60 && s.sim < 90) {
+          return s.sharedToken && s.sameRegion;
+        }
+        // >=90%: should have matched above, but include if present
+        return s.sim >= 90;
+      }).slice(0, 5);
 
   if (plausible.length > 0) {
     const topScore = usedFootprintScoring ? plausible[0].footprintScore : plausible[0].sim;
@@ -2247,6 +2790,45 @@ async function handleFindOrCreateArtist(event) {
         candidates: [] // No plausible candidates
       })
     };
+  }
+
+  // GATE FIX 2026-07-28 (verification finding d): CONTAINMENT CHECK.
+  // Billing-string class ("Not Guilty - 5pc..." vs "Not Guilty", "Cyril Blake
+  // 60s & 70s Band" vs "Cyril Blake"): if the incoming normalised key starts
+  // with an existing candidate's key (or vice versa, ≥6 chars) in the SAME
+  // region, this is almost certainly the same act under listing copy →
+  // review, never create. Runs over ALL fetched candidates (not just
+  // similarity-filtered ones — containment pairs often score low on
+  // Levenshtein).
+  {
+    const incomingKey = normaliseKey(name);
+    const incomingRegion = regionBucket(body.location || venueRegion || '');
+    const containment = [];
+    if (incomingKey.length >= 6) {
+      for (const c of candidates) {
+        const cKey = normaliseKey(c.name);
+        if (cKey.length >= 6 && cKey !== incomingKey
+            && (incomingKey.startsWith(cKey) || cKey.startsWith(incomingKey))) {
+          const cRegion = regionBucket(c.location || '');
+          if (incomingRegion === 'unknown' || cRegion === 'unknown' || incomingRegion === cRegion) {
+            containment.push({ id: c.id, name: c.name, location: c.location || '', reason: 'name-containment' });
+          }
+        }
+      }
+    }
+    if (containment.length > 0) {
+      console.log(`[find-or-create artist] REVIEW "${name}" - containment match: ${containment.map(c => c.name).join(', ')}`);
+      return {
+        statusCode: 200,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          action: 'review',
+          reason: 'name-containment: incoming name contains (or is contained by) an existing artist name in the same region — likely the same act with listing copy/description attached. Strip the description and reuse the existing id, or confirm genuinely distinct.',
+          queryName: name,
+          candidates: containment.slice(0, 5)
+        })
+      };
+    }
   }
 
   console.log(`[find-or-create artist] CREATE "${name}" (no plausible match, canCreate=true)`);
@@ -2731,8 +3313,23 @@ async function handleMCPUpdateArtist(event) {
       expressionAttributeValues[':locationLng'] = artistData.locationLng;
     }
     if (artistData.genres !== undefined) {
+      // Genre validation (2026-07-31): normalise and reject off-list values
+      const { normaliseGenres, GENRES } = require('./lib/genres');
+      const genreResult = normaliseGenres(artistData.genres);
+      if (genreResult.invalid.length > 0) {
+        return {
+          statusCode: 400,
+          headers: getMcpCorsHeaders(),
+          body: JSON.stringify({
+            error: 'Invalid genres',
+            code: 'INVALID_GENRES',
+            invalidGenres: genreResult.invalid,
+            validGenres: GENRES
+          })
+        };
+      }
       updateParts.push('genres = :genres');
-      expressionAttributeValues[':genres'] = artistData.genres || [];
+      expressionAttributeValues[':genres'] = genreResult.valid;
     }
     if (artistData.artistType !== undefined) {
       updateParts.push('artist_type = :artist_type');
@@ -2775,8 +3372,20 @@ async function handleMCPUpdateArtist(event) {
       expressionAttributeValues[':profileImageUrl'] = artistData.profileImageUrl || '';
     }
     if (artistData.externalIds !== undefined) {
+      // MCP externalIds must also merge additively (Fix #2: 2026-07-29)
+      const existingExternalIds = existingArtist.Item?.external_ids || [];
+      const mergedExternalIds = mergeExternalIds(existingExternalIds, artistData.externalIds);
+
       updateParts.push('external_ids = :external_ids');
-      expressionAttributeValues[':external_ids'] = artistData.externalIds || [];
+      expressionAttributeValues[':external_ids'] = mergedExternalIds;
+    }
+    if (artistData.nameVariants !== undefined) {
+      // MCP nameVariants must also merge additively (Fix #3a: 2026-07-29)
+      const existingNameVariants = existingArtist.Item?.name_variants || [];
+      const mergedNameVariants = mergeNameVariants(existingNameVariants, artistData.nameVariants);
+
+      updateParts.push('name_variants = :name_variants');
+      expressionAttributeValues[':name_variants'] = mergedNameVariants;
     }
 
     const params = {
@@ -2792,6 +3401,33 @@ async function handleMCPUpdateArtist(event) {
       params.ExpressionAttributeNames = expressionAttributeNames;
     }
 
+    // GATE FIX 2026-07-28: MCP renames/relocations must re-key sentinels
+    // (existingArtist.Item was fetched above). Enforce-mode collision → 409,
+    // update NOT performed.
+    if (artistData.name !== undefined || artistData.location !== undefined || artistData.facebookUrl !== undefined) {
+      const cur = existingArtist.Item;
+      const effName = artistData.name !== undefined ? artistData.name : cur.name;
+      const effLocation = artistData.location !== undefined ? artistData.location : cur.location;
+      const effFb = artistData.facebookUrl !== undefined ? artistData.facebookUrl : cur.facebookUrl;
+      const rekey = await rekeyUniqueKeys(dynamodb, {
+        oldKeys: buildArtistUniqueKeys(cur.name, cur.location, cur.facebookUrl).keys,
+        newKeys: buildArtistUniqueKeys(effName, effLocation, effFb).keys,
+        refId: artistId,
+        entityType: 'artist',
+        source: 'mcp-update'
+      });
+      if (rekey.changed && rekey.ok === false) {
+        return {
+          statusCode: 409,
+          headers: getCommunityHeaders(),
+          body: JSON.stringify({
+            ...duplicateResponseBody('artist', rekey.existing),
+            message: 'This rename/relocation would make the artist a duplicate of an existing record. Merge instead (do not vary the name to get around this).'
+          })
+        };
+      }
+    }
+
     const result = await dynamodb.update(params).promise();
 
     console.log(`[MCP_UPDATE_ARTIST] Successfully updated artist: ${artistId}`);
@@ -2801,7 +3437,9 @@ async function handleMCPUpdateArtist(event) {
       headers: getCommunityHeaders(),
       body: JSON.stringify({
         ...result.Attributes,
-        artistType: result.Attributes.artist_type || null
+        artistType: result.Attributes.artist_type || null,
+        externalIds: result.Attributes.external_ids || [],  // Provide camelCase for frontend (Fix #2)
+        nameVariants: result.Attributes.name_variants || [] // Provide camelCase for frontend (Fix #3a)
       })
     };
   } catch (error) {
