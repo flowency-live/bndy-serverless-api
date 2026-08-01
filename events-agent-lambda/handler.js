@@ -25,7 +25,17 @@ const VENUES_TABLE = 'bndy-venues';
 const ARTISTS_TABLE = 'bndy-artists';
 const BNDY_API_BASE = 'https://api.bndy.co.uk';
 
-const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+// Lazy-load OpenAI client only when needed (prevents module-load crash if API key missing)
+let _openai = null;
+function getOpenAI() {
+  if (!_openai) {
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is not configured');
+    }
+    _openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+  }
+  return _openai;
+}
 
 const ALLOWED_ORIGINS = [
   'https://www.bndy.co.uk',       // Primary domain
@@ -486,7 +496,7 @@ Text:
 ${clampedText}
 `;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [{ role: 'user', content: prompt }],
     response_format: { type: 'json_object' },
@@ -932,7 +942,7 @@ Text:
 ${clampedText}
 `;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [{ role: 'user', content: prompt }],
     response_format: { type: 'json_object' },
@@ -1099,6 +1109,13 @@ async function handleBulkImport(event) {
         console.log(`    -> SKIPPED: ${resolution.theme}`);
 
       } else if (resolution.action === 'CREATE_NEW' || resolution.action === 'OPEN_MIC') {
+        // Genre normalisation (2026-07-31): normalise LLM output, flag invalid for review
+        const { normaliseGenres } = require('./lib/genres');
+        const genreResult = normaliseGenres(artistData.genres);
+        if (genreResult.invalid.length > 0) {
+          console.warn(`[bulk_import] Artist "${artistData.name}" has invalid genres: ${genreResult.invalid.join(', ')}`);
+        }
+
         if (dryRun) {
           artistIdMap[localId] = `DRY_RUN_${localId}`;
           results.artists.created.push({ localId, name: artistData.name, dryRun: true });
@@ -1109,12 +1126,14 @@ async function handleBulkImport(event) {
             id: artistId,
             name: artistData.name,
             artist_type: (artistData.act_type || 'band').toLowerCase(),
-            genres: artistData.genres || [],
+            genres: genreResult.valid,  // Use normalised genres
             bio: artistData.bio || '',
             location: artistData.location?.city || artistData.location?.region || null,
             isVerified: false,
             source: 'bulk_import',
             ai_created: true,
+            needs_review: genreResult.invalid.length > 0,  // Flag for review if genres were invalid
+            ...(genreResult.invalid.length > 0 ? { review_reason: `Invalid genres: ${genreResult.invalid.join(', ')}` } : {}),
             createdAt: new Date().toISOString()
           };
 

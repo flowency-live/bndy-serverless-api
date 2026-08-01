@@ -496,7 +496,7 @@ exports.handler = async (event, context) => {
       return await handleDeleteAct(event);
     }
 
-    if (method === 'PUT' && event.pathParameters?.id) {
+    if ((method === 'PUT' || method === 'PATCH') && event.pathParameters?.id) {
       // Check if this is an MCP update request (public, no auth)
       if (path.includes('/mcp')) {
         return await handleMCPUpdateArtist(event);
@@ -533,7 +533,7 @@ async function handleGetAllArtists(event) {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
+    ProjectionExpression: 'id, #name, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, availabilityMode, contactMethod, phoneNumber, whatsappNumber, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
@@ -559,6 +559,10 @@ async function handleGetAllArtists(event) {
       actType: artist.actType || null,
       acoustic: artist.acoustic || false,
       publishAvailability: artist.publishAvailability || false,
+      availabilityMode: artist.availabilityMode || 'selected_dates_only',
+      contactMethod: artist.contactMethod || 'phone',
+      phoneNumber: artist.phoneNumber || null,
+      whatsappNumber: artist.whatsappNumber || null,
       showMemberVotes: artist.showMemberVotes || false,
       autoDiscardThreshold: artist.autoDiscardThreshold ?? null,
       facebookUrl: artist.facebookUrl || '',
@@ -627,6 +631,10 @@ async function handleGetArtistById(artistId) {
       actType: result.Item.actType || null,
       acoustic: result.Item.acoustic || false,
       publishAvailability: result.Item.publishAvailability || false,
+      availabilityMode: result.Item.availabilityMode || 'selected_dates_only',
+      contactMethod: result.Item.contactMethod || 'phone',
+      phoneNumber: result.Item.phoneNumber || null,
+      whatsappNumber: result.Item.whatsappNumber || null,
       showMemberVotes: result.Item.showMemberVotes || false,
       autoDiscardThreshold: result.Item.autoDiscardThreshold ?? null,
       facebookUrl: result.Item.facebookUrl || '',
@@ -1061,6 +1069,25 @@ async function handleUpdateArtist(event) {
 
   const { user } = authResult;
 
+  // Validate enum fields
+  if (artistData.availabilityMode !== undefined &&
+      !['selected_dates_only', 'free_weekends'].includes(artistData.availabilityMode)) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Invalid availabilityMode. Must be "selected_dates_only" or "free_weekends".' })
+    };
+  }
+
+  if (artistData.contactMethod !== undefined &&
+      !['phone', 'whatsapp'].includes(artistData.contactMethod)) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Invalid contactMethod. Must be "phone" or "whatsapp".' })
+    };
+  }
+
   // Check access - platform admin OR member
   if (!user.platformAdmin) {
     const membershipResult = await dynamodb.query({
@@ -1131,8 +1158,23 @@ async function handleUpdateArtist(event) {
     expressionAttributeValues[':locationType'] = artistData.locationType;
   }
   if (artistData.genres !== undefined) {
+    // Genre validation (2026-07-31): normalise and reject off-list values
+    const { normaliseGenres, GENRES } = require('./lib/genres');
+    const genreResult = normaliseGenres(artistData.genres);
+    if (genreResult.invalid.length > 0) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({
+          error: 'Invalid genres',
+          code: 'INVALID_GENRES',
+          invalidGenres: genreResult.invalid,
+          validGenres: GENRES
+        })
+      };
+    }
     updateParts.push('genres = :genres');
-    expressionAttributeValues[':genres'] = artistData.genres || [];
+    expressionAttributeValues[':genres'] = genreResult.valid;
   }
   if (artistData.artistType !== undefined) {
     updateParts.push('artist_type = :artist_type');
@@ -1208,6 +1250,24 @@ async function handleUpdateArtist(event) {
   if (artistData.twitterUrl !== undefined) {
     updateParts.push('twitterUrl = :twitterUrl');
     expressionAttributeValues[':twitterUrl'] = artistData.twitterUrl || null;
+  }
+
+  // Availability settings (2026-07-31)
+  if (artistData.availabilityMode !== undefined) {
+    updateParts.push('availabilityMode = :availabilityMode');
+    expressionAttributeValues[':availabilityMode'] = artistData.availabilityMode;
+  }
+  if (artistData.contactMethod !== undefined) {
+    updateParts.push('contactMethod = :contactMethod');
+    expressionAttributeValues[':contactMethod'] = artistData.contactMethod;
+  }
+  if (artistData.phoneNumber !== undefined) {
+    updateParts.push('phoneNumber = :phoneNumber');
+    expressionAttributeValues[':phoneNumber'] = artistData.phoneNumber;
+  }
+  if (artistData.whatsappNumber !== undefined) {
+    updateParts.push('whatsappNumber = :whatsappNumber');
+    expressionAttributeValues[':whatsappNumber'] = artistData.whatsappNumber;
   }
 
   // Allow updating needs_review (for admin review workflow)
@@ -1773,7 +1833,7 @@ async function handleCreateCommunityArtist(event) {
 
   try {
     const body = JSON.parse(event.body);
-    const { name, location, locationType, locationLat, locationLng, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic, profileImageUrl, externalIds, nameVariants } = body;
+    const { name, location, locationType, locationLat, locationLng, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic, profileImageUrl, externalIds, nameVariants, verifiedSourceName } = body;
 
     // Validation
     if (!name || name.trim().length === 0) {
@@ -1796,7 +1856,15 @@ async function handleCreateCommunityArtist(event) {
     // create path not running data-quality validation — lineup names ("A + B"),
     // placeholders ("TBC") and listing-copy names could still be created here.
     // Same check as handleCreateArtist (:821) and find-or-create (:2123).
-    const dataQualityCheck = validateArtistData({ name });
+    //
+    // Fix #7 (2026-07-30): §2A.5 verified-source-name exception.
+    // If verifiedSourceName=true AND facebookUrl is provided, bypass the
+    // listing-copy detector. The caller asserts the name was taken from the
+    // act's own Facebook page — e.g., "NU CALL - Nu-Metal Tribute Band".
+    const dataQualityCheck = validateArtistData({ name }, {
+      verifiedSourceName: verifiedSourceName === true,
+      facebookUrl: facebookUrl || ''
+    });
     if (!dataQualityCheck.valid) {
       console.warn(`[Artists] Community create rejected by data-quality gate: ${JSON.stringify(dataQualityCheck.errors)}`);
       return {
@@ -1806,6 +1874,23 @@ async function handleCreateCommunityArtist(event) {
           error: 'Artist name failed data-quality validation',
           code: 'DATA_QUALITY',
           errors: dataQualityCheck.errors
+        })
+      };
+    }
+
+    // Genre validation (2026-07-31): normalise and reject off-list values
+    const { normaliseGenres, GENRES } = require('./lib/genres');
+    const genreResult = normaliseGenres(genres);
+    if (genreResult.invalid.length > 0) {
+      console.warn(`[Artists] Community create rejected: invalid genres ${JSON.stringify(genreResult.invalid)}`);
+      return {
+        statusCode: 400,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          error: 'Invalid genres',
+          code: 'INVALID_GENRES',
+          invalidGenres: genreResult.invalid,
+          validGenres: GENRES
         })
       };
     }
@@ -1875,7 +1960,7 @@ async function handleCreateCommunityArtist(event) {
       claimedByUserId: null,  // Available for claiming
       socialMediaUrls: [],
       followerCount: 0,
-      genres: Array.isArray(genres) ? genres : [],
+      genres: genreResult.valid,  // Normalised by genre validation above
 
       // Backstage-compatible fields
       owner_user_id: null,  // Community-created = no owner
@@ -1896,6 +1981,13 @@ async function handleCreateCommunityArtist(event) {
 
       // Name variants for known billing variations (Fix #3a)
       name_variants: nameVariants || [],
+
+      // Fix #7: Record if name passed via verified-source-name exception (§2A.5)
+      // Allows reviewers to see why a listing-copy-looking name was accepted
+      ...(dataQualityCheck.verifiedSourceName ? {
+        verifiedSourceName: true,
+        verifiedSourceUrl: dataQualityCheck.verifiedSourceUrl
+      } : {}),
 
       created_at: now,
       updated_at: now
@@ -2277,7 +2369,61 @@ async function handleFindOrCreateArtist(event) {
   const body = JSON.parse(event.body || '{}');
   // canCreate defaults true (Cowork path); runner passes false
   // venueRegion is the listing's venue region for footprint scoring (Batch 3)
-  const { name, canCreate = true, venueRegion } = body;
+  // verifiedSourceName: §2A.5 exception for acts whose FB page name IS the billing (Fix #7)
+  // resolveTo: when action:review was returned, caller can pick a candidate id
+  // confirmNew: when action:review was returned, caller confirms this is genuinely new
+  const { name, canCreate = true, venueRegion, verifiedSourceName, resolveTo, confirmNew } = body;
+
+  // RESOLUTION HANDLING (Blocker #1 fix): resolveTo + confirmNew params
+  // When action:review was previously returned, caller can resolve via these params
+  if (resolveTo && confirmNew) {
+    return {
+      statusCode: 400,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({
+        error: 'Cannot provide both resolveTo and confirmNew - pick one resolution method'
+      })
+    };
+  }
+
+  // resolveTo: Link to existing artist (manual resolution from review candidates)
+  if (resolveTo) {
+    try {
+      const resolved = await dynamodb.get({
+        TableName: 'bndy-artists',
+        Key: { id: resolveTo }
+      }).promise();
+
+      if (!resolved.Item) {
+        return {
+          statusCode: 400,
+          headers: getCommunityHeaders(),
+          body: JSON.stringify({
+            error: `resolveTo artist not found: ${resolveTo}. Use a valid candidate id from the review response.`
+          })
+        };
+      }
+
+      console.log(`[find-or-create artist] MANUAL_RESOLUTION: "${name}" -> "${resolved.Item.name}" (${resolveTo})`);
+      return {
+        statusCode: 200,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          action: 'matched',
+          artist: { id: resolved.Item.id, name: resolved.Item.name, location: resolved.Item.location || '' },
+          confidence: 1,
+          matchedBy: 'manual_resolution'
+        })
+      };
+    } catch (err) {
+      console.error('[find-or-create artist] resolveTo lookup failed:', err.message);
+      return {
+        statusCode: 500,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({ error: 'Failed to resolve artist: ' + err.message })
+      };
+    }
+  }
 
   if (!name || name.trim().length === 0) {
     return {
@@ -2288,7 +2434,11 @@ async function handleFindOrCreateArtist(event) {
   }
 
   // Data quality validation (2026-07-27 audit follow-up)
-  const validation = validateArtistData({ name });
+  // Fix #7 (2026-07-30): Pass verifiedSourceName + facebookUrl for §2A.5 exception
+  const validation = validateArtistData({ name }, {
+    verifiedSourceName: verifiedSourceName === true,
+    facebookUrl: body.facebookUrl || ''
+  });
   if (!validation.valid) {
     console.log(`DATA_QUALITY_REJECT: Artist creation blocked - ${validation.errors.join('; ')}`);
     return {
@@ -2299,6 +2449,23 @@ async function handleFindOrCreateArtist(event) {
         details: validation.errors
       })
     };
+  }
+
+  // confirmNew: Bypass all matching and create directly (manual resolution after review)
+  // Caller has seen the candidates and confirms this is genuinely a new, distinct artist
+  if (confirmNew === true) {
+    console.log(`[find-or-create artist] CONFIRM_NEW: "${name}" - bypassing matching per caller confirmation`);
+    const created = await handleCreateCommunityArtist(event);
+    try {
+      const parsed = JSON.parse(created.body);
+      return {
+        statusCode: created.statusCode,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({ action: created.statusCode === 201 ? 'created' : 'create_failed', ...parsed })
+      };
+    } catch (e) {
+      return created;
+    }
   }
 
   // GATE FIX 2026-07-28 (verification finding c): FB-FIRST MATCH.
@@ -3146,8 +3313,23 @@ async function handleMCPUpdateArtist(event) {
       expressionAttributeValues[':locationLng'] = artistData.locationLng;
     }
     if (artistData.genres !== undefined) {
+      // Genre validation (2026-07-31): normalise and reject off-list values
+      const { normaliseGenres, GENRES } = require('./lib/genres');
+      const genreResult = normaliseGenres(artistData.genres);
+      if (genreResult.invalid.length > 0) {
+        return {
+          statusCode: 400,
+          headers: getMcpCorsHeaders(),
+          body: JSON.stringify({
+            error: 'Invalid genres',
+            code: 'INVALID_GENRES',
+            invalidGenres: genreResult.invalid,
+            validGenres: GENRES
+          })
+        };
+      }
       updateParts.push('genres = :genres');
-      expressionAttributeValues[':genres'] = artistData.genres || [];
+      expressionAttributeValues[':genres'] = genreResult.valid;
     }
     if (artistData.artistType !== undefined) {
       updateParts.push('artist_type = :artist_type');

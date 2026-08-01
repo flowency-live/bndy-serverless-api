@@ -377,7 +377,42 @@ components:
           type: array
           items:
             type: string
-          description: Music genres
+            enum:
+              - Rock
+              - Rock n Roll
+              - Grunge
+              - Metal
+              - Punk
+              - Alternative
+              - New Wave
+              - Pop
+              - Indie
+              - Britpop
+              - Mod
+              - Blues
+              - R&B
+              - Country
+              - Americana
+              - Folk
+              - Soul
+              - Funk
+              - Motown
+              - Disco
+              - Electronic
+              - Dance
+              - Jazz
+              - Classical
+              - Reggae
+              - Ska
+              - Latin
+              - '50s'
+              - '60s'
+              - '70s'
+              - '80s'
+              - '90s'
+              - '00s'
+              - Other
+          description: Music genres (normalised to canonical values)
 
     ArtistResponse:
       type: object
