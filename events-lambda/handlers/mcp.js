@@ -192,15 +192,28 @@ async function handleUpdateEventMcp(deps, event) {
     'billingOrder': 'billingOrder'
   };
 
+  // Fields that support null -> REMOVE (tri-state: true/false/unset)
+  // Clearing these via null means "inherit from venue" or "unknown"
+  const clearableFields = new Set(['ticketed', 'price', 'ticketUrl', 'ticketinformation']);
+  const removeExpressions = [];
+
   const mappedDbFields = new Set();
   Object.entries(allowedFields).forEach(([apiField, dbField]) => {
     if (updates[apiField] !== undefined && !mappedDbFields.has(dbField)) {
       mappedDbFields.add(dbField); // guard: artistId + artist_id both target 'artistId' — first wins
-      const placeholder = `#${dbField}`;
-      const valuePlaceholder = `:${dbField}`;
-      attributeNames[placeholder] = dbField;
-      attributeValues[valuePlaceholder] = updates[apiField];
-      updateExpressions.push(`${placeholder} = ${valuePlaceholder}`);
+
+      // Handle null values for clearable fields -> REMOVE attribute
+      if (updates[apiField] === null && clearableFields.has(dbField)) {
+        const placeholder = `#${dbField}`;
+        attributeNames[placeholder] = dbField;
+        removeExpressions.push(placeholder);
+      } else {
+        const placeholder = `#${dbField}`;
+        const valuePlaceholder = `:${dbField}`;
+        attributeNames[placeholder] = dbField;
+        attributeValues[valuePlaceholder] = updates[apiField];
+        updateExpressions.push(`${placeholder} = ${valuePlaceholder}`);
+      }
     }
   });
 
@@ -277,7 +290,7 @@ async function handleUpdateEventMcp(deps, event) {
   attributeValues[':updatedAt'] = new Date().toISOString();
   updateExpressions.push('#updatedAt = :updatedAt');
 
-  if (updateExpressions.length === 1) { // Only updatedAt
+  if (updateExpressions.length === 1 && removeExpressions.length === 0) { // Only updatedAt, no removes
     return {
       statusCode: 400,
       headers: getCorsHeaders(event),
@@ -285,12 +298,18 @@ async function handleUpdateEventMcp(deps, event) {
     };
   }
 
+  // Build UpdateExpression with SET and optional REMOVE clauses
+  let updateExpression = `SET ${updateExpressions.join(', ')}`;
+  if (removeExpressions.length > 0) {
+    updateExpression += ` REMOVE ${removeExpressions.join(', ')}`;
+  }
+
   await dynamodb.update({
     TableName: EVENTS_TABLE,
     Key: { id },
-    UpdateExpression: `SET ${updateExpressions.join(', ')}`,
+    UpdateExpression: updateExpression,
     ExpressionAttributeNames: attributeNames,
-    ExpressionAttributeValues: attributeValues
+    ...(Object.keys(attributeValues).length > 0 && { ExpressionAttributeValues: attributeValues })
   }).promise();
 
   // Fetch updated event with venue details

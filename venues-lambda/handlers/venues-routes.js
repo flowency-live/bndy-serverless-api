@@ -592,23 +592,31 @@ async function handleUpdateVenue(deps, venueId, venueData, event) {
     socialMediaUrls: 'social_media_urls',
     profileImageUrl: 'profile_image_url',
     standardTicketed: 'standard_ticketed',
+    isTicketed: 'standard_ticketed',  // alias for backstage UI
     standardTicketInformation: 'standard_ticket_information',
+    ticketInformation: 'standard_ticket_information',  // alias for backstage UI
     standardTicketUrl: 'standard_ticket_url',
+    ticketUrl: 'standard_ticket_url',  // alias for backstage UI
     externalIds: 'external_ids',
     enrichment_status: 'enrichment_status',
     enrichment_data: 'enrichment_data'
   };
 
+  // Track which DB fields have been processed (avoid duplicates from aliases)
+  const processedDbKeys = new Set();
+
   // Process each provided field
   Object.keys(venueData).forEach(frontendKey => {
     const dbKey = fieldMappings[frontendKey];
     if (!dbKey) return; // Skip unknown fields
+    if (processedDbKeys.has(dbKey)) return; // Skip if already processed (alias)
 
     const value = venueData[frontendKey];
 
     // Special handling for null values (REMOVE operation)
     if (value === null) {
       removeExpressions.push(dbKey);
+      processedDbKeys.add(dbKey);
       return;
     }
 
@@ -621,6 +629,7 @@ async function handleUpdateVenue(deps, venueId, venueData, event) {
     }
 
     expressionAttributeValues[`:${dbKey}`] = value;
+    processedDbKeys.add(dbKey);
   });
 
   // Build update expression with both SET and REMOVE clauses
