@@ -24,18 +24,47 @@ const { hasEventsForArtist } = require('./lib/artist-event-guard');
  * Sentinel keys for an artist record (2026-07-27 gate plan):
  *  - identity key: normalise(name) + '#' + regionBucket(location) — Jason's
  *    ruling that name + performing location IS the artist UID
+ *  - variant keys: each name_variant produces its own key in the same region
  *  - facebook key: exact FB URL is the strongest identity signal — two
  *    records may never share one
- * Returns { keys, resolvable } — resolvable=false means the location can't be
- * bucketed; in enforce mode such artists must NOT be created (review instead).
+ * Returns { keys, variantKeys, resolvable } — resolvable=false means the
+ * location can't be bucketed; in enforce mode such artists must NOT be
+ * created (review instead). variantKeys lists just the variant-derived keys
+ * for collision reporting.
  */
-function buildArtistUniqueKeys(name, location, facebookUrl) {
+function buildArtistUniqueKeys(name, location, facebookUrl, nameVariants) {
   const identity = artistIdentityKey(name, location);
   const keys = [];
+  const variantKeys = [];
+
   if (identity.resolvable) keys.push(`artist#${identity.key}`);
+
+  // Variant name keys (same region as primary)
+  if (Array.isArray(nameVariants) && nameVariants.length > 0) {
+    const region = regionBucket(location);
+    const seenVariantKeys = new Set();
+    // Don't duplicate the primary name key
+    if (identity.resolvable) seenVariantKeys.add(identity.key);
+
+    for (const variant of nameVariants) {
+      if (!variant || typeof variant !== 'string') continue;
+      const variantNameKey = normaliseKey(variant);
+      if (!variantNameKey || seenVariantKeys.has(variantNameKey)) continue;
+      seenVariantKeys.add(variantNameKey);
+
+      // Only create variant key if region is resolvable
+      if (region !== 'unknown') {
+        const fullVariantKey = `artist#${variantNameKey}#${region}`;
+        keys.push(fullVariantKey);
+        variantKeys.push(fullVariantKey);
+      }
+    }
+  }
+
   const fbKey = facebookKey(facebookUrl);
   if (fbKey) keys.push(`artist#fb#${fbKey}`);
-  return { keys, resolvable: identity.resolvable, identity };
+
+  return { keys, variantKeys, resolvable: identity.resolvable, identity };
 }
 
 /**
@@ -533,7 +562,7 @@ async function handleGetAllArtists(event) {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, availabilityMode, contactMethod, phoneNumber, whatsappNumber, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
+    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, availabilityMode, contactMethod, phoneNumber, whatsappNumber, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
@@ -954,6 +983,9 @@ async function handleCreateArtist(event) {
     source: 'backstage',   // Artist self-created = cleanest data
     needs_review: false,   // No review needed for authenticated artist creation
 
+    // Name variants for alternative billing strings
+    name_variants: artistData.nameVariants || [],
+
     created_at: now,
     updated_at: now
   };
@@ -962,7 +994,7 @@ async function handleCreateArtist(event) {
     // HARD GATE (2026-07-27): same rule as every other create path — the
     // authenticated Backstage route was previously a zero-dedup blind put.
     const { keys: uniqueKeys, resolvable } = buildArtistUniqueKeys(
-      artist.name, artist.location, artist.facebookUrl
+      artist.name, artist.location, artist.facebookUrl, artist.name_variants
     );
     if (!resolvable && gateMode() === 'enforce') {
       return {
@@ -1339,16 +1371,24 @@ async function handleUpdateArtist(event) {
     // location/FB change alters the artist's identity keys. Claim new + release
     // old atomically; enforce-mode collision = this update would create a
     // duplicate identity → 409, update NOT performed.
-    if (artistData.name !== undefined || artistData.location !== undefined || artistData.facebookUrl !== undefined) {
+    // Re-key when name/location/fb changes OR when nameVariants are added
+    const needsRekey = artistData.name !== undefined || artistData.location !== undefined ||
+                       artistData.facebookUrl !== undefined || artistData.nameVariants !== undefined;
+    if (needsRekey) {
       const existingRes = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();
       if (existingRes.Item) {
         const cur = existingRes.Item;
         const effName = artistData.name !== undefined ? artistData.name : cur.name;
         const effLocation = artistData.location !== undefined ? artistData.location : cur.location;
         const effFb = artistData.facebookUrl !== undefined ? artistData.facebookUrl : cur.facebookUrl;
+        // For nameVariants: old keys use existing variants, new keys use merged variants
+        const curVariants = cur.name_variants || [];
+        const effVariants = artistData.nameVariants !== undefined
+          ? mergeNameVariants(curVariants, artistData.nameVariants)
+          : curVariants;
         const rekey = await rekeyUniqueKeys(dynamodb, {
-          oldKeys: buildArtistUniqueKeys(cur.name, cur.location, cur.facebookUrl).keys,
-          newKeys: buildArtistUniqueKeys(effName, effLocation, effFb).keys,
+          oldKeys: buildArtistUniqueKeys(cur.name, cur.location, cur.facebookUrl, curVariants).keys,
+          newKeys: buildArtistUniqueKeys(effName, effLocation, effFb, effVariants).keys,
           refId: artistId,
           entityType: 'artist',
           source: 'backstage-update'
@@ -1359,7 +1399,7 @@ async function handleUpdateArtist(event) {
             headers: getCorsHeaders(),
             body: JSON.stringify({
               ...duplicateResponseBody('artist', rekey.existing),
-              message: 'This rename/relocation would make the artist a duplicate of an existing record. Merge instead.'
+              message: 'This rename/relocation/variant would make the artist a duplicate of an existing record. Merge instead.'
             })
           };
         }
@@ -1405,7 +1445,7 @@ async function handleCheckName(event) {
     // DynamoDB doesn't support lower() function, so we fetch and filter
     const params = {
       TableName: 'bndy-artists',
-      ProjectionExpression: 'id, #name, #location',
+      ProjectionExpression: 'id, #name, bio, #location',
       ExpressionAttributeNames: {
         '#name': 'name',
         '#location': 'location'
@@ -1575,7 +1615,7 @@ async function handleDeleteArtist(artistId) {
     const artistRecord = await dynamodb.get(artistParams).promise();
     await dynamodb.delete(artistParams).promise();
     if (artistRecord.Item) {
-      const { keys } = buildArtistUniqueKeys(artistRecord.Item.name, artistRecord.Item.location, artistRecord.Item.facebookUrl);
+      const { keys } = buildArtistUniqueKeys(artistRecord.Item.name, artistRecord.Item.location, artistRecord.Item.facebookUrl, artistRecord.Item.name_variants);
       await releaseUniqueKeys(dynamodb, keys, artistId);
     }
     console.log(` Artist deleted successfully with ${membershipsResult.Items.length} cascaded membership deletions`);
@@ -1657,7 +1697,7 @@ async function handleMCPDeleteArtist(artistId) {
     }).promise();
 
     if (artistResult.Item) {
-      const { keys } = buildArtistUniqueKeys(artistResult.Item.name, artistResult.Item.location, artistResult.Item.facebookUrl);
+      const { keys } = buildArtistUniqueKeys(artistResult.Item.name, artistResult.Item.location, artistResult.Item.facebookUrl, artistResult.Item.name_variants);
       await releaseUniqueKeys(dynamodb, keys, artistId);
     }
 
@@ -1784,7 +1824,7 @@ async function handleSearchArtists(event) {
         ':prefix': prefix,
         ':searchTerm': searchTerm
       },
-      ProjectionExpression: 'id, #name, #location, locationLat, locationLng, locationType, profileImageUrl',
+      ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, profileImageUrl',
       ExpressionAttributeNames: {
         '#name': 'name',
         '#location': 'location'
@@ -1996,7 +2036,7 @@ async function handleCreateCommunityArtist(event) {
     // HARD GATE (2026-07-27): artist UID = normalise(name) + region bucket.
     // Even when a caller's "this is a new artist" logic is wrong, the
     // sentinel transaction bounces the write.
-    const { keys: uniqueKeys, resolvable } = buildArtistUniqueKeys(name, location, facebookUrl);
+    const { keys: uniqueKeys, resolvable } = buildArtistUniqueKeys(name, location, facebookUrl, nameVariants);
 
     if (!resolvable && gateMode() === 'enforce') {
       // A location that can't be bucketed can't participate in identity —
@@ -2549,7 +2589,7 @@ async function handleFindOrCreateArtist(event) {
         IndexName: 'name-search-index',
         KeyConditionExpression: 'name_prefix = :prefix',
         ExpressionAttributeValues: { ':prefix': prefix },
-        ProjectionExpression: 'id, #name, #location, name_variants',
+        ProjectionExpression: 'id, #name, bio, #location, name_variants',
         ExpressionAttributeNames: { '#name': 'name', '#location': 'location' },
         Limit: 500
       }).promise();
@@ -3401,17 +3441,24 @@ async function handleMCPUpdateArtist(event) {
       params.ExpressionAttributeNames = expressionAttributeNames;
     }
 
-    // GATE FIX 2026-07-28: MCP renames/relocations must re-key sentinels
+    // GATE FIX 2026-07-28: MCP renames/relocations/variants must re-key sentinels
     // (existingArtist.Item was fetched above). Enforce-mode collision → 409,
     // update NOT performed.
-    if (artistData.name !== undefined || artistData.location !== undefined || artistData.facebookUrl !== undefined) {
+    const mcpNeedsRekey = artistData.name !== undefined || artistData.location !== undefined ||
+                          artistData.facebookUrl !== undefined || artistData.nameVariants !== undefined;
+    if (mcpNeedsRekey) {
       const cur = existingArtist.Item;
       const effName = artistData.name !== undefined ? artistData.name : cur.name;
       const effLocation = artistData.location !== undefined ? artistData.location : cur.location;
       const effFb = artistData.facebookUrl !== undefined ? artistData.facebookUrl : cur.facebookUrl;
+      // For nameVariants: old keys use existing variants, new keys use merged variants
+      const curVariants = cur.name_variants || [];
+      const effVariants = artistData.nameVariants !== undefined
+        ? mergeNameVariants(curVariants, artistData.nameVariants)
+        : curVariants;
       const rekey = await rekeyUniqueKeys(dynamodb, {
-        oldKeys: buildArtistUniqueKeys(cur.name, cur.location, cur.facebookUrl).keys,
-        newKeys: buildArtistUniqueKeys(effName, effLocation, effFb).keys,
+        oldKeys: buildArtistUniqueKeys(cur.name, cur.location, cur.facebookUrl, curVariants).keys,
+        newKeys: buildArtistUniqueKeys(effName, effLocation, effFb, effVariants).keys,
         refId: artistId,
         entityType: 'artist',
         source: 'mcp-update'
@@ -3422,7 +3469,7 @@ async function handleMCPUpdateArtist(event) {
           headers: getCommunityHeaders(),
           body: JSON.stringify({
             ...duplicateResponseBody('artist', rekey.existing),
-            message: 'This rename/relocation would make the artist a duplicate of an existing record. Merge instead (do not vary the name to get around this).'
+            message: 'This rename/relocation/variant would make the artist a duplicate of an existing record. Merge instead (do not vary the name to get around this).'
           })
         };
       }
