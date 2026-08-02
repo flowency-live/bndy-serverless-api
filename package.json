@@ -5,6 +5,8 @@
   "scripts": {
     "validate": "node scripts/validate-deployment.js",
     "verify-routes": "node scripts/verify-routes.js",
+    "security:inventory": "node scripts/security-route-inventory.js",
+    "test:security-inventory": "node --test scripts/__tests__/security-route-inventory.test.js",
     "predeploy": "npm run validate && npm run verify-routes",
     "deploy": "sam build && sam deploy --no-confirm-changeset",
     "deploy:guided": "sam build && sam deploy --guided",
