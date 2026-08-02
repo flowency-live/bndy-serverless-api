@@ -201,8 +201,8 @@ The rolled-back function handles these routes:
 
 The rolled-back function requires these environment variables (already set in Lambda):
 
-- `COGNITO_USER_POOL_CLIENT_ID`
-- `COGNITO_USER_POOL_CLIENT_SECRET`
+- `COGNITO_USER_POOL_CLIENT_ID`: stored in `bndy/cognito-backstage-server-client` under `clientId`; value not documented.
+- `COGNITO_USER_POOL_CLIENT_SECRET`: stored in `bndy/cognito-backstage-server-client` under `clientSecret`; value not documented.
 - `JWT_SECRET`
 - `NODE_ENV=production`
 

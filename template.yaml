@@ -578,8 +578,8 @@ Resources:
       Environment:
         Variables:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
-          COGNITO_USER_POOL_CLIENT_ID: 'tb6qcc6a4suk2pv58rd40klh7'
-          COGNITO_USER_POOL_CLIENT_SECRET: '1vk3rd8chd3mmn0ndn40kos0nbr77pjq5tkib4rlljf0n2ra633e'
+          COGNITO_USER_POOL_CLIENT_ID: '{{resolve:secretsmanager:bndy/cognito-backstage-server-client:SecretString:clientId}}'
+          COGNITO_USER_POOL_CLIENT_SECRET: '{{resolve:secretsmanager:bndy/cognito-backstage-server-client:SecretString:clientSecret}}'
       Events:
         GetMe:
           Type: HttpApi
