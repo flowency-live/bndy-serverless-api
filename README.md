@@ -209,8 +209,8 @@ All Lambdas interact with these DynamoDB tables:
 
 All Lambda functions have access to:
 - `JWT_SECRET` - Session token signing
-- `COGNITO_USER_POOL_CLIENT_ID: stored in `bndy/cognito-backstage-server-client` (`clientId`); value not documented.
-- `COGNITO_USER_POOL_CLIENT_SECRET: stored in `bndy/cognito-backstage-server-client` (`clientSecret`); value not documented.
+- `COGNITO_USER_POOL_CLIENT_ID`: stored in `bndy/cognito-backstage-server-client` under `clientId`; value not documented.
+- `COGNITO_USER_POOL_CLIENT_SECRET`: stored in `bndy/cognito-backstage-server-client` under `clientSecret`; value not documented.
 - `NODE_ENV=production`
 
 ---

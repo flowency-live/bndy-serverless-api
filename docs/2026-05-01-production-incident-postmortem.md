@@ -59,8 +59,8 @@
 **Root Cause:** SAM template AuthFunction missing Cognito configuration
 
 **Missing env vars:**
-- `COGNITO_USER_POOL_CLIENT_ID: stored in `bndy/cognito-backstage-server-client` (`clientId`); value not documented.
-- `COGNITO_USER_POOL_CLIENT_SECRET: stored in `bndy/cognito-backstage-server-client` (`clientSecret`); value not documented.
+- `COGNITO_USER_POOL_CLIENT_ID`: stored in `bndy/cognito-backstage-server-client` under `clientId`; value not documented.
+- `COGNITO_USER_POOL_CLIENT_SECRET`: stored in `bndy/cognito-backstage-server-client` under `clientSecret`; value not documented.
 
 **Symptom:** OAuth redirect to Cognito with `client_id=undefined`
 
