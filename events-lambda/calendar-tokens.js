@@ -33,7 +33,7 @@ function generateToken() {
  * @param {Object} params
  * @param {string} params.userId - User ID who owns this token
  * @param {string} params.artistId - Artist ID this token grants access to
- * @param {string} params.scope - Scope: 'full', 'public', or 'personal'
+ * @param {string} params.scope - Scope: 'default'
  * @returns {Promise<Object>} - Created token with subscription URLs
  */
 async function createCalendarToken({ userId, artistId, scope }) {

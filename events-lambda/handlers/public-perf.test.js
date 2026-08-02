@@ -156,9 +156,14 @@ describe('handleGetVenueEvents', () => {
     expect(body.events[0].artist.name).toBe('name-ar-0');
   });
 
-  it('joins artists via BatchGetItem', async () => {
+  it('joins artists via BatchGetItem and looks up the venue once for ticketing defaults', async () => {
     const dynamodb = mockDynamo();
     await handleGetVenueEvents({ dynamodb, getCorsHeaders }, lambdaEvent);
-    expect(dynamodb.get).not.toHaveBeenCalled();
+    expect(dynamodb.get).toHaveBeenCalledTimes(1);
+    expect(dynamodb.get).toHaveBeenCalledWith({
+      TableName: 'bndy-venues',
+      Key: { id: 'vn-1' }
+    });
+    expect(dynamodb.batchGet).toHaveBeenCalled();
   });
 });

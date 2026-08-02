@@ -62,28 +62,39 @@ function getLambdaFolders() {
 }
 
 // Calculate folder size in MB
-function getFolderSizeMB(folderPath) {
-  try {
-    // Use du command for accurate size
-    const result = execSync(`du -sm "${folderPath}"`, { encoding: 'utf-8' });
-    return parseInt(result.split('\t')[0], 10);
-  } catch {
-    // Fallback: manual calculation
-    let totalSize = 0;
-    function walkDir(dir) {
-      const files = fs.readdirSync(dir);
-      for (const file of files) {
-        const filePath = path.join(dir, file);
-        const stat = fs.statSync(filePath);
-        if (stat.isDirectory()) {
-          walkDir(filePath);
-        } else {
-          totalSize += stat.size;
-        }
+function calculateFolderSizeMB(folderPath) {
+  let totalSize = 0;
+
+  function walkDir(dir) {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const filePath = path.join(dir, file);
+      const stat = fs.statSync(filePath);
+      if (stat.isDirectory()) {
+        walkDir(filePath);
+      } else {
+        totalSize += stat.size;
       }
     }
-    walkDir(folderPath);
-    return Math.ceil(totalSize / (1024 * 1024));
+  }
+
+  walkDir(folderPath);
+  return Math.ceil(totalSize / (1024 * 1024));
+}
+
+function getFolderSizeMB(folderPath) {
+  if (process.platform === 'win32') {
+    return calculateFolderSizeMB(folderPath);
+  }
+
+  try {
+    const result = execSync(`du -sm "${folderPath}"`, {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    });
+    return parseInt(result.split('	')[0], 10);
+  } catch {
+    return calculateFolderSizeMB(folderPath);
   }
 }
 

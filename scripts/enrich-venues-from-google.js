@@ -5,7 +5,10 @@ const AWS = require('aws-sdk');
 const https = require('https');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
-const GOOGLE_API_KEY = 'AIzaSyBUIFJW1ZW6N6a7sdILXXWQ-qPxU7StRsk';
+const GOOGLE_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
+if (!GOOGLE_API_KEY) {
+  throw new Error('Set GOOGLE_PLACES_API_KEY before running this script.');
+}
 
 // Configuration
 const BATCH_SIZE = 50; // Process 50 venues at a time

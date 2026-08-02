@@ -66,13 +66,13 @@ describe('calendar-tokens', () => {
       const result = await createCalendarToken({
         userId: 'user-123',
         artistId: 'artist-456',
-        scope: 'full'
+        scope: 'default'
       });
 
       expect(result.token).toMatch(/^cal_/);
       expect(result.userId).toBe('user-123');
       expect(result.artistId).toBe('artist-456');
-      expect(result.scope).toBe('full');
+      expect(result.scope).toBe('default');
       expect(result.subscriptionUrl).toContain(result.token);
       expect(result.webcalUrl).toMatch(/^webcal:/);
       expect(result.revokedAt).toBeNull();
@@ -84,7 +84,7 @@ describe('calendar-tokens', () => {
             token: result.token,
             userId: 'user-123',
             artistId: 'artist-456',
-            scope: 'full'
+            scope: 'default'
           })
         })
       );
@@ -98,16 +98,25 @@ describe('calendar-tokens', () => {
       })).rejects.toThrow('Invalid scope');
     });
 
-    it('should accept all valid scopes', async () => {
+    it('should accept the single default scope', async () => {
       mockDynamoDB.put.mockResolvedValue({});
 
+      const result = await createCalendarToken({
+        userId: 'user-123',
+        artistId: 'artist-456',
+        scope: 'default'
+      });
+
+      expect(result.scope).toBe('default');
+    });
+
+    it('should reject legacy expanded scopes', async () => {
       for (const scope of ['full', 'public', 'personal']) {
-        const result = await createCalendarToken({
+        await expect(createCalendarToken({
           userId: 'user-123',
           artistId: 'artist-456',
           scope
-        });
-        expect(result.scope).toBe(scope);
+        })).rejects.toThrow('Invalid scope');
       }
     });
   });
@@ -118,7 +127,7 @@ describe('calendar-tokens', () => {
         token: 'cal_valid-token',
         userId: 'user-123',
         artistId: 'artist-456',
-        scope: 'full',
+        scope: 'default',
         createdAt: '2025-01-01T10:00:00Z',
         lastUsedAt: '2025-01-01T10:00:00Z',
         revokedAt: null
@@ -148,7 +157,7 @@ describe('calendar-tokens', () => {
         token: 'cal_revoked-token',
         userId: 'user-123',
         artistId: 'artist-456',
-        scope: 'full',
+        scope: 'default',
         revokedAt: '2025-01-15T10:00:00Z'
       };
 
@@ -174,7 +183,7 @@ describe('calendar-tokens', () => {
           token: 'cal_token-1',
           userId: 'user-123',
           artistId: 'artist-456',
-          scope: 'full',
+          scope: 'default',
           createdAt: '2025-01-01T10:00:00Z'
         },
         {

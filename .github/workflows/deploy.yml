@@ -63,18 +63,9 @@ jobs:
         with:
           use-installer: true
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
       - name: Validate SAM Template
         run: |
-          # Skip SAM lint validation due to nodejs20.x deprecation warnings
-          # The runtime will be upgraded to nodejs24.x when the bndy-jwt layer is updated
-          aws cloudformation validate-template --template-body file://template.yaml --region ${{ env.AWS_REGION }}
+          sam validate --lint
 
       - name: Run Pre-Deployment Validation
         run: |
