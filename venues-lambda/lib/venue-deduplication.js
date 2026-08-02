@@ -427,7 +427,7 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
       standard_ticketed: false,
       standard_ticket_information: '',
       standard_ticket_url: '',
-      created_at: now,
+      createdAt: now,
       updated_at: now,
       // AI creation flags
       ai_created: venueData.ai_created || false,

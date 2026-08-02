@@ -764,7 +764,7 @@ async function handleGetArtistByExternalId(event) {
       spotifyUrl: matchingArtist.spotifyUrl || '',
       ai_created: matchingArtist.ai_created,
       needs_review: matchingArtist.needs_review,
-      createdAt: matchingArtist.created_at,
+      createdAt: matchingArtist.createdAt,
       updatedAt: matchingArtist.updated_at
     };
 
@@ -986,7 +986,7 @@ async function handleCreateArtist(event) {
     // Name variants for alternative billing strings
     name_variants: artistData.nameVariants || [],
 
-    created_at: now,
+    createdAt: now,
     updated_at: now
   };
 
@@ -2029,7 +2029,7 @@ async function handleCreateCommunityArtist(event) {
         verifiedSourceUrl: dataQualityCheck.verifiedSourceUrl
       } : {}),
 
-      created_at: now,
+      createdAt: now,
       updated_at: now
     };
 
@@ -3505,6 +3505,25 @@ async function handleMCPUpdateArtist(event) {
 
 async function handleListArtistsMcp(event) {
   const queryParams = event.queryStringParameters || {};
+
+  // Known parameter names - reject any unknown ones to prevent silent filter failures
+  const KNOWN_PARAMS = new Set([
+    'limit', 'offset',
+    'missingSocials', 'missingLocation', 'missingGenres',
+    'region', 'createdSince'
+  ]);
+  const unknownParams = Object.keys(queryParams).filter(p => !KNOWN_PARAMS.has(p));
+  if (unknownParams.length > 0) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        error: `Unknown parameter(s): ${unknownParams.join(', ')}`,
+        knownParameters: Array.from(KNOWN_PARAMS),
+        message: 'Unknown parameters are rejected to prevent silent filter failures. Check parameter names.'
+      })
+    };
+  }
 
   // Parse pagination params
   const limit = Math.min(parseInt(queryParams.limit) || 100, 500);
