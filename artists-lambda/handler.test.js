@@ -12,7 +12,8 @@ const mockDynamoDB = {
   put: jest.fn(),
   scan: jest.fn(),
   get: jest.fn(),
-  update: jest.fn()
+  update: jest.fn(),
+  transactWrite: jest.fn()
 };
 
 jest.mock('aws-sdk', () => ({
@@ -22,7 +23,8 @@ jest.mock('aws-sdk', () => ({
       put: (params) => ({ promise: () => mockDynamoDB.put(params) }),
       scan: (params) => ({ promise: () => mockDynamoDB.scan(params) }),
       get: (params) => ({ promise: () => mockDynamoDB.get(params) }),
-      update: (params) => ({ promise: () => mockDynamoDB.update(params) })
+      update: (params) => ({ promise: () => mockDynamoDB.update(params) }),
+      transactWrite: (params) => ({ promise: () => mockDynamoDB.transactWrite(params) })
     }))
   },
   SSM: jest.fn(() => ({
@@ -462,5 +464,57 @@ describe('Acts CRUD - #60 Acts Model', () => {
       expect(body.acts.find(a => a.id === 'act-2').isDefault).toBe(true);
       expect(body.acts.find(a => a.id === 'act-1').isDefault).toBe(false);
     });
+  });
+});
+describe('Artist baseline createdAt and MCP list filters', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDynamoDB.get.mockImplementation((params) => {
+      if (params.TableName === 'bndy-users') {
+        return Promise.resolve({ Item: { cognito_id: 'user-1', platformAdmin: false } });
+      }
+      return Promise.resolve({ Item: null });
+    });
+    mockDynamoDB.scan.mockResolvedValue({ Items: [] });
+    mockDynamoDB.transactWrite.mockResolvedValue({});
+    mockDynamoDB.put.mockResolvedValue({});
+  });
+
+  const createSessionCookie = () => {
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign({ userId: 'user-1' }, 'test-secret', { expiresIn: '1h' });
+    return 'bndy_session=' + token;
+  };
+
+  it('rejects unknown MCP list query parameters before scanning', async () => {
+    const result = await handler({
+      requestContext: { http: { method: 'GET', path: '/api/artists/list' } },
+      queryStringParameters: { missingGenre: 'true' },
+      headers: { origin: 'https://backstage.bndy.co.uk' }
+    }, {});
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toContain('missingGenre');
+    expect(mockDynamoDB.scan).not.toHaveBeenCalled();
+  });
+
+  it('writes createdAt and not created_at on new artist records', async () => {
+    const result = await handler({
+      requestContext: { http: { method: 'POST', path: '/api/artists' } },
+      headers: {
+        origin: 'https://backstage.bndy.co.uk',
+        Cookie: createSessionCookie()
+      },
+      body: JSON.stringify({
+        name: 'CreatedAt Artist',
+        location: 'Bristol',
+        genres: ['rock']
+      })
+    }, {});
+
+    expect(result.statusCode).toBe(201);
+    const artistPut = mockDynamoDB.transactWrite.mock.calls[0][0].TransactItems.find(item => item.Put.TableName === 'bndy-artists');
+    expect(artistPut.Put.Item.createdAt).toEqual(expect.any(String));
+    expect(artistPut.Put.Item.created_at).toBeUndefined();
   });
 });

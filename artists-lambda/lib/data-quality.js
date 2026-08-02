@@ -133,10 +133,20 @@ function isListingCopyName(name) {
 /**
  * Comprehensive artist validation — stable API used by the handlers.
  * Returns { valid: boolean, errors: string[] }
+ *
+ * @param {Object} artistData - Artist data including { name, ... }
+ * @param {Object} options - Validation options
+ * @param {boolean} options.verifiedSourceName - If true + facebookUrl provided, bypass
+ *   isListingCopyName check (§2A.5: verified-source-name exception). Used when the act's
+ *   own page name IS the billing string — the full name is legitimate despite looking
+ *   like listing copy. Requires facebookUrl as evidence.
+ * @param {string} options.facebookUrl - Required when verifiedSourceName=true. Evidence
+ *   that the name was taken from the act's own Facebook page.
  */
-function validateArtistData(artistData) {
+function validateArtistData(artistData, options = {}) {
   const errors = [];
   const { name } = artistData || {};
+  const { verifiedSourceName, facebookUrl } = options;
 
   if (!name) {
     return { valid: false, errors: ['Artist name is required'] };
@@ -164,7 +174,14 @@ function validateArtistData(artistData) {
     );
   }
 
-  if (isListingCopyName(name)) {
+  // §2A.5 verified-source-name exception (Fix #7, 2026-07-30):
+  // When the act's own Facebook page name IS the billing string (verified by
+  // the caller with facebookUrl evidence), skip the listing-copy check.
+  // The full name is legitimate — e.g., "NU CALL - Nu-Metal Tribute Band"
+  // where that's literally what their Facebook page is called.
+  const skipListingCopyCheck = verifiedSourceName === true && facebookUrl;
+
+  if (!skipListingCopyCheck && isListingCopyName(name)) {
     errors.push(
       `listing_copy_name: Artist name "${name}" contains listing/promo copy, not just the act's name. ` +
       `Suggested clean name: "${sanitizeBillingName(name)}". Resolve THAT against existing artists ` +
@@ -175,6 +192,8 @@ function validateArtistData(artistData) {
   return {
     valid: errors.length === 0,
     errors,
+    // Return verifiedSourceName flag so caller can record it on the artist
+    ...(skipListingCopyCheck ? { verifiedSourceName: true, verifiedSourceUrl: facebookUrl } : {})
   };
 }
 

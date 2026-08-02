@@ -41,24 +41,91 @@ async function handleGetArtistAvailability(deps, event) {
   console.log('ARTIST_AVAILABILITY: Query received', { artistId, startDate: start, endDate: end });
 
   try {
-    // Query availability events for this artist
-    const result = await dynamodb.query({
-      TableName: EVENTS_TABLE,
-      IndexName: 'artistId-date-index',
-      KeyConditionExpression: 'artistId = :artistId AND #date BETWEEN :start AND :end',
-      FilterExpression: '#type = :available',
-      ExpressionAttributeNames: { '#date': 'date', '#type': 'type' },
-      ExpressionAttributeValues: {
-        ':artistId': artistId,
-        ':start': start,
-        ':end': end,
-        ':available': 'available'
-      }
+    // Fetch artist to check availabilityMode and publishAvailability
+    const artistResult = await dynamodb.get({
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
     }).promise();
 
-    const availability = result.Items || [];
+    const artist = artistResult.Item;
+    const publishAvailability = artist?.publishAvailability || false;
+    const availabilityMode = artist?.availabilityMode || 'selected_dates_only';
 
-    console.log('ARTIST_AVAILABILITY: Found availability', { artistId, count: availability.length });
+    // Return empty if publishAvailability is false
+    if (!publishAvailability) {
+      console.log('ARTIST_AVAILABILITY: publishAvailability is false, returning empty');
+      return {
+        statusCode: 200,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ availability: [] })
+      };
+    }
+
+    let availability = [];
+
+    if (availabilityMode === 'free_weekends') {
+      // Generate all Fri/Sat/Sun dates in range
+      const weekendDates = [];
+      let currentDate = new Date(start);
+      const endDateObj = new Date(end);
+
+      while (currentDate <= endDateObj) {
+        const dayOfWeek = currentDate.getDay();
+        // Friday (5), Saturday (6), Sunday (0)
+        if (dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6) {
+          const dateStr = currentDate.toISOString().split('T')[0];
+          weekendDates.push(dateStr);
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      console.log('ARTIST_AVAILABILITY: Generated weekend dates', { count: weekendDates.length });
+
+      // For each weekend date, check if any events exist (each day evaluated independently)
+      for (const date of weekendDates) {
+        const eventsOnDate = await dynamodb.query({
+          TableName: EVENTS_TABLE,
+          IndexName: 'artistId-date-index',
+          KeyConditionExpression: 'artistId = :artistId AND #date = :date',
+          ExpressionAttributeNames: { '#date': 'date' },
+          ExpressionAttributeValues: {
+            ':artistId': artistId,
+            ':date': date
+          }
+        }).promise();
+
+        // Include date only if no events exist
+        if (!eventsOnDate.Items || eventsOnDate.Items.length === 0) {
+          availability.push({
+            id: `free-${date}`,
+            artistId,
+            date,
+            type: 'free_weekend',
+            notes: 'Free weekend day'
+          });
+        }
+      }
+
+      console.log('ARTIST_AVAILABILITY: Free weekends found', { artistId, count: availability.length });
+    } else {
+      // Selected dates only mode - query for type="available" events
+      const result = await dynamodb.query({
+        TableName: EVENTS_TABLE,
+        IndexName: 'artistId-date-index',
+        KeyConditionExpression: 'artistId = :artistId AND #date BETWEEN :start AND :end',
+        FilterExpression: '#type = :available',
+        ExpressionAttributeNames: { '#date': 'date', '#type': 'type' },
+        ExpressionAttributeValues: {
+          ':artistId': artistId,
+          ':start': start,
+          ':end': end,
+          ':available': 'available'
+        }
+      }).promise();
+
+      availability = result.Items || [];
+      console.log('ARTIST_AVAILABILITY: Selected dates found', { artistId, count: availability.length });
+    }
 
     return {
       statusCode: 200,

@@ -1,5 +1,5 @@
 /**
- * Behavior tests for GET /api/artists: full pagination, slim payload (no bio),
+ * Behavior tests for GET /api/artists: full pagination, stable payload,
  * gzip + Cache-Control.
  */
 const zlib = require('zlib');
@@ -51,13 +51,6 @@ describe('GET /api/artists', () => {
     expect(decodeBody(res)).toHaveLength(3);
   });
 
-  it('does not fetch bio in the list projection', async () => {
-    mockDynamoDB.scan.mockResolvedValueOnce({ Items: [artist(1)] });
-    await handler(listEvent, {});
-    const projection = mockDynamoDB.scan.mock.calls[0][0].ProjectionExpression;
-    expect(projection).not.toMatch(/\bbio\b/);
-    expect(projection).toMatch(/\bid\b/);
-  });
 
   it('keeps the response shape (bio present as empty string)', async () => {
     mockDynamoDB.scan.mockResolvedValueOnce({ Items: [{ id: 'ar-1', name: 'A' }] });

@@ -114,6 +114,25 @@ async function handleListVenuesMcp(deps, event) {
   const { dynamodb, getCorsHeaders } = deps;
   const queryParams = event.queryStringParameters || {};
 
+  // Known parameter names - reject any unknown ones to prevent silent filter failures
+  const KNOWN_PARAMS = new Set([
+    'limit', 'offset',
+    'missingSocials', 'missingAddress', 'missingCity', 'missingCoordinates',
+    'region', 'city', 'createdSince', 'aiCreated'
+  ]);
+  const unknownParams = Object.keys(queryParams).filter(p => !KNOWN_PARAMS.has(p));
+  if (unknownParams.length > 0) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        error: `Unknown parameter(s): ${unknownParams.join(', ')}`,
+        knownParameters: Array.from(KNOWN_PARAMS),
+        message: 'Unknown parameters are rejected to prevent silent filter failures. Check parameter names.'
+      })
+    };
+  }
+
   // Parse pagination params
   const limit = Math.min(parseInt(queryParams.limit) || 100, 500);
   const offset = parseInt(queryParams.offset) || 0;
@@ -322,7 +341,7 @@ async function handleGetVenueById(deps, venueId, event) {
       ai_created: result.Item.ai_created,
       needs_review: result.Item.needs_review,
       created_source: result.Item.created_source,
-      createdAt: result.Item.created_at,
+      createdAt: result.Item.createdAt,
       updatedAt: result.Item.updated_at
     };
 
@@ -406,7 +425,7 @@ async function handleGetVenueByExternalId(deps, event) {
       ai_created: matchingVenue.ai_created,
       needs_review: matchingVenue.needs_review,
       created_source: matchingVenue.created_source,
-      createdAt: matchingVenue.created_at,
+      createdAt: matchingVenue.createdAt,
       updatedAt: matchingVenue.updated_at
     };
 
@@ -474,7 +493,7 @@ async function handleCreateVenue(deps, venueData, event) {
     ai_created: venueData.ai_created || false,
     needs_review: venueData.needs_review || false,
     created_source: venueData.created_source || venueData.source,
-    created_at: now,
+    createdAt: now,
     updated_at: now
   };
 
@@ -592,23 +611,31 @@ async function handleUpdateVenue(deps, venueId, venueData, event) {
     socialMediaUrls: 'social_media_urls',
     profileImageUrl: 'profile_image_url',
     standardTicketed: 'standard_ticketed',
+    isTicketed: 'standard_ticketed',  // alias for backstage UI
     standardTicketInformation: 'standard_ticket_information',
+    ticketInformation: 'standard_ticket_information',  // alias for backstage UI
     standardTicketUrl: 'standard_ticket_url',
+    ticketUrl: 'standard_ticket_url',  // alias for backstage UI
     externalIds: 'external_ids',
     enrichment_status: 'enrichment_status',
     enrichment_data: 'enrichment_data'
   };
 
+  // Track which DB fields have been processed (avoid duplicates from aliases)
+  const processedDbKeys = new Set();
+
   // Process each provided field
   Object.keys(venueData).forEach(frontendKey => {
     const dbKey = fieldMappings[frontendKey];
     if (!dbKey) return; // Skip unknown fields
+    if (processedDbKeys.has(dbKey)) return; // Skip if already processed (alias)
 
     const value = venueData[frontendKey];
 
     // Special handling for null values (REMOVE operation)
     if (value === null) {
       removeExpressions.push(dbKey);
+      processedDbKeys.add(dbKey);
       return;
     }
 
@@ -621,6 +648,7 @@ async function handleUpdateVenue(deps, venueId, venueData, event) {
     }
 
     expressionAttributeValues[`:${dbKey}`] = value;
+    processedDbKeys.add(dbKey);
   });
 
   // Build update expression with both SET and REMOVE clauses
@@ -676,7 +704,7 @@ async function handleUpdateVenue(deps, venueId, venueData, event) {
       ai_created: result.Attributes.ai_created,
       needs_review: result.Attributes.needs_review,
       created_source: result.Attributes.created_source,
-      createdAt: result.Attributes.created_at,
+      createdAt: result.Attributes.createdAt,
       updatedAt: result.Attributes.updated_at
     };
 

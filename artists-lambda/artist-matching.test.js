@@ -12,6 +12,7 @@ const mockDynamoDB = {
   query: jest.fn(),
   put: jest.fn(),
   get: jest.fn(),
+  transactWrite: jest.fn(),
 };
 
 jest.mock('aws-sdk', () => ({
@@ -20,6 +21,7 @@ jest.mock('aws-sdk', () => ({
       query: (params) => ({ promise: () => mockDynamoDB.query(params) }),
       put: (params) => ({ promise: () => mockDynamoDB.put(params) }),
       get: (params) => ({ promise: () => mockDynamoDB.get(params) }),
+      transactWrite: (params) => ({ promise: () => mockDynamoDB.transactWrite(params) }),
     })),
   },
   SSM: jest.fn(() => ({
@@ -457,6 +459,107 @@ describe('Artist Find-or-Create Matching (#50)', () => {
       expect(result.statusCode).toBe(200);
       expect(body.action).toBe('review');
       expect(body.reason).toContain('margin');
+    });
+  });
+
+  // =========================================================================
+  // RESOLUTION PARAMS (Blocker #1 fix): resolveTo + confirmNew
+  // When action:review is returned, caller can retry with resolution params
+  // =========================================================================
+  describe('Review resolution params (resolveTo/confirmNew)', () => {
+    it('should match existing artist when resolveTo contains valid candidate id', async () => {
+      // Scenario: Review was returned with candidates. Caller picks one.
+      // The candidate exists in the database.
+      mockDynamoDB.query.mockResolvedValue({ Items: [] }); // No candidates from search
+      mockDynamoDB.get.mockImplementation((params) => {
+        if (params.Key?.id === 'existing-artist-123') {
+          return Promise.resolve({
+            Item: { id: 'existing-artist-123', name: 'Midnight Shift', location: 'Derby' }
+          });
+        }
+        return Promise.resolve({});
+      });
+
+      const event = createFindOrCreateRequest('Midnight Shift', {
+        resolveTo: 'existing-artist-123'
+      });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(200);
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('existing-artist-123');
+      expect(body.matchedBy).toBe('manual_resolution');
+    });
+
+    it('should return error when resolveTo contains invalid artist id', async () => {
+      mockDynamoDB.query.mockResolvedValue({ Items: [] });
+      mockDynamoDB.get.mockResolvedValue({}); // Artist not found
+
+      const event = createFindOrCreateRequest('Midnight Shift', {
+        resolveTo: 'invalid-artist-id'
+      });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(400);
+      expect(body.error).toContain('resolveTo');
+    });
+
+    it('should create new artist when confirmNew is true (bypassing similarity matching)', async () => {
+      // Scenario: Review was returned with candidates, but caller confirms this is genuinely new.
+      // The create should proceed despite shared tokens.
+      mockDynamoDB.query.mockResolvedValue({
+        Items: [
+          { id: 'midnight-shindig', name: 'Midnight Shindig', location: 'North West' },
+          { id: 'midnight-echoes', name: 'Midnight Echoes', location: 'Sunderland' },
+        ]
+      });
+      mockDynamoDB.put.mockResolvedValue({});
+      mockDynamoDB.transactWrite.mockResolvedValue({}); // For unique-gate sentinel creation
+
+      const event = createFindOrCreateRequest('Midnight Shift', {
+        confirmNew: true,
+        artist_type: 'band',
+        location: 'Derbyshire'
+      });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      // Should create despite candidates existing
+      expect([200, 201]).toContain(result.statusCode);
+      expect(body.action).toBe('created');
+    });
+
+    it('should reject when both resolveTo and confirmNew are provided', async () => {
+      const event = createFindOrCreateRequest('Some Artist', {
+        resolveTo: 'some-id',
+        confirmNew: true
+      });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(400);
+      expect(body.error).toContain('resolveTo');
+      expect(body.error).toContain('confirmNew');
+    });
+
+    it('should return review as before when neither resolveTo nor confirmNew provided', async () => {
+      // Standard behavior: candidates exist, no resolution → review
+      mockDynamoDB.query.mockResolvedValue({
+        Items: [
+          { id: 'midnight-shindig', name: 'Midnight Shindig', location: 'North West' },
+          { id: 'midnight-echoes', name: 'Midnight Echoes', location: 'Sunderland' },
+        ]
+      });
+
+      const event = createFindOrCreateRequest('Midnight Shift');
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(200);
+      expect(body.action).toBe('review');
+      expect(body.candidates.length).toBeGreaterThan(0);
     });
   });
 

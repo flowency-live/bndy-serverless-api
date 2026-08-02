@@ -150,17 +150,9 @@ function isFutureEvent(event) {
 }
 
 async function categorizeOrphans(orphans) {
-  const autoDelete = [];
+  // Delete ALL orphans (user approved 2026-07-29)
+  const autoDelete = orphans;
   const manualReview = [];
-
-  orphans.forEach(({ event, deadArtistIds, allArtistIds }) => {
-    // Auto-delete criteria: future-dated AND import-only
-    if (isFutureEvent(event) && isImportOnlyEvent(event)) {
-      autoDelete.push({ event, deadArtistIds, allArtistIds });
-    } else {
-      manualReview.push({ event, deadArtistIds, allArtistIds });
-    }
-  });
 
   return { autoDelete, manualReview };
 }

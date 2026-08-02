@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const ngeohash = require('ngeohash');
 const { stripPrivateFields, EVENTS_TABLE, VENUES_TABLE, getVenue, checkForDuplicateEvent, checkForDuplicateByExternalId, ensureVenueRelationship, putEventGated } = require('../lib/event-data');
 const { duplicateResponseBody } = require('../lib/unique-gate');
+const { resolveTicketing } = require('./ticketing-resolution');
 const { computeGeohashFields } = require('../lib/geohash');
 const { parseBbox, validateDateWindow, planBboxQuery, GH6_INDEX } = require('../lib/geo-query');
 const { verifyMembership } = require('../lib/auth');
@@ -270,24 +271,32 @@ async function handleBatchEventsWithJoins(deps, event) {
     batchGetByIds(dynamodb, VENUES_TABLE, venueIds)
   ]);
 
-  // Join events with artist and venue data
-  const enrichedEvents = events.map(e => ({
-    ...e,
-    artist: e.artistId && artistMap[e.artistId] ? {
-      id: artistMap[e.artistId].id,
-      name: artistMap[e.artistId].name,
-      genres: artistMap[e.artistId].genres,
-      profileImageUrl: artistMap[e.artistId].profileImageUrl
-    } : null,
-    venue: e.venueId && venueMap[e.venueId] ? {
-      id: venueMap[e.venueId].id,
-      name: venueMap[e.venueId].name,
-      address: venueMap[e.venueId].address,
-      city: venueMap[e.venueId].city,
-      latitude: venueMap[e.venueId].latitude,
-      longitude: venueMap[e.venueId].longitude
-    } : null
-  }));
+  // Join events with artist, venue, and resolved ticketing data
+  const enrichedEvents = events.map(e => {
+    const venue = e.venueId ? venueMap[e.venueId] : null;
+    const ticketing = resolveTicketing(e, venue);
+
+    return {
+      ...e,
+      artist: e.artistId && artistMap[e.artistId] ? {
+        id: artistMap[e.artistId].id,
+        name: artistMap[e.artistId].name,
+        genres: artistMap[e.artistId].genres,
+        profileImageUrl: artistMap[e.artistId].profileImageUrl
+      } : null,
+      venue: venue ? {
+        id: venue.id,
+        name: venue.name,
+        address: venue.address,
+        city: venue.city,
+        latitude: venue.latitude,
+        longitude: venue.longitude,
+        standardTicketed: venue.standardTicketed,
+        standardTicketUrl: venue.standardTicketUrl
+      } : null,
+      ticketing
+    };
+  });
 
   console.log('BATCH_EVENTS: Returning enriched events', { count: enrichedEvents.length });
 
@@ -338,19 +347,27 @@ async function handleGetVenueEvents(deps, event) {
   // Collect unique artistIds
   const artistIds = [...new Set(events.map(e => e.artistId).filter(Boolean))];
 
-  // Batch get artists (BatchGetItem, chunks of 25)
-  const artistMap = await batchGetByIds(dynamodb, ARTISTS_TABLE, artistIds);
+  // Batch get artists and venue (BatchGetItem, chunks of 25)
+  const [artistMap, venueResult] = await Promise.all([
+    batchGetByIds(dynamodb, ARTISTS_TABLE, artistIds),
+    dynamodb.get({ TableName: VENUES_TABLE, Key: { id: venueId } }).promise()
+  ]);
+  const venue = venueResult.Item || null;
 
-  // Join events with artist data
-  const enrichedEvents = events.map(e => ({
-    ...e,
-    artist: e.artistId && artistMap[e.artistId] ? {
-      id: artistMap[e.artistId].id,
-      name: artistMap[e.artistId].name,
-      genres: artistMap[e.artistId].genres,
-      profileImageUrl: artistMap[e.artistId].profileImageUrl
-    } : null
-  }));
+  // Join events with artist data and resolved ticketing
+  const enrichedEvents = events.map(e => {
+    const ticketing = resolveTicketing(e, venue);
+    return {
+      ...e,
+      artist: e.artistId && artistMap[e.artistId] ? {
+        id: artistMap[e.artistId].id,
+        name: artistMap[e.artistId].name,
+        genres: artistMap[e.artistId].genres,
+        profileImageUrl: artistMap[e.artistId].profileImageUrl
+      } : null,
+      ticketing
+    };
+  });
 
   return jsonResponse(event, 200, { events: enrichedEvents }, {
     corsHeaders: getCorsHeaders(event),
@@ -424,6 +441,9 @@ async function handleGetAllPublicEvents(deps, event) {
     // Strip private fee fields for public endpoint
     const enrichedEvents = allEvents.map(e => {
       const sanitizedEvent = stripPrivateFields(e);
+      const venue = sanitizedEvent.venueId ? venueMap[sanitizedEvent.venueId] : null;
+      const ticketing = resolveTicketing(e, venue);
+
       // Build full artistIds array (primary + collaborating)
       const eventArtistIds = sanitizedEvent.artistId ? [sanitizedEvent.artistId] : [];
       if (sanitizedEvent.collaboratingArtistIds && Array.isArray(sanitizedEvent.collaboratingArtistIds)) {
@@ -437,10 +457,11 @@ async function handleGetAllPublicEvents(deps, event) {
         artistName: artistMap[sanitizedEvent.artistId]?.name,
         artistIds: eventArtistIds.length > 0 ? eventArtistIds : undefined,
         artistNames: eventArtistNames.length > 0 ? eventArtistNames : undefined,
-        venueName: venueMap[sanitizedEvent.venueId]?.name,
-        venue: venueMap[sanitizedEvent.venueId] ? {
-          city: venueMap[sanitizedEvent.venueId].city
-        } : null
+        venueName: venue?.name,
+        venue: venue ? {
+          city: venue.city
+        } : null,
+        ticketing
       };
     });
 
@@ -538,15 +559,17 @@ async function handleGetArtistPublicEvents(deps, event) {
     const venueIds = [...new Set(events.map(e => e.venueId).filter(Boolean))];
     const venueMap = await batchGetByIds(dynamodb, VENUES_TABLE, venueIds);
 
-    // Join events with venue data
+    // Join events with venue data and resolved ticketing
     // Strip private fee fields for public endpoint
     const enrichedEvents = events.map(e => {
       const sanitizedEvent = stripPrivateFields(e);
-      const venue = venueMap[sanitizedEvent.venueId];
+      const venue = venueMap[sanitizedEvent.venueId] || null;
+      const ticketing = resolveTicketing(e, venue);
       return {
         ...sanitizedEvent,
         venueName: venue?.name || sanitizedEvent.venueName || 'Unknown Venue',
-        venueCity: venue?.city || null
+        venueCity: venue?.city || null,
+        ticketing
       };
     });
 
