@@ -2,7 +2,113 @@
 // Handles: /api/songs, /api/songs/:id
 
 const AWS = require('aws-sdk');
+const jwt = require('jsonwebtoken');
+
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
+const ssm = new AWS.SSM({ region: 'eu-west-2' });
+
+// JWT Secret - cached after first retrieval
+let JWT_SECRET = null;
+
+/**
+ * Get JWT secret from SSM Parameter Store with fallback to env var
+ */
+async function getJWTSecret() {
+  if (JWT_SECRET) {
+    return JWT_SECRET;
+  }
+
+  try {
+    const result = await ssm.getParameter({
+      Name: '/bndy/auth/jwt-secret',
+      WithDecryption: true
+    }).promise();
+    JWT_SECRET = result.Parameter.Value;
+    console.log('[SONGS] JWT_SECRET loaded from SSM');
+    return JWT_SECRET;
+  } catch (error) {
+    console.error('[SONGS] Failed to get JWT_SECRET from SSM:', error.message);
+    if (process.env.JWT_SECRET) {
+      JWT_SECRET = process.env.JWT_SECRET;
+      console.log('[SONGS] JWT_SECRET loaded from environment variable (fallback)');
+      return JWT_SECRET;
+    }
+    throw new Error('JWT_SECRET not available from SSM or environment');
+  }
+}
+
+/**
+ * Parse cookies from event
+ */
+const parseCookies = (cookieHeader) => {
+  if (!cookieHeader) return {};
+  return cookieHeader.split(';').reduce((cookies, cookie) => {
+    const [name, value] = cookie.trim().split('=');
+    cookies[name] = value;
+    return cookies;
+  }, {});
+};
+
+/**
+ * Authentication middleware
+ */
+const requireAuth = async (event) => {
+  let sessionToken = null;
+
+  if (event.cookies && Array.isArray(event.cookies)) {
+    const cookieString = event.cookies.find(c => c.startsWith('bndy_session='));
+    if (cookieString) {
+      sessionToken = cookieString.split('=')[1];
+    }
+  } else {
+    const cookies = parseCookies(event.headers?.Cookie || event.headers?.cookie || '');
+    sessionToken = cookies.bndy_session;
+  }
+
+  if (!sessionToken) {
+    return { error: 'Not authenticated' };
+  }
+
+  try {
+    const jwtSecret = await getJWTSecret();
+    const session = jwt.verify(sessionToken, jwtSecret);
+
+    // Fetch user to check platformAdmin flag
+    const userResult = await dynamodb.get({
+      TableName: 'bndy-users',
+      Key: { cognito_id: session.userId }
+    }).promise();
+
+    const platformAdmin = userResult.Item?.platformAdmin || false;
+
+    return {
+      user: {
+        ...session,
+        platformAdmin
+      }
+    };
+  } catch (error) {
+    console.error('[SONGS] Invalid session token:', error.message);
+    return { error: 'Invalid session' };
+  }
+};
+
+/**
+ * Require platform admin authentication
+ * Returns { user } on success, { error, statusCode } on failure
+ */
+const requirePlatformAdmin = async (event) => {
+  const authResult = await requireAuth(event);
+  if (authResult.error) {
+    return { error: authResult.error, statusCode: 401 };
+  }
+
+  if (!authResult.user.platformAdmin) {
+    return { error: 'Platform admin access required', statusCode: 403 };
+  }
+
+  return authResult;
+};
 
 const ALLOWED_ORIGINS = [
   'https://www.bndy.co.uk',       // Primary domain
@@ -58,6 +164,16 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'DELETE' && event.pathParameters?.id) {
+      // SEC-XX: Require platformAdmin for song deletion (godmode only)
+      const authResult = await requirePlatformAdmin(event);
+      if (authResult.error) {
+        return {
+          statusCode: authResult.statusCode || 401,
+          headers: getCorsHeaders(),
+          body: JSON.stringify({ error: authResult.error })
+        };
+      }
+
       const queryParams = event.queryStringParameters || {};
       if (queryParams.force === 'true') {
         return await handleForceDeleteSong(event.pathParameters.id);

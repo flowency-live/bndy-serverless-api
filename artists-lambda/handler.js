@@ -18,7 +18,7 @@ const { artistIdentityKey, artistUniqueKey, facebookKey, normaliseKey, regionBuc
 const { gatedPut, rekeyUniqueKeys, releaseUniqueKeys, duplicateResponseBody, gateMode } = require('./lib/unique-gate');
 const { validateArtistData } = require('./lib/data-quality');
 const { deleteArtistEvents } = require('./lib/cascade-delete-events');
-const { hasEventsForArtist } = require('./lib/artist-event-guard');
+const { hasEventsForArtist, countEventsForArtist } = require('./lib/artist-event-guard');
 
 /**
  * Sentinel keys for an artist record (2026-07-27 gate plan):
@@ -538,6 +538,23 @@ exports.handler = async (event, context) => {
       if (path.includes('/mcp')) {
         return await handleMCPDeleteArtist(event.pathParameters.id);
       }
+
+      // SEC-XX: Require platformAdmin for artist deletion (godmode only)
+      const authResult = await requirePlatformAdmin(event);
+      if (authResult.error) {
+        return {
+          statusCode: authResult.statusCode || 401,
+          headers: getCorsHeaders(),
+          body: JSON.stringify({ error: authResult.error })
+        };
+      }
+
+      // Check for force delete (cascade delete events)
+      const queryParams = event.queryStringParameters || {};
+      if (queryParams.force === 'true') {
+        return await handleForceDeleteArtist(event.pathParameters.id);
+      }
+
       return await handleDeleteArtist(event.pathParameters.id);
     }
 
@@ -1568,17 +1585,19 @@ async function handleDeleteArtist(artistId) {
   try {
     // Step 1: Check if any events reference this artist (Fix #6b, 2026-07-29)
     // Refuse deletion to prevent orphan events with dead artistIds
-    const hasEvents = await hasEventsForArtist(dynamodb, artistId);
-    if (hasEvents) {
-      console.log(` ✗ Artist ${artistId} has events - refusing deletion`);
+    const eventCheck = await countEventsForArtist(dynamodb, artistId);
+    if (eventCheck.totalCount > 0) {
+      console.log(` ✗ Artist ${artistId} has ${eventCheck.totalCount} events - refusing deletion`);
       return {
         statusCode: 409,
         headers: getCorsHeaders(),
         body: JSON.stringify({
           error: 'Artist has events',
           code: 'ARTIST_HAS_EVENTS',
-          message: 'Cannot delete artist while events reference it. Delete or reassign events first.',
-          artistId
+          message: `This artist has ${eventCheck.totalCount} event(s). Delete them too?`,
+          artistId,
+          eventCount: eventCheck.totalCount,
+          requiresConfirmation: true
         })
       };
     }
@@ -1627,6 +1646,70 @@ async function handleDeleteArtist(artistId) {
     };
   } catch (error) {
     console.error(' Artist deletion failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Force delete artist and all associated events (cascade delete)
+ * Called when user confirms deletion after 409 response
+ */
+async function handleForceDeleteArtist(artistId) {
+  console.log(` Artists Lambda: Force deleting artist and events: ${artistId}`);
+
+  try {
+    // Step 1: Get all event IDs for this artist
+    const eventCheck = await countEventsForArtist(dynamodb, artistId);
+    console.log(` Found ${eventCheck.totalCount} events to cascade delete`);
+
+    // Step 2: Delete all events referencing this artist
+    if (eventCheck.totalCount > 0) {
+      await deleteArtistEvents(dynamodb, artistId, eventCheck.eventIds);
+      console.log(` Deleted ${eventCheck.totalCount} events`);
+    }
+
+    // Step 3: Delete memberships (cascade)
+    const membershipQueryParams = {
+      TableName: MEMBERSHIPS_TABLE,
+      IndexName: 'artist_id-index',
+      KeyConditionExpression: 'artist_id = :artistId',
+      ExpressionAttributeValues: {
+        ':artistId': artistId
+      }
+    };
+
+    const membershipsResult = await dynamodb.query(membershipQueryParams).promise();
+    console.log(` Found ${membershipsResult.Items.length} memberships to delete`);
+
+    for (const membership of membershipsResult.Items) {
+      await dynamodb.delete({
+        TableName: MEMBERSHIPS_TABLE,
+        Key: { membership_id: membership.membership_id }
+      }).promise();
+    }
+
+    // Step 4: Delete the artist record + release uniqueness sentinels
+    const artistParams = {
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
+    };
+
+    const artistRecord = await dynamodb.get(artistParams).promise();
+    await dynamodb.delete(artistParams).promise();
+    if (artistRecord.Item) {
+      const { keys } = buildArtistUniqueKeys(artistRecord.Item.name, artistRecord.Item.location, artistRecord.Item.facebookUrl, artistRecord.Item.name_variants);
+      await releaseUniqueKeys(dynamodb, keys, artistId);
+    }
+
+    console.log(` Force delete complete: artist ${artistId}, ${eventCheck.totalCount} events, ${membershipsResult.Items.length} memberships`);
+
+    return {
+      statusCode: 204,
+      headers: getCorsHeaders(),
+      body: ''
+    };
+  } catch (error) {
+    console.error(' Artist force deletion failed:', error);
     throw error;
   }
 }

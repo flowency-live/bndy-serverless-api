@@ -16,6 +16,17 @@ const EVENTS_TABLE = 'bndy-events';
  * Returns true if ANY events reference the artist.
  */
 async function hasEventsForArtist(dynamodb, artistId) {
+  const result = await countEventsForArtist(dynamodb, artistId);
+  return result.totalCount > 0;
+}
+
+/**
+ * Count all events referencing this artist across all artist fields.
+ * Returns { totalCount, eventIds } for use in 409 responses and force delete.
+ */
+async function countEventsForArtist(dynamodb, artistId) {
+  const eventIds = [];
+
   // Check 1: Primary artist (artistId field) via artistId-date-index
   const primaryQuery = {
     TableName: EVENTS_TABLE,
@@ -24,37 +35,53 @@ async function hasEventsForArtist(dynamodb, artistId) {
     ExpressionAttributeValues: {
       ':artistId': artistId
     },
-    Limit: 1  // We only need to know if ANY exist
+    ProjectionExpression: 'id'
   };
 
-  const primaryResult = await dynamodb.query(primaryQuery).promise();
-  if (primaryResult.Items && primaryResult.Items.length > 0) {
-    console.log(`✗ Artist ${artistId} has ${primaryResult.Count}+ events as primary artist`);
-    return true;
+  let primaryResult = await dynamodb.query(primaryQuery).promise();
+  eventIds.push(...(primaryResult.Items || []).map(e => e.id));
+
+  // Handle pagination for primary query
+  while (primaryResult.LastEvaluatedKey) {
+    primaryQuery.ExclusiveStartKey = primaryResult.LastEvaluatedKey;
+    primaryResult = await dynamodb.query(primaryQuery).promise();
+    eventIds.push(...(primaryResult.Items || []).map(e => e.id));
   }
 
   // Check 2: Legacy artistIds[] field + collaboratingArtistIds[]
-  // These don't have indexes, so we need to scan with filter
-  // (This is acceptable for a DELETE guard - deletion is infrequent)
   const scanParams = {
     TableName: EVENTS_TABLE,
     FilterExpression: 'contains(artistIds, :artistId) OR contains(collaboratingArtistIds, :artistId)',
     ExpressionAttributeValues: {
       ':artistId': artistId
     },
-    Limit: 1  // We only need to know if ANY exist
+    ProjectionExpression: 'id'
   };
 
-  const scanResult = await dynamodb.scan(scanParams).promise();
-  if (scanResult.Items && scanResult.Items.length > 0) {
-    console.log(`✗ Artist ${artistId} has ${scanResult.Count}+ events in artistIds[] or collaboratingArtistIds[]`);
-    return true;
+  let scanResult = await dynamodb.scan(scanParams).promise();
+  eventIds.push(...(scanResult.Items || []).map(e => e.id));
+
+  // Handle pagination for scan
+  while (scanResult.LastEvaluatedKey) {
+    scanParams.ExclusiveStartKey = scanResult.LastEvaluatedKey;
+    scanResult = await dynamodb.scan(scanParams).promise();
+    eventIds.push(...(scanResult.Items || []).map(e => e.id));
   }
 
-  console.log(`✓ Artist ${artistId} has zero events - safe to delete`);
-  return false;
+  // Dedupe event IDs (in case same event appears in multiple fields)
+  const uniqueEventIds = [...new Set(eventIds)];
+  const totalCount = uniqueEventIds.length;
+
+  if (totalCount > 0) {
+    console.log(`✗ Artist ${artistId} has ${totalCount} events`);
+  } else {
+    console.log(`✓ Artist ${artistId} has zero events - safe to delete`);
+  }
+
+  return { totalCount, eventIds: uniqueEventIds };
 }
 
 module.exports = {
-  hasEventsForArtist
+  hasEventsForArtist,
+  countEventsForArtist
 };

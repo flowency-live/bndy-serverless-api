@@ -50,15 +50,31 @@ async function batchDeleteEvents(dynamodb, ids) {
 /**
  * Delete every event whose artistId matches. Returns { deleted, audit } where
  * audit is a compact record of each removed event for the caller to log.
+ *
+ * If eventIds is provided, deletes those specific events.
+ * Otherwise, queries for all events matching the artistId.
  */
-async function deleteArtistEvents(dynamodb, artistId) {
-  const events = await queryAllArtistEvents(dynamodb, artistId);
-  if (events.length === 0) return { deleted: 0, audit: [] };
-  const audit = events.map((e) => ({
-    id: e.id, date: e.date, venueId: e.venueId ?? null, name: e.name ?? null, isPublic: e.isPublic ?? null,
-  }));
-  await batchDeleteEvents(dynamodb, events.map((e) => e.id));
-  return { deleted: events.length, audit };
+async function deleteArtistEvents(dynamodb, artistId, eventIds = null) {
+  let idsToDelete = eventIds;
+  let audit = [];
+
+  if (!idsToDelete) {
+    // Legacy behavior: query and delete
+    const events = await queryAllArtistEvents(dynamodb, artistId);
+    if (events.length === 0) return { deleted: 0, audit: [] };
+    audit = events.map((e) => ({
+      id: e.id, date: e.date, venueId: e.venueId ?? null, name: e.name ?? null, isPublic: e.isPublic ?? null,
+    }));
+    idsToDelete = events.map((e) => e.id);
+  } else {
+    // New behavior: use provided IDs
+    audit = idsToDelete.map((id) => ({ id }));
+  }
+
+  if (idsToDelete.length === 0) return { deleted: 0, audit: [] };
+
+  await batchDeleteEvents(dynamodb, idsToDelete);
+  return { deleted: idsToDelete.length, audit };
 }
 
 module.exports = { deleteArtistEvents, queryAllArtistEvents, batchDeleteEvents, EVENTS_TABLE };

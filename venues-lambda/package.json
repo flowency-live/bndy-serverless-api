@@ -9,6 +9,7 @@
   "dependencies": {
     "aws-sdk": "^2.1692.0",
     "@googlemaps/google-maps-services-js": "^3.4.2",
+    "jsonwebtoken": "^9.0.2",
     "ngeohash": "^0.6.3"
   },
   "devDependencies": {
