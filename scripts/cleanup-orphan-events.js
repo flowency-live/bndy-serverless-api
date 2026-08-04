@@ -11,6 +11,13 @@
  *
  * Fix: Scan ALL events, verify all artist references exist, delete future-dated
  * import-only orphans, report rest for manual review.
+ *
+ * IMPORTANT (2026-08-04): NEVER delete events that are:
+ *   - type: 'unavailable', 'rehearsal', 'other', 'blocked' (backstage events)
+ *   - ownerUserId set (member-created unavailability)
+ *   - non-public without venue (likely backstage, not orphaned gigs)
+ * These are legitimate records, not orphaned public gigs. 182 events were
+ * accidentally deleted and had to be restored via PITR.
  */
 
 const AWS = require('aws-sdk');
@@ -150,9 +157,38 @@ function isFutureEvent(event) {
 }
 
 async function categorizeOrphans(orphans) {
-  // Delete ALL orphans (user approved 2026-07-29)
-  const autoDelete = orphans;
+  // GUARD: Never delete member-created events (unavailability, rehearsals, etc.)
+  // These are legitimate backstage records, not orphaned public gigs.
+  // Fix applied 2026-08-04 after accidental deletion of 182 events.
+  const PROTECTED_TYPES = ['unavailable', 'rehearsal', 'other', 'blocked'];
+
+  const autoDelete = [];
   const manualReview = [];
+
+  for (const orphan of orphans) {
+    const event = orphan.event;
+
+    // Protect events with ownerUserId (member-created)
+    if (event.ownerUserId) {
+      manualReview.push(orphan);
+      continue;
+    }
+
+    // Protect private event types
+    if (PROTECTED_TYPES.includes(event.type)) {
+      manualReview.push(orphan);
+      continue;
+    }
+
+    // Protect non-public events without a venue (likely backstage events)
+    if (!event.isPublic && !event.venueId) {
+      manualReview.push(orphan);
+      continue;
+    }
+
+    // Public gigs with dead artist references can be auto-deleted
+    autoDelete.push(orphan);
+  }
 
   return { autoDelete, manualReview };
 }
