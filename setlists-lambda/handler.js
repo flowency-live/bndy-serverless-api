@@ -1,7 +1,81 @@
 const AWS = require('aws-sdk');
 const { v4: uuidv4 } = require('uuid');
+const jwt = require('jsonwebtoken');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
+const ssm = new AWS.SSM({ region: 'eu-west-2' });
+
+// JWT Secret - cached after first retrieval
+let JWT_SECRET = null;
+
+/**
+ * Get JWT secret from SSM Parameter Store with fallback to env var
+ */
+async function getJWTSecret() {
+  if (JWT_SECRET) {
+    return JWT_SECRET;
+  }
+
+  try {
+    const result = await ssm.getParameter({
+      Name: '/bndy/auth/jwt-secret',
+      WithDecryption: true
+    }).promise();
+    JWT_SECRET = result.Parameter.Value;
+    console.log('[SETLISTS] JWT_SECRET loaded from SSM');
+    return JWT_SECRET;
+  } catch (error) {
+    console.error('[SETLISTS] Failed to get JWT_SECRET from SSM:', error.message);
+    if (process.env.JWT_SECRET) {
+      JWT_SECRET = process.env.JWT_SECRET;
+      console.log('[SETLISTS] JWT_SECRET loaded from environment variable (fallback)');
+      return JWT_SECRET;
+    }
+    throw new Error('JWT_SECRET not available from SSM or environment');
+  }
+}
+
+/**
+ * Parse cookies from event
+ */
+const parseCookies = (cookieHeader) => {
+  if (!cookieHeader) return {};
+  return cookieHeader.split(';').reduce((cookies, cookie) => {
+    const [name, value] = cookie.trim().split('=');
+    cookies[name] = value;
+    return cookies;
+  }, {});
+};
+
+/**
+ * Authentication middleware - SEC-04
+ */
+const requireAuth = async (event) => {
+  let sessionToken = null;
+
+  if (event.cookies && Array.isArray(event.cookies)) {
+    const cookieString = event.cookies.find(c => c.startsWith('bndy_session='));
+    if (cookieString) {
+      sessionToken = cookieString.split('=')[1];
+    }
+  } else {
+    const cookies = parseCookies(event.headers?.Cookie || event.headers?.cookie || '');
+    sessionToken = cookies.bndy_session;
+  }
+
+  if (!sessionToken) {
+    return { error: 'Not authenticated' };
+  }
+
+  try {
+    const jwtSecret = await getJWTSecret();
+    const session = jwt.verify(sessionToken, jwtSecret);
+    return { user: session };
+  } catch (error) {
+    console.error('[SETLISTS] Invalid session token:', error.message);
+    return { error: 'Invalid session' };
+  }
+};
 
 const ALLOWED_ORIGINS = [
   'https://www.bndy.co.uk',       // Primary domain
@@ -203,6 +277,12 @@ exports.handler = async (event) => {
 
     // POST /api/artists/{artistId}/setlists - Create new setlist
     if (method === 'POST' && path.match(/\/api\/artists\/[^/]+\/setlists$/)) {
+      // SEC-04: Require authentication for setlist creation
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const artistId = event.pathParameters?.artistId;
       const body = parseBody(event);
 
@@ -245,6 +325,12 @@ exports.handler = async (event) => {
 
     // PUT /api/artists/{artistId}/setlists/{setlistId} - Update setlist
     if (method === 'PUT' && path.match(/\/api\/artists\/[^/]+\/setlists\/[^/]+$/)) {
+      // SEC-04: Require authentication for setlist updates
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const setlistId = event.pathParameters?.setlistId;
       const body = parseBody(event);
 
@@ -282,6 +368,12 @@ exports.handler = async (event) => {
 
     // DELETE /api/artists/{artistId}/setlists/{setlistId} - Delete setlist
     if (method === 'DELETE' && path.match(/\/api\/artists\/[^/]+\/setlists\/[^/]+$/)) {
+      // SEC-04: Require authentication for setlist deletion
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const setlistId = event.pathParameters?.setlistId;
 
       if (!setlistId) {
@@ -298,6 +390,12 @@ exports.handler = async (event) => {
 
     // POST /api/artists/{artistId}/setlists/{setlistId}/copy - Copy setlist
     if (method === 'POST' && path.match(/\/api\/artists\/[^/]+\/setlists\/[^/]+\/copy$/)) {
+      // SEC-04: Require authentication for setlist copy
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const setlistId = event.pathParameters?.setlistId;
       const body = parseBody(event);
 

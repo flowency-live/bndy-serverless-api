@@ -224,10 +224,28 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'POST' && path === '/api/venues/find-or-create') {
+      // SEC-04: Require authentication for find-or-create
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return {
+          statusCode: 401,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({ error: authResult.error })
+        };
+      }
       return await handleFindOrCreateVenue(deps, parseBody(event.body), event);
     }
 
     if (method === 'POST' && path === '/api/integration/venues') {
+      // SEC-04: Require authentication for integration endpoint
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return {
+          statusCode: 401,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({ error: authResult.error })
+        };
+      }
       return await handleIntegrationCreateVenue(deps, parseBody(event.body), event);
     }
 
@@ -236,14 +254,41 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'POST' && path === '/api/venues') {
+      // SEC-04: Require authentication for venue creation
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return {
+          statusCode: 401,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({ error: authResult.error })
+        };
+      }
       return await handleCreateVenue(deps, parseBody(event.body), event);
     }
 
     if (method === 'PUT' && event.pathParameters?.id) {
+      // SEC-04: Require authentication for venue updates
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return {
+          statusCode: 401,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({ error: authResult.error })
+        };
+      }
       return await handleUpdateVenue(deps, event.pathParameters.id, parseBody(event.body), event);
     }
 
     if (method === 'POST' && event.pathParameters?.id && path.includes('/enrich')) {
+      // SEC-04: Require authentication for venue enrichment
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return {
+          statusCode: 401,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({ error: authResult.error })
+        };
+      }
       return await handleEnrichVenue(deps, event.pathParameters.id, parseBody(event.body), event);
     }
 

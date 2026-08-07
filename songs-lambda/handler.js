@@ -156,10 +156,28 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'POST' && path === '/api/songs') {
+      // SEC-04: Require authentication for song creation
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return {
+          statusCode: 401,
+          headers: getCorsHeaders(),
+          body: JSON.stringify({ error: authResult.error })
+        };
+      }
       return await handleCreateSong(JSON.parse(event.body));
     }
 
     if (method === 'PUT' && event.pathParameters?.id) {
+      // SEC-04: Require authentication for song updates
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return {
+          statusCode: 401,
+          headers: getCorsHeaders(),
+          body: JSON.stringify({ error: authResult.error })
+        };
+      }
       return await handleUpdateSong(event.pathParameters.id, JSON.parse(event.body));
     }
 

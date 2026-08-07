@@ -1,7 +1,81 @@
 const AWS = require('aws-sdk');
 const { v4: uuidv4 } = require('uuid');
+const jwt = require('jsonwebtoken');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
+const ssm = new AWS.SSM({ region: 'eu-west-2' });
+
+// JWT Secret - cached after first retrieval
+let JWT_SECRET = null;
+
+/**
+ * Get JWT secret from SSM Parameter Store with fallback to env var
+ */
+async function getJWTSecret() {
+  if (JWT_SECRET) {
+    return JWT_SECRET;
+  }
+
+  try {
+    const result = await ssm.getParameter({
+      Name: '/bndy/auth/jwt-secret',
+      WithDecryption: true
+    }).promise();
+    JWT_SECRET = result.Parameter.Value;
+    console.log('[VENUE-CRM] JWT_SECRET loaded from SSM');
+    return JWT_SECRET;
+  } catch (error) {
+    console.error('[VENUE-CRM] Failed to get JWT_SECRET from SSM:', error.message);
+    if (process.env.JWT_SECRET) {
+      JWT_SECRET = process.env.JWT_SECRET;
+      console.log('[VENUE-CRM] JWT_SECRET loaded from environment variable (fallback)');
+      return JWT_SECRET;
+    }
+    throw new Error('JWT_SECRET not available from SSM or environment');
+  }
+}
+
+/**
+ * Parse cookies from event
+ */
+const parseCookies = (cookieHeader) => {
+  if (!cookieHeader) return {};
+  return cookieHeader.split(';').reduce((cookies, cookie) => {
+    const [name, value] = cookie.trim().split('=');
+    cookies[name] = value;
+    return cookies;
+  }, {});
+};
+
+/**
+ * Authentication middleware - SEC-04
+ */
+const requireAuth = async (event) => {
+  let sessionToken = null;
+
+  if (event.cookies && Array.isArray(event.cookies)) {
+    const cookieString = event.cookies.find(c => c.startsWith('bndy_session='));
+    if (cookieString) {
+      sessionToken = cookieString.split('=')[1];
+    }
+  } else {
+    const cookies = parseCookies(event.headers?.Cookie || event.headers?.cookie || '');
+    sessionToken = cookies.bndy_session;
+  }
+
+  if (!sessionToken) {
+    return { error: 'Not authenticated' };
+  }
+
+  try {
+    const jwtSecret = await getJWTSecret();
+    const session = jwt.verify(sessionToken, jwtSecret);
+    return { user: session };
+  } catch (error) {
+    console.error('[VENUE-CRM] Invalid session token:', error.message);
+    return { error: 'Invalid session' };
+  }
+};
 
 const ALLOWED_ORIGINS = [
   'https://www.bndy.co.uk',       // Primary domain
@@ -160,6 +234,12 @@ exports.handler = async (event) => {
 
     // POST /api/artists/{artistId}/crm/venues - Create artist-venue relationship
     if (method === 'POST' && path.match(/\/api\/artists\/[^/]+\/crm\/venues$/)) {
+      // SEC-04: Require authentication for CRM venue creation
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const artistId = event.pathParameters?.artistId;
       const body = parseBody(event);
 
@@ -272,6 +352,12 @@ exports.handler = async (event) => {
 
     // PUT /api/artists/{artistId}/crm/venues/{venueId} - Update notes/custom name
     if (method === 'PUT' && path.match(/\/api\/artists\/[^/]+\/crm\/venues\/[^/]+$/)) {
+      // SEC-04: Require authentication for CRM venue update
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const artistId = event.pathParameters?.artistId;
       const venueId = event.pathParameters?.venueId;
       const body = parseBody(event);
@@ -338,6 +424,12 @@ exports.handler = async (event) => {
 
     // DELETE /api/artists/{artistId}/crm/venues/{venueId} - Delete relationship + cascade contacts
     if (method === 'DELETE' && path.match(/\/api\/artists\/[^/]+\/crm\/venues\/[^/]+$/)) {
+      // SEC-04: Require authentication for CRM venue deletion
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const artistId = event.pathParameters?.artistId;
       const venueId = event.pathParameters?.venueId;
 
@@ -443,6 +535,12 @@ exports.handler = async (event) => {
 
     // POST /api/artists/{artistId}/crm/venues/{venueId}/contacts - Create contact
     if (method === 'POST' && path.match(/\/api\/artists\/[^/]+\/crm\/venues\/[^/]+\/contacts$/)) {
+      // SEC-04: Require authentication for CRM contact creation
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const artistId = event.pathParameters?.artistId;
       const venueId = event.pathParameters?.venueId;
       const body = parseBody(event);
@@ -501,6 +599,12 @@ exports.handler = async (event) => {
 
     // PUT /api/artists/{artistId}/crm/venues/{venueId}/contacts/{contactId} - Update contact
     if (method === 'PUT' && path.match(/\/api\/artists\/[^/]+\/crm\/venues\/[^/]+\/contacts\/[^/]+$/)) {
+      // SEC-04: Require authentication for CRM contact update
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const contactId = event.pathParameters?.contactId;
       const body = parseBody(event);
 
@@ -564,6 +668,12 @@ exports.handler = async (event) => {
 
     // DELETE /api/artists/{artistId}/crm/venues/{venueId}/contacts/{contactId} - Delete contact
     if (method === 'DELETE' && path.match(/\/api\/artists\/[^/]+\/crm\/venues\/[^/]+\/contacts\/[^/]+$/)) {
+      // SEC-04: Require authentication for CRM contact deletion
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const contactId = event.pathParameters?.contactId;
 
       if (!contactId) {
@@ -654,6 +764,12 @@ exports.handler = async (event) => {
 
     // POST /api/artists/{artistId}/crm/venues/{venueId}/notes - Create note
     if (method === 'POST' && path.match(/\/api\/artists\/[^/]+\/crm\/venues\/[^/]+\/notes$/)) {
+      // SEC-04: Require authentication for CRM note creation
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const artistId = event.pathParameters?.artistId;
       const venueId = event.pathParameters?.venueId;
       const body = parseBody(event);
@@ -710,6 +826,12 @@ exports.handler = async (event) => {
 
     // PUT /api/artists/{artistId}/crm/venues/{venueId}/notes/{noteId} - Update note
     if (method === 'PUT' && path.match(/\/api\/artists\/[^/]+\/crm\/venues\/[^/]+\/notes\/[^/]+$/)) {
+      // SEC-04: Require authentication for CRM note update
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const noteId = event.pathParameters?.noteId;
       const body = parseBody(event);
 
@@ -761,6 +883,12 @@ exports.handler = async (event) => {
 
     // DELETE /api/artists/{artistId}/crm/venues/{venueId}/notes/{noteId} - Delete note
     if (method === 'DELETE' && path.match(/\/api\/artists\/[^/]+\/crm\/venues\/[^/]+\/notes\/[^/]+$/)) {
+      // SEC-04: Require authentication for CRM note deletion
+      const authResult = await requireAuth(event);
+      if (authResult.error) {
+        return createResponse(401, { error: authResult.error });
+      }
+
       const noteId = event.pathParameters?.noteId;
       const queryParams = event.queryStringParameters || {};
       const userId = queryParams.user_id;
