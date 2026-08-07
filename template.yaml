@@ -445,18 +445,26 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues
             Method: GET
+        # B1: Places proxy for community gig wizard (no auth, WAF rate-limited)
+        PlacesSuggest:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/places/suggest
+            Method: GET
+        PlacesDetails:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/places/details
+            Method: GET
         CreateVenue:
           Type: HttpApi
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues
             Method: POST
-        CreateCommunityVenue:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /api/venues/community
-            Method: POST
+        # B5: Removed dead CreateCommunityVenue route (no handler exists)
         FindOrCreateVenue:
           Type: HttpApi
           Properties:
@@ -487,6 +495,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues/{id}/mcp
             Method: DELETE
+        UpdateVenueMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{id}/mcp
+            Method: PUT
         EnrichVenueMcp:
           Type: HttpApi
           Properties:
@@ -1591,7 +1605,7 @@ Resources:
             Path: /api/builders/{id}/venues/{venueId}
             Method: DELETE
 
-  # Source Runs (admin)
+  # Source Runs (admin + MCP record_run)
   SourceRunsFunc:
     Type: AWS::Serverless::Function
     Properties:
@@ -1603,6 +1617,7 @@ Resources:
       Environment:
         Variables:
           SOURCE_RUNS_BUCKET: bndy-signals-prod-771551874768
+          SOURCE_RUNS_TOKEN: '{{resolve:secretsmanager:bndy/source-runs-token:SecretString:token}}'
       Events:
         A:
           Type: HttpApi
@@ -1622,6 +1637,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/source-runs/coverage
             Method: GET
+        Timeseries:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/source-runs/timeseries
+            Method: GET
         D:
           Type: HttpApi
           Properties:
@@ -1634,6 +1655,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/source-runs/{sourceId}/{runId}
             Method: GET
+        RecordRun:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/source-runs/{sourceId}/{runId}
+            Method: PUT
         F:
           Type: HttpApi
           Properties:

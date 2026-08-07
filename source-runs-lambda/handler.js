@@ -79,9 +79,34 @@ const getAllowedOrigin = () => {
 const getCorsHeaders = () => ({
   'Access-Control-Allow-Origin': getAllowedOrigin(),
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
-  'Access-Control-Allow-Methods': 'GET,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,PUT,OPTIONS',
   'Access-Control-Allow-Credentials': 'true'
 });
+
+/**
+ * Bearer token auth for PUT (MCP record_run).
+ * Token from process.env.SOURCE_RUNS_TOKEN — NOT hardcoded.
+ */
+const requireBearerToken = (event) => {
+  const token = process.env.SOURCE_RUNS_TOKEN;
+  if (!token) {
+    console.error('[SOURCE-RUNS] SOURCE_RUNS_TOKEN not configured');
+    return { error: 'Server configuration error', status: 500 };
+  }
+
+  const authHeader = event.headers?.Authorization || event.headers?.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { error: 'Bearer token required', status: 401 };
+  }
+
+  const providedToken = authHeader.slice(7);
+  if (providedToken !== token) {
+    console.error('[SOURCE-RUNS] Invalid bearer token');
+    return { error: 'Invalid token', status: 403 };
+  }
+
+  return { valid: true };
+};
 
 const createResponse = (statusCode, body) => ({
   statusCode,
@@ -595,6 +620,258 @@ async function countExternalIdsBySource(tableName) {
 }
 
 /**
+ * GET /api/source-runs/timeseries?days=N
+ * Returns daily aggregate per source, one point per day per source.
+ * Each point has a state: ok / quiet / empty / failed / nofire.
+ * Multiple runs in a day are summed.
+ */
+const handleGetTimeseries = async (event) => {
+  const authResult = await requirePlatformAdmin(event);
+  if (authResult.error) {
+    return createResponse(authResult.status, { error: authResult.error });
+  }
+
+  const days = parseInt(event.queryStringParameters?.days || '30', 10);
+  const now = new Date();
+  const toDate = now.toISOString().split('T')[0];
+  const fromDate = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  console.log('[SOURCE-RUNS] Timeseries request', { days, from: fromDate, to: toDate });
+
+  try {
+    // List all sources
+    const listResult = await s3.listObjectsV2({
+      Bucket: BUCKET_NAME,
+      Prefix: `${PREFIX}/`,
+      Delimiter: '/'
+    }).promise();
+
+    const sourceIds = (listResult.CommonPrefixes || [])
+      .map(p => p.Prefix.replace(`${PREFIX}/`, '').replace(/\/$/, ''))
+      .filter(Boolean);
+
+    const sources = [];
+
+    for (const sourceId of sourceIds) {
+      // Get run dates for this source
+      const runsResult = await s3.listObjectsV2({
+        Bucket: BUCKET_NAME,
+        Prefix: `${PREFIX}/${sourceId}/`,
+        Delimiter: '/'
+      }).promise();
+
+      const runDates = (runsResult.CommonPrefixes || [])
+        .map(p => p.Prefix.split('/').filter(Boolean).pop())
+        .filter(d => d >= fromDate && d <= toDate);
+
+      // Build date -> runs map
+      const dateRunsMap = {};
+      for (const runDate of runDates) {
+        try {
+          const runData = await s3.getObject({
+            Bucket: BUCKET_NAME,
+            Key: `${PREFIX}/${sourceId}/${runDate}/run.json`
+          }).promise();
+          const run = JSON.parse(runData.Body.toString());
+
+          if (!dateRunsMap[runDate]) {
+            dateRunsMap[runDate] = [];
+          }
+          dateRunsMap[runDate].push(run);
+        } catch (e) {
+          // No run.json for this date
+        }
+      }
+
+      // Build points array for each day in range
+      const points = [];
+      const totals = { added: 0, gigs: 0, artists: 0, venues: 0, removed: 0, offered: 0 };
+      let totalOffered = 0;
+      let hasOfferedData = false;
+
+      let d = new Date(fromDate);
+      const endDate = new Date(toDate);
+      while (d <= endDate) {
+        const dateStr = d.toISOString().split('T')[0];
+        const runs = dateRunsMap[dateStr] || [];
+
+        if (runs.length === 0) {
+          // No run recorded
+          points.push({
+            date: dateStr,
+            state: 'nofire',
+            added: 0,
+            gigs: 0,
+            artists: 0,
+            venues: 0,
+            removed: 0,
+            offered: 0,
+            runs: 0
+          });
+        } else {
+          // Aggregate runs for this day
+          let dayGigs = 0, dayArtists = 0, dayVenues = 0, dayRemoved = 0, dayOffered = 0;
+          let hasFailed = false;
+          let hasCompleted = false;
+
+          for (const run of runs) {
+            const c = run.counts || {};
+            dayGigs += (c.eventsCreated || 0);
+            dayArtists += (c.artistsCreated || 0);
+            dayVenues += (c.venuesCreated || 0);
+            dayRemoved += (c.eventsDeleted || 0) + (c.eventsHidden || 0) + (c.cancelled || 0) + (c.pastDropped || 0);
+            if (c.rawRows !== undefined) {
+              dayOffered += c.rawRows;
+              hasOfferedData = true;
+            }
+
+            if (run.status === 'failed' || (run.errors && run.errors.length > 0)) {
+              hasFailed = true;
+            }
+            if (run.status === 'completed') {
+              hasCompleted = true;
+            }
+          }
+
+          const dayAdded = dayGigs + dayArtists + dayVenues;
+
+          // Determine state
+          let state;
+          if (hasFailed && !hasCompleted) {
+            state = 'failed';
+          } else if (dayOffered === 0 && hasOfferedData) {
+            state = 'quiet'; // Source published nothing
+          } else if (dayAdded === 0 && dayOffered > 0) {
+            state = 'empty'; // Source published but we wrote nothing
+          } else {
+            state = 'ok';
+          }
+
+          points.push({
+            date: dateStr,
+            state,
+            added: dayAdded,
+            gigs: dayGigs,
+            artists: dayArtists,
+            venues: dayVenues,
+            removed: dayRemoved,
+            offered: dayOffered,
+            runs: runs.length
+          });
+
+          totals.added += dayAdded;
+          totals.gigs += dayGigs;
+          totals.artists += dayArtists;
+          totals.venues += dayVenues;
+          totals.removed += dayRemoved;
+          totals.offered += dayOffered;
+          totalOffered += dayOffered;
+        }
+
+        d.setDate(d.getDate() + 1);
+      }
+
+      const yieldPct = hasOfferedData && totalOffered > 0
+        ? Math.round((totals.added / totalOffered) * 100)
+        : null;
+
+      sources.push({
+        sourceId,
+        sourceName: formatSourceName(sourceId),
+        points,
+        totals,
+        yieldPct
+      });
+    }
+
+    return createResponse(200, {
+      days,
+      from: fromDate,
+      to: toDate,
+      sources
+    });
+  } catch (error) {
+    console.error('[SOURCE-RUNS] Error getting timeseries:', error);
+    return createResponse(500, { error: 'Failed to get timeseries data' });
+  }
+};
+
+/**
+ * PUT /api/source-runs/{sourceId}/{runId}
+ * Records a source run. Uses bearer token auth (for MCP, not JWT cookie).
+ */
+const handleRecordRun = async (event) => {
+  const authResult = requireBearerToken(event);
+  if (authResult.error) {
+    return createResponse(authResult.status, { error: authResult.error });
+  }
+
+  const { sourceId, runId } = event.pathParameters || {};
+
+  if (!sourceId || !runId) {
+    return createResponse(400, { error: 'sourceId and runId are required' });
+  }
+
+  let body;
+  try {
+    body = JSON.parse(event.body || '{}');
+  } catch (e) {
+    return createResponse(400, { error: 'Invalid JSON body' });
+  }
+
+  const { runDate, status, counts, note, reportPath, errors } = body;
+
+  if (!runDate) {
+    return createResponse(400, { error: 'runDate is required' });
+  }
+
+  if (!status || !['started', 'completed', 'failed'].includes(status)) {
+    return createResponse(400, { error: 'status must be started, completed, or failed' });
+  }
+
+  // Build run object
+  const runData = {
+    sourceId,
+    runId,
+    runDate,
+    status,
+    counts: counts || {},
+    recordedAt: new Date().toISOString(),
+    ...(status === 'started' && { startedAt: new Date().toISOString() }),
+    ...(status === 'completed' && { completedAt: new Date().toISOString() }),
+    ...(note && { note }),
+    ...(reportPath && { reportPath }),
+    ...(errors && errors.length > 0 && { errors })
+  };
+
+  console.log('[SOURCE-RUNS] Recording run', { sourceId, runId, runDate, status });
+
+  try {
+    // Write to S3
+    await s3.putObject({
+      Bucket: BUCKET_NAME,
+      Key: `${PREFIX}/${sourceId}/${runDate}/run.json`,
+      Body: JSON.stringify(runData, null, 2),
+      ContentType: 'application/json'
+    }).promise();
+
+    console.log('[SOURCE-RUNS] Run recorded successfully');
+
+    return createResponse(200, {
+      success: true,
+      sourceId,
+      runId,
+      runDate,
+      status,
+      message: 'Run recorded'
+    });
+  } catch (error) {
+    console.error('[SOURCE-RUNS] Error recording run:', error);
+    return createResponse(500, { error: 'Failed to record run' });
+  }
+};
+
+/**
  * Main handler
  */
 exports.handler = async (event, context) => {
@@ -633,11 +910,26 @@ exports.handler = async (event, context) => {
       return await handleGetCoverage(event);
     }
 
+    // GET /api/source-runs/timeseries (must be before {sourceId} regex)
+    if (method === 'GET' && path === '/api/source-runs/timeseries') {
+      return await handleGetTimeseries(event);
+    }
+
     // GET /api/source-runs/{sourceId} (but not /api/source-runs/{sourceId}/{runId})
     const sourceRunsMatch = path.match(/^\/api\/source-runs\/([^/]+)$/);
     if (method === 'GET' && sourceRunsMatch) {
       event.pathParameters = { sourceId: sourceRunsMatch[1] };
       return await handleGetSourceRunsBySource(event);
+    }
+
+    // PUT /api/source-runs/{sourceId}/{runId} (record_run from MCP)
+    const sourceRunPutMatch = path.match(/^\/api\/source-runs\/([^/]+)\/([^/]+)$/);
+    if (method === 'PUT' && sourceRunPutMatch) {
+      event.pathParameters = {
+        sourceId: sourceRunPutMatch[1],
+        runId: sourceRunPutMatch[2]
+      };
+      return await handleRecordRun(event);
     }
 
     // GET /api/source-runs/{sourceId}/{runId}
@@ -658,8 +950,10 @@ exports.handler = async (event, context) => {
         'GET /api/source-runs',
         'GET /api/source-runs/summaries',
         'GET /api/source-runs/coverage',
+        'GET /api/source-runs/timeseries',
         'GET /api/source-runs/{sourceId}',
         'GET /api/source-runs/{sourceId}/{runId}',
+        'PUT /api/source-runs/{sourceId}/{runId}',
         'GET /api/review-items'
       ]
     });
