@@ -14,6 +14,7 @@
 
 const AWS = require('aws-sdk');
 const https = require('https');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
 // Keep-alive agent: SDK v2 opens a new TLS connection per DynamoDB call by
@@ -66,9 +67,31 @@ const parseCookies = (cookieHeader) => {
 };
 
 /**
+ * Timing-safe string comparison to prevent timing attacks on token verification.
+ */
+const timingSafeCompare = (a, b) => {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+};
+
+/**
  * Authentication middleware
  */
 const requireAuth = async (event) => {
+  // Service credential for unattended MCP/agent writes. Cookie auth stays the
+  // primary path; this is an additional accepted credential, not a bypass.
+  const bearer = event.headers?.Authorization || event.headers?.authorization || '';
+  const token = bearer.startsWith('Bearer ') ? bearer.slice(7) : null;
+  const serviceToken = process.env.MCP_SERVICE_TOKEN;
+
+  // Only accept service token if MCP_SERVICE_TOKEN is configured (non-empty)
+  if (token && serviceToken && timingSafeCompare(token, serviceToken)) {
+    return { user: { userId: 'mcp-service', platformAdmin: true, isService: true } };
+  }
+
   let sessionToken = null;
 
   if (event.cookies && Array.isArray(event.cookies)) {
