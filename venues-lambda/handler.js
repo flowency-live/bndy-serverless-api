@@ -145,6 +145,12 @@ const {
   handleIntegrationCreateVenue
 } = require('./lib/venue-deduplication');
 
+// Places proxy handlers (B1: community gig wizard)
+const {
+  handlePlacesSuggest,
+  handlePlacesDetails
+} = require('./handlers/places');
+
 /**
  * Safe JSON parse helper - handles both string and object body
  */
@@ -210,6 +216,15 @@ exports.handler = async (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;
 
   try {
+    // Places proxy routes (B1: community gig wizard - no auth required, WAF rate-limited)
+    if (method === 'GET' && path === '/api/places/suggest') {
+      return await handlePlacesSuggest(deps, event);
+    }
+
+    if (method === 'GET' && path === '/api/places/details') {
+      return await handlePlacesDetails(deps, event);
+    }
+
     // Route requests
     if (method === 'GET' && path === '/api/venues') {
       return await handleGetAllVenues(deps, event);
@@ -267,27 +282,33 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'PUT' && event.pathParameters?.id) {
-      // SEC-04: Require authentication for venue updates
-      const authResult = await requireAuth(event);
-      if (authResult.error) {
-        return {
-          statusCode: 401,
-          headers: getCorsHeaders(event),
-          body: JSON.stringify({ error: authResult.error })
-        };
+      // MCP routes bypass auth (machine-to-machine)
+      if (!path.includes('/mcp')) {
+        // SEC-04: Require authentication for venue updates (non-MCP)
+        const authResult = await requireAuth(event);
+        if (authResult.error) {
+          return {
+            statusCode: 401,
+            headers: getCorsHeaders(event),
+            body: JSON.stringify({ error: authResult.error })
+          };
+        }
       }
       return await handleUpdateVenue(deps, event.pathParameters.id, parseBody(event.body), event);
     }
 
     if (method === 'POST' && event.pathParameters?.id && path.includes('/enrich')) {
-      // SEC-04: Require authentication for venue enrichment
-      const authResult = await requireAuth(event);
-      if (authResult.error) {
-        return {
-          statusCode: 401,
-          headers: getCorsHeaders(event),
-          body: JSON.stringify({ error: authResult.error })
-        };
+      // MCP routes bypass auth (machine-to-machine)
+      if (!path.includes('/mcp')) {
+        // SEC-04: Require authentication for venue enrichment (non-MCP)
+        const authResult = await requireAuth(event);
+        if (authResult.error) {
+          return {
+            statusCode: 401,
+            headers: getCorsHeaders(event),
+            body: JSON.stringify({ error: authResult.error })
+          };
+        }
       }
       return await handleEnrichVenue(deps, event.pathParameters.id, parseBody(event.body), event);
     }
