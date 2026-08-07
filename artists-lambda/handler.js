@@ -472,7 +472,8 @@ exports.handler = async (event, context) => {
     }
 
     // Find-or-create artist (public, no auth) - server-side resolution gate (ADR-014)
-    if (method === 'POST' && path === '/api/artists/find-or-create') {
+    // SEC-COMMUNITY: Also handles /api/community/artists/find-or-create (public wizard)
+    if (method === 'POST' && (path === '/api/artists/find-or-create' || path === '/api/community/artists/find-or-create')) {
       return await handleFindOrCreateArtist(event);
     }
 
@@ -2464,7 +2465,8 @@ async function handleFindOrCreateArtist(event) {
   // verifiedSourceName: §2A.5 exception for acts whose FB page name IS the billing (Fix #7)
   // resolveTo: when action:review was returned, caller can pick a candidate id
   // confirmNew: when action:review was returned, caller confirms this is genuinely new
-  const { name, canCreate = true, venueRegion, verifiedSourceName, resolveTo, confirmNew } = body;
+  // dryRun: B3 - return full verdict (matched/review/clear + candidates with location), ZERO writes
+  const { name, canCreate = true, venueRegion, verifiedSourceName, resolveTo, confirmNew, dryRun } = body;
 
   // RESOLUTION HANDLING (Blocker #1 fix): resolveTo + confirmNew params
   // When action:review was previously returned, caller can resolve via these params
@@ -2546,6 +2548,19 @@ async function handleFindOrCreateArtist(event) {
   // confirmNew: Bypass all matching and create directly (manual resolution after review)
   // Caller has seen the candidates and confirms this is genuinely a new, distinct artist
   if (confirmNew === true) {
+    // B3: dryRun mode - return verdict without creating
+    if (dryRun) {
+      console.log(`[find-or-create artist] DRY_RUN CONFIRM_NEW: "${name}" - would create (zero writes)`);
+      return {
+        statusCode: 200,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          action: 'clear',
+          reason: 'dryRun: confirmNew accepted, would create new artist',
+          candidates: []
+        })
+      };
+    }
     console.log(`[find-or-create artist] CONFIRM_NEW: "${name}" - bypassing matching per caller confirmation`);
     const created = await handleCreateCommunityArtist(event);
     try {
@@ -2921,6 +2936,20 @@ async function handleFindOrCreateArtist(event) {
         })
       };
     }
+  }
+
+  // B3: dryRun mode - return verdict without creating
+  if (dryRun) {
+    console.log(`[find-or-create artist] DRY_RUN CREATE: "${name}" - would create (zero writes)`);
+    return {
+      statusCode: 200,
+      headers: getCommunityHeaders(),
+      body: JSON.stringify({
+        action: 'clear',
+        reason: 'dryRun: no match found, would create new artist',
+        candidates: []
+      })
+    };
   }
 
   console.log(`[find-or-create artist] CREATE "${name}" (no plausible match, canCreate=true)`);
@@ -3715,11 +3744,22 @@ async function handleListArtistsMcp(event) {
   }
 }
 
-// CORS headers for community endpoints (allows live.bndy.co.uk)
-function getCommunityHeaders() {
+// CORS headers for community endpoints (B2: dynamic allowlist for wizard)
+// Note: event param optional for backwards compat; pass it for proper origin echo
+function getCommunityHeaders(event) {
+  const origin = event?.headers?.origin || event?.headers?.Origin || '';
+  const allowedOrigins = [
+    'https://live.bndy.co.uk',
+    'https://gigmap.bndy.co.uk',
+    'https://www.bndy.co.uk',
+    'https://bndy.co.uk',
+    'http://localhost:3000'
+  ];
+  const allowOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+
   return {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': 'https://live.bndy.co.uk',
+    'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Credentials': 'false'

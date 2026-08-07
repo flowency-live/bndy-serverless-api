@@ -812,6 +812,32 @@ async function handleCreateCommunityEvent(deps, event) {
 
   try {
     const body = JSON.parse(event.body);
+
+    // SEC-COMMUNITY: Honeypot + time-trap anti-bot validation
+    // hp field: hidden field that bots will fill - if present, silent reject
+    // startedAt: timestamp when wizard started - if <3s ago, silent reject
+    if (body.hp) {
+      console.log('COMMUNITY_EVENT: Honeypot triggered, silent reject');
+      // Return success to not reveal detection - bot thinks it worked
+      return {
+        statusCode: 201,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ id: 'rejected', message: 'Event created' })
+      };
+    }
+
+    if (body.startedAt) {
+      const elapsed = Date.now() - body.startedAt;
+      if (elapsed < 3000) {
+        console.log(`COMMUNITY_EVENT: Time-trap triggered (${elapsed}ms), silent reject`);
+        return {
+          statusCode: 201,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({ id: 'rejected', message: 'Event created' })
+        };
+      }
+    }
+
     const {
       artistId, artistIds, venueId, date, startTime, endTime, title, isPublic, source, isOpenMic,
       // Enrichment fields (parity with edit_event)
@@ -989,6 +1015,8 @@ async function handleCreateCommunityEvent(deps, event) {
 
       // AI import flags (when source is mcp_ai_import)
       ...(source === 'mcp_ai_import' && { aiCreated: true, needsReview: true }),
+      // B4: Community wizard events need review before considered clean
+      ...(source === 'community_wizard' && { needsReview: true }),
 
       createdAt: now,
       updatedAt: now

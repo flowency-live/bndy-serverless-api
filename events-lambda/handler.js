@@ -105,7 +105,8 @@ exports.handler = async (event, context) => {
       return await handleGetVenueEvents(deps, event);
     }
 
-    if (routeKey.match(/POST \/api\/events\/community/)) {
+    // SEC-COMMUNITY: Also handles /api/community/events (public wizard namespace)
+    if (routeKey.match(/POST \/api\/events\/community/) || routeKey.match(/POST \/api\/community\/events$/)) {
       return await handleCreateCommunityEvent(deps, event);
     }
 

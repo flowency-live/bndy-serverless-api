@@ -217,11 +217,12 @@ exports.handler = async (event, context) => {
 
   try {
     // Places proxy routes (B1: community gig wizard - no auth required, WAF rate-limited)
-    if (method === 'GET' && path === '/api/places/suggest') {
+    // SEC-COMMUNITY: Also handles /api/community/places/* (public wizard namespace)
+    if (method === 'GET' && (path === '/api/places/suggest' || path === '/api/community/places/autocomplete')) {
       return await handlePlacesSuggest(deps, event);
     }
 
-    if (method === 'GET' && path === '/api/places/details') {
+    if (method === 'GET' && (path === '/api/places/details' || path === '/api/community/places/details')) {
       return await handlePlacesDetails(deps, event);
     }
 
@@ -236,6 +237,11 @@ exports.handler = async (event, context) => {
 
     if (method === 'GET' && path === '/api/venues/list') {
       return await handleListVenuesMcp(deps, event);
+    }
+
+    // SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)
+    if (method === 'POST' && path === '/api/community/venues/find-or-create') {
+      return await handleFindOrCreateVenue(deps, parseBody(event.body), event);
     }
 
     if (method === 'POST' && path === '/api/venues/find-or-create') {

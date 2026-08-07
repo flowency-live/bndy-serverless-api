@@ -111,6 +111,13 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/find-or-create
             Method: POST
+        # SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)
+        CommunityFindOrCreateArtist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/community/artists/find-or-create
+            Method: POST
         CreateCommunityArtist:
           Type: HttpApi
           Properties:
@@ -219,6 +226,13 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/events/community
+            Method: POST
+        # SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited, honeypot+time-trap)
+        CommunityCreateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/community/events
             Method: POST
         GetEventById:
           Type: HttpApi
@@ -471,6 +485,25 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues/find-or-create
             Method: POST
+        # SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)
+        CommunityFindOrCreateVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/community/venues/find-or-create
+            Method: POST
+        CommunityPlacesAutocomplete:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/community/places/autocomplete
+            Method: GET
+        CommunityPlacesDetails:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/community/places/details
+            Method: GET
         GetVenueById:
           Type: HttpApi
           Properties:
