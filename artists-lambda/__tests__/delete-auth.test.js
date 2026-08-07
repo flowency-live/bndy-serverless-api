@@ -9,6 +9,9 @@
  * 3. Authenticated platformAdmin requests proceed with deletion
  */
 
+// Set JWT_SECRET before requiring handler
+process.env.JWT_SECRET = 'test-jwt-secret';
+
 // Mock AWS SDK before requiring handler
 const mockDynamoDB = {
   get: jest.fn(),

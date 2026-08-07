@@ -7,6 +7,9 @@
  * - Response format (no unused eventCount field)
  */
 
+// Set JWT_SECRET before requiring handler
+process.env.JWT_SECRET = 'test-jwt-secret';
+
 const mockDynamoDB = {
   query: jest.fn(),
   put: jest.fn(),
@@ -29,7 +32,7 @@ jest.mock('aws-sdk', () => ({
   },
   SSM: jest.fn(() => ({
     getParameter: () => ({
-      promise: () => Promise.resolve({ Parameter: { Value: 'test-secret' } })
+      promise: () => Promise.resolve({ Parameter: { Value: 'test-jwt-secret' } })
     })
   })),
   S3: jest.fn(() => ({
@@ -197,7 +200,7 @@ describe('Acts CRUD - #60 Acts Model', () => {
     const jwt = require('jsonwebtoken');
     const token = jwt.sign(
       { userId: 'admin-1' },
-      'test-secret',
+      'test-jwt-secret',
       { expiresIn: '1h' }
     );
     return `bndy_session=${token}`;
@@ -482,7 +485,7 @@ describe('Artist baseline createdAt and MCP list filters', () => {
 
   const createSessionCookie = () => {
     const jwt = require('jsonwebtoken');
-    const token = jwt.sign({ userId: 'user-1' }, 'test-secret', { expiresIn: '1h' });
+    const token = jwt.sign({ userId: 'user-1' }, 'test-jwt-secret', { expiresIn: '1h' });
     return 'bndy_session=' + token;
   };
 

@@ -10,7 +10,6 @@ const https = require('https');
 // default; reusing connections saves ~10-50ms per call on busy handlers.
 const keepAliveAgent = new (require('https').Agent)({ keepAlive: true });
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2', httpOptions: { agent: keepAliveAgent } });
-const ssm = new AWS.SSM({ region: 'eu-west-2' });
 const s3 = new AWS.S3({ region: 'eu-west-2' });
 const { jsonResponse } = require('./lib/http-response');
 const { scanAll } = require('./lib/scan-all');
@@ -147,37 +146,8 @@ const getAllowedOrigin = () => {
   return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
 };
 
-// JWT Secret - cached after first retrieval
-let JWT_SECRET = null;
-
-/**
- * Get JWT secret from SSM Parameter Store with fallback to env var
- */
-async function getJWTSecret() {
-  if (JWT_SECRET) {
-    return JWT_SECRET; // Return cached value
-  }
-
-  // Try SSM first
-  try {
-    const result = await ssm.getParameter({
-      Name: '/bndy/auth/jwt-secret',
-      WithDecryption: true
-    }).promise();
-    JWT_SECRET = result.Parameter.Value;
-    console.log('[ARTISTS] JWT_SECRET loaded from SSM');
-    return JWT_SECRET;
-  } catch (error) {
-    console.error('[ARTISTS] Failed to get JWT_SECRET from SSM:', error.message);
-    // Fallback to environment variable
-    if (process.env.JWT_SECRET) {
-      JWT_SECRET = process.env.JWT_SECRET;
-      console.log('[ARTISTS] JWT_SECRET loaded from environment variable (fallback)');
-      return JWT_SECRET;
-    }
-    throw new Error('JWT_SECRET not available from SSM or environment');
-  }
-}
+// JWT Secret from environment variable (set by SAM template from Secrets Manager)
+const JWT_SECRET = process.env.JWT_SECRET;
 
 /**
  * Extract Facebook username from URL
@@ -396,8 +366,7 @@ const requireAuth = async (event) => {
   }
 
   try {
-    const jwtSecret = await getJWTSecret();
-    const session = jwt.verify(sessionToken, jwtSecret);
+    const session = jwt.verify(sessionToken, JWT_SECRET);
 
     // Fetch user to check platformAdmin flag
     const userResult = await dynamodb.get({
