@@ -1,0 +1,82 @@
+{
+  "$schema": "./route-policy.schema.json",
+  "policyVersion": 1,
+  "status": "baseline-unenforced",
+  "trackingIssue": 2,
+  "decisions": {
+    "publicAccess": "read-only",
+    "defaultMutationZone": "admin",
+    "mcpRepositoryInScope": false,
+    "chatgptDeleteAllowed": false,
+    "chatgptArbitraryUpdateAllowed": false
+  },
+  "zones": {
+    "public-read": {
+      "authentication": "none",
+      "allowedMethods": ["GET", "OPTIONS"],
+      "description": "Explicitly approved public discovery routes only"
+    },
+    "admin": {
+      "authentication": "AdminAuthorizer",
+      "allowedMethods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      "description": "Backstage godmode using verified BNDY session and exact admin email allowlist"
+    },
+    "ai-integration": {
+      "authentication": "IntegrationAuthorizer",
+      "allowedMethods": ["GET", "POST", "OPTIONS"],
+      "description": "Constrained ChatGPT operations; no generic update or delete"
+    },
+    "deprecated": {
+      "authentication": "blocked-or-admin-until-removed",
+      "allowedMethods": [],
+      "description": "Legacy routes that must not remain publicly callable"
+    },
+    "internal": {
+      "authentication": "not-public-api",
+      "allowedMethods": [],
+      "description": "Non-API or direct invocation only"
+    }
+  },
+  "classificationRules": [
+    {
+      "id": "mutation-default-admin",
+      "methods": ["POST", "PUT", "PATCH", "DELETE"],
+      "targetZone": "admin",
+      "reason": "All existing mutations are admin-only unless explicitly assigned to the constrained AI surface"
+    },
+    {
+      "id": "legacy-http-mcp",
+      "pathContains": "/mcp",
+      "targetZone": "deprecated",
+      "reason": "The local MCP invokes AWS directly; HTTP MCP mutation routes are not required publicly"
+    },
+    {
+      "id": "future-ai-surface",
+      "pathPrefix": "/api/ai/",
+      "targetZone": "ai-integration",
+      "reason": "Dedicated ChatGPT surface"
+    },
+    {
+      "id": "get-review",
+      "methods": ["GET"],
+      "targetZone": "public-read",
+      "reason": "Initial baseline classification only; SEC-01 will require every public GET to be explicitly approved"
+    }
+  ],
+  "plannedAiRoutes": [
+    { "method": "GET", "path": "/api/ai/artists/search" },
+    { "method": "POST", "path": "/api/ai/artists/find-or-create" },
+    { "method": "POST", "path": "/api/ai/artists/{id}/enrich" },
+    { "method": "GET", "path": "/api/ai/venues/search" },
+    { "method": "POST", "path": "/api/ai/venues/find-or-create" },
+    { "method": "POST", "path": "/api/ai/venues/{id}/enrich" },
+    { "method": "GET", "path": "/api/ai/events/search" },
+    { "method": "POST", "path": "/api/ai/events/find-or-create" }
+  ],
+  "explicitRoutes": [],
+  "notes": [
+    "SEC-00 records the target policy but does not enforce it or change production behaviour.",
+    "Run npm run security:inventory to generate the complete current route inventory from template.yaml.",
+    "SEC-01 will replace broad GET classification with an explicit public route allowlist and fail on unknown routes."
+  ]
+}
