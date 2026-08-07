@@ -103,8 +103,10 @@ async function handlePlacesSuggest(deps, event) {
     };
   }
 
+  // kind=town → UK towns/cities (artist "based in" lookup); default → venues (establishments)
+  const kind = event.queryStringParameters?.kind === 'town' ? 'town' : 'venue';
   const trimmedQuery = query.trim();
-  const cacheKey = `suggest:${trimmedQuery.toLowerCase()}`;
+  const cacheKey = `suggest:${kind}:${trimmedQuery.toLowerCase()}`;
 
   // Check cache
   const cached = getCached(cacheKey);
@@ -123,7 +125,7 @@ async function handlePlacesSuggest(deps, event) {
     const response = await placesClient.placeAutocomplete({
       params: {
         input: trimmedQuery,
-        types: 'establishment',
+        types: kind === 'town' ? '(cities)' : 'establishment',
         components: ['country:gb'], // UK-biased per spec
         key: process.env.GOOGLE_PLACES_API_KEY,
         // Session token for billing optimization (Google charges per session, not per keystroke)
@@ -141,7 +143,7 @@ async function handlePlacesSuggest(deps, event) {
     }
 
     const suggestions = (response.data.predictions || [])
-      .filter(p => !isHardDenied(p.types)) // drop unambiguous non-venues (dentists, car washes...)
+      .filter(p => kind === 'town' || !isHardDenied(p.types)) // venue mode: drop unambiguous non-venues
       .map(p => ({
         placeId: p.place_id,
         name: p.structured_formatting?.main_text || p.description.split(',')[0],

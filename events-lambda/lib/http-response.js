@@ -24,6 +24,12 @@ function jsonResponse(event, statusCode, data, options) {
   };
   if (cacheControl) {
     headers['Cache-Control'] = cacheControl;
+    // CRITICAL: When caching and using dynamic CORS origin, Vary: Origin ensures
+    // the cache serves the correct response for each origin (fixes CORS failures
+    // where gigmap.bndy.co.uk's cached response was served to backstage.bndy.co.uk)
+    if (corsHeaders['Access-Control-Allow-Origin']) {
+      headers['Vary'] = 'Origin, Accept-Encoding';
+    }
   }
 
   if (statusCode === 200 && Buffer.byteLength(body) >= MIN_COMPRESS_BYTES && acceptsGzip(event)) {
