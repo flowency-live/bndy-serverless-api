@@ -429,9 +429,9 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
       standard_ticket_url: '',
       createdAt: now,
       updated_at: now,
-      // AI creation flags
+      // AI creation flags + B4: community wizard venues need review
       ai_created: venueData.ai_created || false,
-      needs_review: venueData.needs_review || false,
+      needs_review: venueData.needs_review || venueData.source === 'community_wizard' || false,
       created_source: venueData.created_source || venueData.source || 'backstage_wizard'
     };
 

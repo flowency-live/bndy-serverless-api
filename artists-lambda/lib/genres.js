@@ -1,10 +1,10 @@
 /**
  * Genre Normalisation Module
  *
- * CANONICAL copy of genre list - sync verified with bndy-frontstage.
- * Source of truth: bndy-frontstage/src/lib/constants/genres.ts
+ * CANONICAL copy of genre list (36 entries incl. 6 era tags + Other).
+ * B6 sync verified 2026-08-07: matches bndy-app/src/features/wizard/lib.ts GENRES
  *
- * DO NOT modify this list without also updating the frontstage source.
+ * DO NOT modify this list without also updating the frontend wizard/lib.ts.
  */
 
 'use strict';
