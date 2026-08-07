@@ -563,6 +563,113 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     });
   });
 
+  // =========================================================================
+  // ADDENDUM H FIX: dryRun must run validation (DATA_QUALITY, LOCATION_UNRESOLVABLE)
+  // Bug: dryRun returned "clear" for artists that would fail validation at create time
+  // =========================================================================
+  describe('dryRun validation (Addendum H)', () => {
+    it('should return 422 DATA_QUALITY when dryRun and name is a lineup', async () => {
+      mockDynamoDB.query.mockResolvedValue({ Items: [] });
+
+      const event = createFindOrCreateRequest('Artist A + Artist B', {
+        dryRun: true,
+        location: 'Stoke-on-Trent'
+      });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(422);
+      expect(body.code).toBe('DATA_QUALITY');
+      expect(body.errors).toBeDefined();
+      expect(body.errors.some(e => e.includes('multi_artist_lineup'))).toBe(true);
+    });
+
+    it('should return 422 DATA_QUALITY when dryRun and name is a placeholder', async () => {
+      mockDynamoDB.query.mockResolvedValue({ Items: [] });
+
+      const event = createFindOrCreateRequest('TBC', {
+        dryRun: true,
+        location: 'Stoke-on-Trent'
+      });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(422);
+      expect(body.code).toBe('DATA_QUALITY');
+      expect(body.errors.some(e => e.includes('cancelled_event_detected'))).toBe(true);
+    });
+
+    it('should return clear when dryRun and validation passes', async () => {
+      mockDynamoDB.query.mockResolvedValue({ Items: [] });
+
+      const event = createFindOrCreateRequest('Valid Artist Name', {
+        dryRun: true,
+        location: 'Stoke-on-Trent'
+      });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(200);
+      expect(body.action).toBe('clear');
+      expect(body.reason).toContain('dryRun');
+    });
+
+    it('should return matched when dryRun and artist already exists', async () => {
+      mockDynamoDB.query.mockResolvedValue({
+        Items: [{ id: 'existing-artist', name: 'Valid Artist Name', location: 'Stoke' }]
+      });
+
+      const event = createFindOrCreateRequest('Valid Artist Name', {
+        dryRun: true,
+        location: 'Stoke-on-Trent'
+      });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(200);
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('existing-artist');
+    });
+
+    it('should return 422 DATA_QUALITY when dryRun with confirmNew and name is invalid', async () => {
+      mockDynamoDB.query.mockResolvedValue({ Items: [] });
+
+      const event = createFindOrCreateRequest('Band A + Band B', {
+        dryRun: true,
+        confirmNew: true,
+        location: 'Stoke-on-Trent'
+      });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(422);
+      expect(body.code).toBe('DATA_QUALITY');
+    });
+
+    it('should return 422 LOCATION_UNRESOLVABLE when dryRun and location is a NON_LOCATION (enforce mode)', async () => {
+      const originalGateMode = process.env.GATE_MODE;
+      process.env.GATE_MODE = 'enforce';
+
+      try {
+        mockDynamoDB.query.mockResolvedValue({ Items: [] });
+
+        // Use 'UK' which is in NON_LOCATIONS set - triggers UNKNOWN_REGION
+        const event = createFindOrCreateRequest('Valid Artist Name', {
+          dryRun: true,
+          location: 'UK' // This is in NON_LOCATIONS, triggers UNKNOWN_REGION
+        });
+        const result = await handler(event, {});
+        const body = JSON.parse(result.body);
+
+        // Location resolution validation should fire in dryRun path
+        expect(result.statusCode).toBe(422);
+        expect(body.code).toBe('LOCATION_UNRESOLVABLE');
+      } finally {
+        process.env.GATE_MODE = originalGateMode;
+      }
+    });
+  });
+
   describe('Decision bands (Batch 3)', () => {
     it('should MATCH when score >= 90 with clear margin', async () => {
       // Single candidate with high similarity → MATCH

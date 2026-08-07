@@ -2529,6 +2529,9 @@ async function handleFindOrCreateArtist(event) {
 
   // Data quality validation (2026-07-27 audit follow-up)
   // Fix #7 (2026-07-30): Pass verifiedSourceName + facebookUrl for §2A.5 exception
+  // ADDENDUM H FIX (2026-08-07): Return 422 with DATA_QUALITY code so dryRun pre-check
+  // surfaces validation errors BEFORE publish. Without this, dryRun returned "clear"
+  // but actual create failed with 422, stranding the wizard.
   const validation = validateArtistData({ name }, {
     verifiedSourceName: verifiedSourceName === true,
     facebookUrl: body.facebookUrl || ''
@@ -2536,13 +2539,34 @@ async function handleFindOrCreateArtist(event) {
   if (!validation.valid) {
     console.log(`DATA_QUALITY_REJECT: Artist creation blocked - ${validation.errors.join('; ')}`);
     return {
-      statusCode: 400,
+      statusCode: 422,
       headers: getCommunityHeaders(),
       body: JSON.stringify({
-        error: 'data_quality_validation_failed',
-        details: validation.errors
+        error: 'Artist name failed data-quality validation',
+        code: 'DATA_QUALITY',
+        errors: validation.errors
       })
     };
+  }
+
+  // ADDENDUM H FIX (2026-08-07): Location resolution validation for confirmNew path.
+  // Validate location upfront so dryRun surfaces the error instead of returning "clear"
+  // only to have the actual create fail with 422.
+  const location = body.location;
+  if (confirmNew === true) {
+    const { resolvable } = buildArtistUniqueKeys(name, location || '', '', []);
+    if (!resolvable && gateMode() === 'enforce') {
+      console.log(`LOCATION_UNRESOLVABLE: "${name}" location "${location}" cannot be bucketed (confirmNew path)`);
+      return {
+        statusCode: 422,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          error: `Location "${location || ''}" cannot be resolved to a region. Artist identity requires a resolvable performing location — supply a town/county (e.g. "Stoke-on-Trent").`,
+          code: 'LOCATION_UNRESOLVABLE',
+          action: 'review'
+        })
+      };
+    }
   }
 
   // confirmNew: Bypass all matching and create directly (manual resolution after review)
@@ -2940,6 +2964,21 @@ async function handleFindOrCreateArtist(event) {
 
   // B3: dryRun mode - return verdict without creating
   if (dryRun) {
+    // ADDENDUM H FIX: validate location BEFORE returning "clear" so wizard
+    // surfaces the error at pre-check time, not at publish time.
+    const { resolvable } = buildArtistUniqueKeys(name, body.location || '', '', []);
+    if (!resolvable && gateMode() === 'enforce') {
+      console.log(`LOCATION_UNRESOLVABLE: "${name}" location "${body.location}" cannot be bucketed (dryRun path)`);
+      return {
+        statusCode: 422,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          error: `Location "${body.location || ''}" cannot be resolved to a region. Artist identity requires a resolvable performing location — supply a town/county (e.g. "Stoke-on-Trent").`,
+          code: 'LOCATION_UNRESOLVABLE',
+          action: 'review'
+        })
+      };
+    }
     console.log(`[find-or-create artist] DRY_RUN CREATE: "${name}" - would create (zero writes)`);
     return {
       statusCode: 200,
