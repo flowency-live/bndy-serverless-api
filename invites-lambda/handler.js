@@ -164,10 +164,20 @@ const requireAuth = async (event) => {
   try {
     const jwtSecret = await getJWTSecret();
     const session = jwt.verify(sessionToken, jwtSecret);
+
+    // Fetch platformAdmin flag from users table (for godmode access)
+    const userResult = await dynamodb.get({
+      TableName: USERS_TABLE,
+      Key: { cognito_id: session.userId }
+    }).promise();
+
+    const platformAdmin = userResult.Item?.platformAdmin || false;
+
     console.log('[INVITES] User authenticated via session', {
-      userId: session.userId.substring(0, 8) + '...'
+      userId: session.userId.substring(0, 8) + '...',
+      platformAdmin
     });
-    return { user: session };
+    return { user: { ...session, platformAdmin } };
   } catch (error) {
     console.error('[INVITES] Invalid session token:', error.message);
     return { error: 'Invalid session' };
@@ -220,25 +230,30 @@ const handleCreateGeneralInvite = async (event, artistId) => {
 
     const artist = artistResult.Item;
 
-    // Verify user is admin/owner of this artist
-    const membershipResult = await dynamodb.query({
-      TableName: MEMBERSHIPS_TABLE,
-      IndexName: 'artist_id-index',
-      KeyConditionExpression: 'artist_id = :artistId',
-      FilterExpression: 'user_id = :userId AND (#role = :admin OR #role = :owner)',
-      ExpressionAttributeNames: {
-        '#role': 'role'
-      },
-      ExpressionAttributeValues: {
-        ':artistId': artistId,
-        ':userId': user.userId,
-        ':admin': 'admin',
-        ':owner': 'owner'
-      }
-    }).promise();
+    // Platform admins (godmode) can create invites for any artist
+    if (!user.platformAdmin) {
+      // Verify user is admin/owner of this artist
+      const membershipResult = await dynamodb.query({
+        TableName: MEMBERSHIPS_TABLE,
+        IndexName: 'artist_id-index',
+        KeyConditionExpression: 'artist_id = :artistId',
+        FilterExpression: 'user_id = :userId AND (#role = :admin OR #role = :owner)',
+        ExpressionAttributeNames: {
+          '#role': 'role'
+        },
+        ExpressionAttributeValues: {
+          ':artistId': artistId,
+          ':userId': user.userId,
+          ':admin': 'admin',
+          ':owner': 'owner'
+        }
+      }).promise();
 
-    if (membershipResult.Items.length === 0) {
-      return createResponse(403, { error: 'Insufficient permissions - must be admin or owner' });
+      if (membershipResult.Items.length === 0) {
+        return createResponse(403, { error: 'Insufficient permissions - must be admin or owner' });
+      }
+    } else {
+      console.log('[INVITES] Platform admin creating invite (godmode)');
     }
 
     // Get inviter details
@@ -334,25 +349,30 @@ const handleCreatePhoneInvite = async (event, artistId) => {
 
     const artist = artistResult.Item;
 
-    // Verify user is admin/owner
-    const membershipResult = await dynamodb.query({
-      TableName: MEMBERSHIPS_TABLE,
-      IndexName: 'artist_id-index',
-      KeyConditionExpression: 'artist_id = :artistId',
-      FilterExpression: 'user_id = :userId AND (#role = :admin OR #role = :owner)',
-      ExpressionAttributeNames: {
-        '#role': 'role'
-      },
-      ExpressionAttributeValues: {
-        ':artistId': artistId,
-        ':userId': user.userId,
-        ':admin': 'admin',
-        ':owner': 'owner'
-      }
-    }).promise();
+    // Platform admins (godmode) can create invites for any artist
+    if (!user.platformAdmin) {
+      // Verify user is admin/owner
+      const membershipResult = await dynamodb.query({
+        TableName: MEMBERSHIPS_TABLE,
+        IndexName: 'artist_id-index',
+        KeyConditionExpression: 'artist_id = :artistId',
+        FilterExpression: 'user_id = :userId AND (#role = :admin OR #role = :owner)',
+        ExpressionAttributeNames: {
+          '#role': 'role'
+        },
+        ExpressionAttributeValues: {
+          ':artistId': artistId,
+          ':userId': user.userId,
+          ':admin': 'admin',
+          ':owner': 'owner'
+        }
+      }).promise();
 
-    if (membershipResult.Items.length === 0) {
-      return createResponse(403, { error: 'Insufficient permissions - must be admin or owner' });
+      if (membershipResult.Items.length === 0) {
+        return createResponse(403, { error: 'Insufficient permissions - must be admin or owner' });
+      }
+    } else {
+      console.log('[INVITES] Platform admin creating phone invite (godmode)');
     }
 
     // Get inviter details
@@ -427,27 +447,32 @@ const handleListInvites = async (event, artistId) => {
   const { user } = authResult;
 
   try {
-    console.log('[INVITES] Listing invites for artist', { artistId, userId: user.userId });
+    console.log('[INVITES] Listing invites for artist', { artistId, userId: user.userId, platformAdmin: user.platformAdmin });
 
-    // Verify user is admin/owner of this artist
-    const membershipResult = await dynamodb.query({
-      TableName: MEMBERSHIPS_TABLE,
-      IndexName: 'artist_id-index',
-      KeyConditionExpression: 'artist_id = :artistId',
-      FilterExpression: 'user_id = :userId AND (#role = :admin OR #role = :owner)',
-      ExpressionAttributeNames: {
-        '#role': 'role'
-      },
-      ExpressionAttributeValues: {
-        ':artistId': artistId,
-        ':userId': user.userId,
-        ':admin': 'admin',
-        ':owner': 'owner'
+    // Platform admins (godmode) can list invites for any artist
+    if (!user.platformAdmin) {
+      // Verify user is admin/owner of this artist
+      const membershipResult = await dynamodb.query({
+        TableName: MEMBERSHIPS_TABLE,
+        IndexName: 'artist_id-index',
+        KeyConditionExpression: 'artist_id = :artistId',
+        FilterExpression: 'user_id = :userId AND (#role = :admin OR #role = :owner)',
+        ExpressionAttributeNames: {
+          '#role': 'role'
+        },
+        ExpressionAttributeValues: {
+          ':artistId': artistId,
+          ':userId': user.userId,
+          ':admin': 'admin',
+          ':owner': 'owner'
+        }
+      }).promise();
+
+      if (membershipResult.Items.length === 0) {
+        return createResponse(403, { error: 'Insufficient permissions - must be admin or owner' });
       }
-    }).promise();
-
-    if (membershipResult.Items.length === 0) {
-      return createResponse(403, { error: 'Insufficient permissions - must be admin or owner' });
+    } else {
+      console.log('[INVITES] Platform admin listing invites (godmode)');
     }
 
     // Query invites for this artist using GSI
