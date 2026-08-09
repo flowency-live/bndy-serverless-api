@@ -1,7 +1,7 @@
 {
   "$schema": "./route-policy.schema.json",
   "policyVersion": 1,
-  "status": "baseline-unenforced",
+  "status": "sec-01-enforced",
   "trackingIssue": 2,
   "decisions": {
     "publicAccess": "read-only",
@@ -25,6 +25,12 @@
       "authentication": "IntegrationAuthorizer",
       "allowedMethods": ["GET", "POST", "OPTIONS"],
       "description": "Constrained ChatGPT operations; no generic update or delete"
+    },
+    "community": {
+      "authentication": "none",
+      "allowedMethods": ["POST"],
+      "description": "Public wizard mutations - explicitly approved, rate-limited, honeypot/time-trap protected, needsReview tagged",
+      "controls": ["rate-limit", "honeypot", "time-trap", "unique-gates", "needsReview-tag"]
     },
     "deprecated": {
       "authentication": "blocked-or-admin-until-removed",
@@ -73,7 +79,56 @@
     { "method": "GET", "path": "/api/ai/events/search" },
     { "method": "POST", "path": "/api/ai/events/find-or-create" }
   ],
-  "explicitRoutes": [],
+  "explicitRoutes": [
+    {
+      "method": "POST",
+      "path": "/api/community/artists/find-or-create",
+      "zone": "community",
+      "reason": "SEC-COMMUNITY: Public wizard artist resolution - rate-limited, honeypot protected",
+      "addedBy": "SEC-COMMUNITY",
+      "addedDate": "2026-08-07"
+    },
+    {
+      "method": "POST",
+      "path": "/api/community/venues/find-or-create",
+      "zone": "community",
+      "reason": "SEC-COMMUNITY: Public wizard venue resolution - rate-limited, honeypot protected",
+      "addedBy": "SEC-COMMUNITY",
+      "addedDate": "2026-08-07"
+    },
+    {
+      "method": "POST",
+      "path": "/api/community/events",
+      "zone": "community",
+      "reason": "SEC-COMMUNITY: Public wizard event creation - rate-limited, honeypot protected, time-trap",
+      "addedBy": "SEC-COMMUNITY",
+      "addedDate": "2026-08-07"
+    },
+    {
+      "method": "POST",
+      "path": "/api/artists/find-or-create",
+      "zone": "community",
+      "reason": "Legacy community route - aliases to same handler as /api/community/*",
+      "addedBy": "SEC-COMMUNITY",
+      "addedDate": "2026-08-07"
+    },
+    {
+      "method": "POST",
+      "path": "/api/artists/community",
+      "zone": "community",
+      "reason": "Legacy community artist creation",
+      "addedBy": "SEC-COMMUNITY",
+      "addedDate": "2026-08-07"
+    },
+    {
+      "method": "POST",
+      "path": "/api/events/community",
+      "zone": "community",
+      "reason": "Legacy community event creation",
+      "addedBy": "SEC-COMMUNITY",
+      "addedDate": "2026-08-07"
+    }
+  ],
   "notes": [
     "SEC-00 records the target policy but does not enforce it or change production behaviour.",
     "Run npm run security:inventory to generate the complete current route inventory from template.yaml.",
