@@ -133,6 +133,42 @@ const requireAuth = async (event) => {
   }
 };
 
+// Platform admin authorization - required for godmode endpoints
+const requirePlatformAdmin = async (event) => {
+  const authResult = await requireAuth(event);
+  if (authResult.error) {
+    return { error: authResult.error, statusCode: 401 };
+  }
+
+  // Look up user in database to check platformAdmin flag
+  try {
+    const userResult = await dynamodb.get({
+      TableName: USERS_TABLE,
+      Key: { cognito_id: authResult.user.userId }
+    }).promise();
+
+    if (!userResult.Item) {
+      console.error('USERS: User not found in database for admin check');
+      return { error: 'User not found', statusCode: 404 };
+    }
+
+    if (!userResult.Item.platformAdmin) {
+      console.log('USERS: Access denied - not platform admin', {
+        userId: authResult.user.userId.substring(0, 8) + '...'
+      });
+      return { error: 'Platform admin access required', statusCode: 403 };
+    }
+
+    console.log('USERS: Platform admin verified', {
+      userId: authResult.user.userId.substring(0, 8) + '...'
+    });
+    return { user: authResult.user, dbUser: userResult.Item };
+  } catch (error) {
+    console.error('USERS: Error checking admin status:', error.message);
+    return { error: 'Internal server error', statusCode: 500 };
+  }
+};
+
 // Get user profile
 const handleGetProfile = async (event) => {
   const authResult = await requireAuth(event);
@@ -287,10 +323,11 @@ const getAuthType = (cognitoId, username) => {
 
 // List all users (admin function - godmode)
 const handleListUsers = async (event) => {
-  const authResult = await requireAuth(event);
+  // SEC-AUD-002: Require platformAdmin for godmode endpoints
+  const authResult = await requirePlatformAdmin(event);
 
-  if (authResult.error) {
-    return createResponse(401, { error: authResult.error });
+  if (authResult.statusCode) {
+    return createResponse(authResult.statusCode, { error: authResult.error });
   }
 
   try {
@@ -343,10 +380,11 @@ const handleListUsers = async (event) => {
 
 // Delete user (admin function - godmode)
 const handleDeleteUser = async (event) => {
-  const authResult = await requireAuth(event);
+  // SEC-AUD-002: Require platformAdmin for godmode endpoints
+  const authResult = await requirePlatformAdmin(event);
 
-  if (authResult.error) {
-    return createResponse(401, { error: authResult.error });
+  if (authResult.statusCode) {
+    return createResponse(authResult.statusCode, { error: authResult.error });
   }
 
   try {
