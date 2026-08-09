@@ -42,3 +42,11 @@ test.json
 lambda-test.json
 *.log
 _production_baselines/url.txt
+
+# PII/Data dumps - never commit user data
+temp-users.json
+*.local.json
+*-dump.json
+*-export.json
+users-*.json
+!package*.json
