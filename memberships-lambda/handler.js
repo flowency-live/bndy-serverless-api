@@ -140,6 +140,69 @@ const requireAuth = async (event) => {
   }
 };
 
+// SEC-AUD-003: Platform admin authorization - required for godmode endpoints
+const requirePlatformAdmin = async (event) => {
+  const authResult = await requireAuth(event);
+  if (authResult.error) {
+    return { error: authResult.error, statusCode: 401 };
+  }
+
+  if (!authResult.user.platformAdmin) {
+    console.log('[MEMBERSHIPS] Access denied - not platform admin', {
+      userId: authResult.user.userId.substring(0, 8) + '...'
+    });
+    return { error: 'Platform admin access required', statusCode: 403 };
+  }
+
+  return authResult;
+};
+
+// SEC-AUD-003: Artist admin authorization - required for membership mutations
+const requireArtistAdmin = async (event, artistId) => {
+  const authResult = await requireAuth(event);
+  if (authResult.error) {
+    return { error: authResult.error, statusCode: 401 };
+  }
+
+  // Platform admins can manage any artist
+  if (authResult.user.platformAdmin) {
+    console.log('[MEMBERSHIPS] Platform admin - artist access granted', {
+      userId: authResult.user.userId.substring(0, 8) + '...',
+      artistId
+    });
+    return authResult;
+  }
+
+  // Check if user is admin of this artist
+  const membershipResult = await dynamodb.query({
+    TableName: MEMBERSHIPS_TABLE,
+    IndexName: 'artist_id-index',
+    KeyConditionExpression: 'artist_id = :artistId',
+    FilterExpression: 'user_id = :userId',
+    ExpressionAttributeValues: {
+      ':artistId': artistId,
+      ':userId': authResult.user.userId
+    }
+  }).promise();
+
+  const membership = membershipResult.Items?.[0];
+
+  if (!membership || membership.role !== 'admin') {
+    console.log('[MEMBERSHIPS] Access denied - not artist admin', {
+      userId: authResult.user.userId.substring(0, 8) + '...',
+      artistId,
+      hasRole: membership?.role || 'none'
+    });
+    return { error: 'Artist admin access required', statusCode: 403 };
+  }
+
+  console.log('[MEMBERSHIPS] Artist admin verified', {
+    userId: authResult.user.userId.substring(0, 8) + '...',
+    artistId
+  });
+  return authResult;
+};
+
 // Helper: Resolve membership profile with inheritance from user
 const resolveMembershipProfile = async (membership, userId) => {
   // Get user profile for inheritance
@@ -191,9 +254,10 @@ const resolveMembershipProfile = async (membership, userId) => {
 
 // Get all memberships (godmode admin function)
 const handleGetAllMemberships = async (event) => {
-  const authResult = await requireAuth(event);
-  if (authResult.error) {
-    return createResponse(401, { error: authResult.error });
+  // SEC-AUD-003: Require platformAdmin for godmode endpoints
+  const authResult = await requirePlatformAdmin(event);
+  if (authResult.statusCode) {
+    return createResponse(authResult.statusCode, { error: authResult.error });
   }
 
   try {
@@ -268,9 +332,10 @@ const handleGetArtistMembers = async (event, artistId) => {
 
 // Add member to artist (create membership)
 const handleAddMember = async (event, artistId) => {
-  const authResult = await requireAuth(event);
-  if (authResult.error) {
-    return createResponse(401, { error: authResult.error });
+  // SEC-AUD-003: Require artist admin to add members
+  const authResult = await requireArtistAdmin(event, artistId);
+  if (authResult.statusCode) {
+    return createResponse(authResult.statusCode, { error: authResult.error });
   }
 
   const { user } = authResult;
@@ -416,6 +481,64 @@ const handleUpdateMembership = async (event, membershipId) => {
       return createResponse(404, { error: 'Membership not found' });
     }
 
+    const existingMembership = existingResult.Item;
+    const isOwnMembership = existingMembership.user_id === user.userId;
+    const isRoleChange = role !== undefined && role !== existingMembership.role;
+
+    // SEC-AUD-003: Authorization check
+    // Users can update their own membership (except role)
+    // Artist admins can update any membership in their artist
+    // Platform admins can update any membership
+    if (!isOwnMembership && !user.platformAdmin) {
+      // Check if user is admin of this artist
+      const adminCheckResult = await dynamodb.query({
+        TableName: MEMBERSHIPS_TABLE,
+        IndexName: 'artist_id-index',
+        KeyConditionExpression: 'artist_id = :artistId',
+        FilterExpression: 'user_id = :userId',
+        ExpressionAttributeValues: {
+          ':artistId': existingMembership.artist_id,
+          ':userId': user.userId
+        }
+      }).promise();
+
+      const userMembership = adminCheckResult.Items?.[0];
+      if (!userMembership || userMembership.role !== 'admin') {
+        console.log('[MEMBERSHIPS] Access denied - not authorized to update membership', {
+          userId: user.userId.substring(0, 8) + '...',
+          membershipId,
+          targetUserId: existingMembership.user_id.substring(0, 8) + '...'
+        });
+        return createResponse(403, { error: 'Not authorized to update this membership' });
+      }
+    }
+
+    // SEC-AUD-003: Prevent role escalation by non-admins
+    if (isRoleChange) {
+      // Only artist admins or platform admins can change roles
+      if (!user.platformAdmin) {
+        const adminCheckResult = await dynamodb.query({
+          TableName: MEMBERSHIPS_TABLE,
+          IndexName: 'artist_id-index',
+          KeyConditionExpression: 'artist_id = :artistId',
+          FilterExpression: 'user_id = :userId',
+          ExpressionAttributeValues: {
+            ':artistId': existingMembership.artist_id,
+            ':userId': user.userId
+          }
+        }).promise();
+
+        const userMembership = adminCheckResult.Items?.[0];
+        if (!userMembership || userMembership.role !== 'admin') {
+          console.log('[MEMBERSHIPS] Access denied - cannot escalate role', {
+            userId: user.userId.substring(0, 8) + '...',
+            requestedRole: role
+          });
+          return createResponse(403, { error: 'Only artist admins can change roles' });
+        }
+      }
+    }
+
     // Build update expression
     const updateParts = [];
     const expressionAttributeValues = {};
@@ -516,6 +639,8 @@ const handleDeleteMembership = async (event, membershipId) => {
     return createResponse(401, { error: authResult.error });
   }
 
+  const { user } = authResult;
+
   try {
     console.log('[MEMBERSHIPS] Deleting membership', { membershipId });
 
@@ -527,6 +652,37 @@ const handleDeleteMembership = async (event, membershipId) => {
 
     if (!membershipResult.Item) {
       return createResponse(404, { error: 'Membership not found' });
+    }
+
+    const existingMembership = membershipResult.Item;
+    const isOwnMembership = existingMembership.user_id === user.userId;
+
+    // SEC-AUD-003: Authorization check
+    // Users can delete their own membership (self-removal / leave band)
+    // Artist admins can delete any membership in their artist
+    // Platform admins can delete any membership
+    if (!isOwnMembership && !user.platformAdmin) {
+      // Check if user is admin of this artist
+      const adminCheckResult = await dynamodb.query({
+        TableName: MEMBERSHIPS_TABLE,
+        IndexName: 'artist_id-index',
+        KeyConditionExpression: 'artist_id = :artistId',
+        FilterExpression: 'user_id = :userId',
+        ExpressionAttributeValues: {
+          ':artistId': existingMembership.artist_id,
+          ':userId': user.userId
+        }
+      }).promise();
+
+      const userMembership = adminCheckResult.Items?.[0];
+      if (!userMembership || userMembership.role !== 'admin') {
+        console.log('[MEMBERSHIPS] Access denied - not authorized to delete membership', {
+          userId: user.userId.substring(0, 8) + '...',
+          membershipId,
+          targetUserId: existingMembership.user_id.substring(0, 8) + '...'
+        });
+        return createResponse(403, { error: 'Not authorized to delete this membership' });
+      }
     }
 
     const artistId = membershipResult.Item.artist_id;
