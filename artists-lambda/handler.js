@@ -631,7 +631,7 @@ async function handleGetAllArtists(event) {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, availabilityMode, contactMethod, phoneNumber, whatsappNumber, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt, #hidden',
+    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, availabilityMode, contactMethod, phoneNumber, whatsappNumber, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt, #hidden, enrichment_status, enrichment_data, enrichment_date',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
@@ -683,7 +683,11 @@ async function handleGetAllArtists(event) {
       ai_created: artist.ai_created || false,
       needs_review: artist.needs_review !== undefined ? artist.needs_review : null,
       validated: artist.validated !== undefined ? artist.validated : true,
-      createdAt: artist.createdAt
+      createdAt: artist.createdAt,
+      // Enrichment fields (2026-08-11)
+      enrichmentStatus: artist.enrichment_status || null,
+      enrichmentData: artist.enrichment_data || null,
+      enrichmentDate: artist.enrichment_date || null
     }));
 
     console.log(` Artists Lambda: Served ${formattedArtists.length} artists`);

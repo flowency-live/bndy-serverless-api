@@ -176,6 +176,11 @@ async function handleUpdateEventMcp(deps, event) {
     'venueId': 'venueId',
     'description': 'description',
     'isPublic': 'isPublic',
+    // Item 13 (2026-08-11): open mic flag was missing here, so BOTH the MCP
+    // edit_event tool AND the curator edit sheet (which delegates to this
+    // handler) silently dropped it. The paired `type` attribute is kept in
+    // sync below.
+    'isOpenMic': 'isOpenMic',
     'ticketed': 'ticketed',
     'ticketUrl': 'ticketUrl',
     'ticketinformation': 'ticketinformation',
@@ -216,6 +221,15 @@ async function handleUpdateEventMcp(deps, event) {
       }
     }
   });
+
+  // Item 13: the record carries the flag TWICE — `isOpenMic` (boolean, read by
+  // bndy-app) and `type` ('open-mic' | 'gig', written by the community create).
+  // An isOpenMic edit updates both so no reader ever sees them disagree.
+  if (updates.isOpenMic !== undefined) {
+    attributeNames['#type'] = 'type';
+    attributeValues[':type'] = updates.isOpenMic ? 'open-mic' : 'gig';
+    updateExpressions.push('#type = :type');
+  }
 
   // AUDIT FIX F4 (2026-07-27): updates could previously edit an event INTO
   // being a duplicate with no check. If this update changes any identity
