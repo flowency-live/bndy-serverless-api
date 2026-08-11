@@ -46,6 +46,11 @@ const MUTATION_ROUTE_BASELINE = {
   'DELETE /api/artists/{id}': 'handler-auth',
   'POST /api/artists/{id}/refresh-facebook-image': 'handler-auth',
 
+  // === Curator: Artists ===
+  'PUT /api/curator/artists/{id}': 'handler-auth',
+  'POST /api/curator/artists/{id}/hide': 'handler-auth',
+  'POST /api/curator/artists/{id}/restore': 'handler-auth',
+
   // === Community (public wizard - SEC-COMMUNITY) ===
   'POST /api/community/artists/find-or-create': 'community',
   'POST /api/community/venues/find-or-create': 'community',
@@ -70,6 +75,13 @@ const MUTATION_ROUTE_BASELINE = {
   'POST /api/artists/{artistId}/public-gigs': 'handler-auth',
   'POST /api/events/batch': 'handler-auth',
 
+  // === Curator: Events ===
+  'PUT /api/curator/events/{id}': 'handler-auth',
+  'POST /api/curator/events/{id}/hide': 'handler-auth',
+  'POST /api/curator/events/{id}/restore': 'handler-auth',
+  'POST /api/curator/events/{id}/cancel': 'handler-auth',
+  'POST /api/curator/events/{id}/uncancel': 'handler-auth',
+
   // === Calendar ===
   'POST /api/artists/{artistId}/calendar/subscribe': 'handler-auth',
   'DELETE /api/artists/{artistId}/calendar/subscriptions/{subscriptionId}': 'handler-auth',
@@ -85,6 +97,11 @@ const MUTATION_ROUTE_BASELINE = {
   'PUT /api/venues/{id}/mcp': 'mcp',
   'POST /api/venues/{id}/enrich': 'mcp',
   'POST /api/integration/venues': 'handler-auth',
+
+  // === Curator: Venues ===
+  'PUT /api/curator/venues/{id}': 'handler-auth',
+  'POST /api/curator/venues/{id}/hide': 'handler-auth',
+  'POST /api/curator/venues/{id}/restore': 'handler-auth',
 
   // === Festivals ===
   'POST /festivals': 'handler-auth',
@@ -106,6 +123,11 @@ const MUTATION_ROUTE_BASELINE = {
   'DELETE /users/{userId}': 'handler-auth',
   'PUT /users/profile': 'handler-auth',
   'POST /users/favourites/toggle': 'handler-auth',
+  'PUT /users/{userId}/role': 'handler-auth',
+
+  // === Community Flags (public - rate-limited) ===
+  'POST /api/community/flags': 'community',
+  'PUT /users/flags/{flagId}/resolve': 'handler-auth',
 
   // === Memberships ===
   'POST /api/memberships': 'handler-auth',
