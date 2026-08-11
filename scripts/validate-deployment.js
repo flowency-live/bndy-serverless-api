@@ -25,7 +25,7 @@ const { execSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const MAX_LAMBDA_SIZE_MB = 250;
-const MAX_ROUTES_PER_LAMBDA = 25;
+const MAX_ROUTES_PER_LAMBDA = 30; // Raised from 25 to accommodate MCP routes (2026-08-11)
 
 // Colors for output
 const RED = '\x1b[31m';
