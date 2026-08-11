@@ -52,6 +52,7 @@ const ALLOWED_ORIGINS = [
   'https://bndy.co.uk',            // Apex domain
   'https://live.bndy.co.uk',      // Frontstage
   'https://gigmap.bndy.co.uk',    // GigMap
+  'https://map.bndy.co.uk',       // bndy-app canonical domain
   'http://localhost:3000'          // Local development
 ];
 
@@ -306,6 +307,96 @@ const handleUpdateProfile = async (event) => {
   }
 };
 
+// ========== FAVOURITES (backlog feature 3) ==========
+// Model A (Jason ruling 2026-08-11): string sets on the bndy-users record.
+// favourite_artist_ids / favourite_venue_ids. No separate table.
+
+const FAVOURITE_ATTRS = {
+  artist: 'favourite_artist_ids',
+  venue: 'favourite_venue_ids'
+};
+
+const setToArray = (attr) => {
+  if (!attr) return [];
+  if (Array.isArray(attr.values)) return attr.values; // DocumentClient set
+  if (Array.isArray(attr)) return attr;               // plain list fallback
+  return [];
+};
+
+// GET /users/favourites
+const handleGetFavourites = async (event) => {
+  const authResult = await requireAuth(event);
+  if (authResult.error) {
+    return createResponse(401, { error: authResult.error });
+  }
+
+  try {
+    const userResult = await dynamodb.get({
+      TableName: USERS_TABLE,
+      Key: { cognito_id: authResult.user.userId }
+    }).promise();
+
+    if (!userResult.Item) {
+      return createResponse(404, { error: 'User not found' });
+    }
+
+    return createResponse(200, {
+      artistIds: setToArray(userResult.Item.favourite_artist_ids),
+      venueIds: setToArray(userResult.Item.favourite_venue_ids)
+    });
+  } catch (error) {
+    console.error('USERS: Get favourites error:', error);
+    return createResponse(500, { error: 'Internal server error' });
+  }
+};
+
+// POST /users/favourites/toggle  body: { type: 'artist'|'venue', id, favourite: boolean }
+// Idempotent: ADD when favourite=true, DELETE when favourite=false. No read needed.
+const handleToggleFavourite = async (event) => {
+  const authResult = await requireAuth(event);
+  if (authResult.error) {
+    return createResponse(401, { error: authResult.error });
+  }
+
+  let body;
+  try {
+    body = JSON.parse(event.body || '{}');
+  } catch (e) {
+    return createResponse(400, { error: 'Invalid JSON body' });
+  }
+
+  const { type, id, favourite } = body;
+  const attrName = FAVOURITE_ATTRS[type];
+
+  if (!attrName) {
+    return createResponse(400, { error: "type must be 'artist' or 'venue'" });
+  }
+  if (typeof id !== 'string' || id.length === 0 || id.length > 200) {
+    return createResponse(400, { error: 'id must be a non-empty string' });
+  }
+  if (typeof favourite !== 'boolean') {
+    return createResponse(400, { error: 'favourite must be a boolean' });
+  }
+
+  try {
+    const op = favourite ? 'ADD' : 'DELETE';
+    await dynamodb.update({
+      TableName: USERS_TABLE,
+      Key: { cognito_id: authResult.user.userId },
+      UpdateExpression: `${op} ${attrName} :ids`,
+      ExpressionAttributeValues: {
+        ':ids': dynamodb.createSet([id])
+      }
+    }).promise();
+
+    console.log('USERS: Favourite toggled', { type, favourite });
+    return createResponse(200, { success: true, type, id, favourite });
+  } catch (error) {
+    console.error('USERS: Toggle favourite error:', error);
+    return createResponse(500, { error: 'Internal server error' });
+  }
+};
+
 // Determine auth type from cognito_id and username
 const getAuthType = (cognitoId, username) => {
   if (cognitoId.startsWith('phone_')) {
@@ -488,6 +579,14 @@ exports.handler = async (event, context) => {
     // Route requests (HTTP API v2 format)
     if (routeKey === 'GET /users/profile') {
       return await handleGetProfile(event);
+    }
+
+    if (routeKey === 'GET /users/favourites') {
+      return await handleGetFavourites(event);
+    }
+
+    if (routeKey === 'POST /users/favourites/toggle') {
+      return await handleToggleFavourite(event);
     }
 
     if (routeKey === 'PUT /users/profile') {

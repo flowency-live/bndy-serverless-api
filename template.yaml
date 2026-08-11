@@ -781,6 +781,18 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /users/profile
             Method: PUT
+        GetUserFavourites:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /users/favourites
+            Method: GET
+        ToggleUserFavourite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /users/favourites/toggle
+            Method: POST
 
   # Memberships Lambda
   MembershipsFunction:

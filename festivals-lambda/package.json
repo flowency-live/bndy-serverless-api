@@ -8,7 +8,8 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
-    "aws-sdk": "^2.1450.0"
+    "aws-sdk": "^2.1450.0",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
     "jest": "^30.4.2"

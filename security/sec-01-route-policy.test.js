@@ -105,6 +105,7 @@ const MUTATION_ROUTE_BASELINE = {
   'PUT /users/{userId}': 'handler-auth',
   'DELETE /users/{userId}': 'handler-auth',
   'PUT /users/profile': 'handler-auth',
+  'POST /users/favourites/toggle': 'handler-auth',
 
   // === Memberships ===
   'POST /api/memberships': 'handler-auth',

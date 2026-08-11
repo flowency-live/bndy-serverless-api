@@ -23,8 +23,22 @@ const ALLOWED_ORIGINS = [
   'https://bndy.co.uk',            // Apex domain
   'https://live.bndy.co.uk',      // Frontstage
   'https://gigmap.bndy.co.uk',    // GigMap
+  'https://map.bndy.co.uk',       // bndy-app canonical domain
   'http://localhost:3000'          // Local development
 ];
+
+// Validate a client-supplied returnTo URL. Accept it only when its origin is
+// in ALLOWED_ORIGINS. Returns the full URL string, or null when invalid.
+const validateReturnTo = (returnTo) => {
+  if (!returnTo || typeof returnTo !== 'string') return null;
+  try {
+    const url = new URL(returnTo);
+    if (!ALLOWED_ORIGINS.includes(url.origin)) return null;
+    return url.origin + url.pathname + url.search;
+  } catch (e) {
+    return null;
+  }
+};
 
 const API_URL = 'https://api.bndy.co.uk';
 const REDIRECT_URI = `${API_URL}/auth/callback`;
@@ -74,7 +88,7 @@ const OAUTH_STATE_TABLE = 'bndy-oauth-states';
 const generateState = () => crypto.randomBytes(32).toString('hex');
 
 // OAuth state management with DynamoDB
-const storeOAuthState = async (state, origin) => {
+const storeOAuthState = async (state, origin, returnTo = null) => {
   const ttl = Math.floor(Date.now() / 1000) + 300; // 5 minutes from now
 
   await dynamodb.put({
@@ -82,6 +96,7 @@ const storeOAuthState = async (state, origin) => {
     Item: {
       state,
       origin,
+      return_to: returnTo,
       created_at: new Date().toISOString(),
       ttl
     }
@@ -112,7 +127,8 @@ const verifyOAuthState = async (state) => {
     }).promise();
 
     console.log('AUTH: OAuth state verified and deleted');
-    return true;
+    // Truthy result carries the stored item so the callback can honour return_to.
+    return result.Item;
   } catch (error) {
     console.error('AUTH: Error verifying OAuth state:', error);
     return false;
@@ -195,9 +211,10 @@ const requireAuth = (event) => {
 const handleGoogleAuth = async (event) => {
   const state = generateState();
   const origin = getFrontendUrl();
+  const returnTo = validateReturnTo(event.queryStringParameters?.returnTo);
 
   // Store state in DynamoDB
-  await storeOAuthState(state, origin);
+  await storeOAuthState(state, origin, returnTo);
 
   const authUrl = `${COGNITO_DOMAIN}/oauth2/authorize?` +
     `response_type=code&` +
@@ -321,7 +338,15 @@ const handleOAuthCallback = async (event) => {
       'Max-Age=7776000; Path=/; ' +
       'Domain=.bndy.co.uk';
 
-    console.log('AUTH CALLBACK: Session created, redirecting to dashboard');
+    console.log('AUTH CALLBACK: Session created, redirecting');
+
+    // Prefer the return_to stored with the OAuth state (bndy-app flow).
+    // Fall back to the legacy backstage destination.
+    const storedReturnTo = validateReturnTo(stateValid?.return_to);
+    const stateOrigin = stateValid?.origin && ALLOWED_ORIGINS.includes(stateValid.origin)
+      ? stateValid.origin
+      : getFrontendUrl();
+    const successTarget = storedReturnTo || `${stateOrigin}/dashboard`;
 
     // Return 200 with HTML+JS redirect for reliable cookie setting
     // Check for pending invite in localStorage and redirect accordingly
@@ -338,9 +363,9 @@ const handleOAuthCallback = async (event) => {
     const pendingInvite = localStorage.getItem('pendingInvite');
     if (pendingInvite) {
       console.log('AUTH CALLBACK: Found pending invite, redirecting to invite page');
-      window.location.href = '${getFrontendUrl()}/invite/' + pendingInvite;
+      window.location.href = '${stateOrigin}/invite/' + pendingInvite;
     } else {
-      window.location.href = '${getFrontendUrl()}/dashboard';
+      window.location.href = '${successTarget}';
     }
   </script>
 </body>
@@ -403,7 +428,10 @@ const handleGetMe = async (event) => {
         avatarUrl: dbUser.avatar_url || null,
         instrument: dbUser.instrument || null,
         profileCompleted: dbUser.profile_complete || false,
-        createdAt: dbUser.created_at
+        createdAt: dbUser.created_at,
+        // Role ladder: user | curator | owner | staff.
+        // Legacy records have no role field. platformAdmin=true reads as staff.
+        role: dbUser.role || (dbUser.platformAdmin ? 'staff' : 'user')
       },
       bands: [], // Empty array for now - TODO: Implement artist memberships
       session: {
@@ -644,6 +672,7 @@ const handlePhoneVerifyOTP = async (event) => {
         avatar_url: null,
         instrument: null,
         profile_complete: false,  // Just like Google OAuth
+        role: 'user',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }
@@ -776,6 +805,7 @@ const handlePhoneVerifyAndOnboard = async (event) => {
         avatar_url: null,
         instrument: null,
         profile_complete: true,
+        role: 'user',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }
@@ -868,6 +898,7 @@ const createOrUpdateUser = async (userData) => {
           avatar_url: null,
           instrument: null,
           profile_complete: false,
+        role: 'user',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }
@@ -886,6 +917,8 @@ const handleEmailRequestMagic = async (event) => {
   try {
     const body = JSON.parse(event.body || '{}');
     const { email } = body;
+    // Where to send the user after the link is clicked. Origin must be allowed.
+    const returnTo = validateReturnTo(body.returnTo);
 
     // Validate email format
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -909,7 +942,8 @@ const handleEmailRequestMagic = async (event) => {
         attempts: 0,
         createdAt: new Date().toISOString(),
         requestId,
-        type: 'email-magic-link'
+        type: 'email-magic-link',
+        return_to: returnTo
       }
     }).promise();
 
@@ -997,9 +1031,11 @@ const handleMagicLinkAuth = async (event) => {
         TableName: MAGIC_TOKEN_TABLE,
         Key: { token }
       }).promise();
+      const expiredReturnTo = validateReturnTo(tokenRecord.return_to);
+      const expiredOrigin = expiredReturnTo ? new URL(expiredReturnTo).origin : getFrontendUrl();
       return {
         statusCode: 302,
-        headers: { Location: `${getFrontendUrl()}/login?error=token_expired` },
+        headers: { Location: `${expiredOrigin}/login?error=token_expired` },
         body: ''
       };
     }
@@ -1040,6 +1076,10 @@ const handleMagicLinkAuth = async (event) => {
 
       console.log('[EMAIL_AUTH] Existing user logged in');
 
+      const storedReturnTo = validateReturnTo(tokenRecord.return_to);
+      const successTarget = storedReturnTo || `${getFrontendUrl()}/dashboard`;
+      const inviteOrigin = storedReturnTo ? new URL(storedReturnTo).origin : getFrontendUrl();
+
       const redirectHtml = `
 <!DOCTYPE html>
 <html>
@@ -1053,9 +1093,9 @@ const handleMagicLinkAuth = async (event) => {
     const pendingInvite = localStorage.getItem('pendingInvite');
     if (pendingInvite) {
       console.log('EMAIL AUTH: Found pending invite, redirecting to invite page');
-      window.location.href = '${getFrontendUrl()}/invite/' + pendingInvite;
+      window.location.href = '${inviteOrigin}/invite/' + pendingInvite;
     } else {
-      window.location.href = '${getFrontendUrl()}/dashboard';
+      window.location.href = '${successTarget}';
     }
   </script>
 </body>
@@ -1086,6 +1126,7 @@ const handleMagicLinkAuth = async (event) => {
         email,
         username,
         profile_complete: false,
+        role: 'user',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }
@@ -1108,6 +1149,8 @@ const handleMagicLinkAuth = async (event) => {
 
     console.log('[EMAIL_AUTH] New user created and logged in');
 
+    const newUserTarget = validateReturnTo(tokenRecord.return_to) || `${getFrontendUrl()}/dashboard`;
+
     const redirectHtml = `
 <!DOCTYPE html>
 <html>
@@ -1117,7 +1160,7 @@ const handleMagicLinkAuth = async (event) => {
 <body>
   <p>Welcome to bndy! Redirecting...</p>
   <script>
-    window.location.href = '${getFrontendUrl()}/dashboard';
+    window.location.href = '${newUserTarget}';
   </script>
 </body>
 </html>`;
@@ -1204,9 +1247,10 @@ const handleCheckIdentity = async (event) => {
 const handleAppleAuth = async (event) => {
   const state = generateState();
   const origin = getFrontendUrl();
+  const returnTo = validateReturnTo(event.queryStringParameters?.returnTo);
 
   // Store state in DynamoDB
-  await storeOAuthState(state, origin);
+  await storeOAuthState(state, origin, returnTo);
 
   const authUrl = `${COGNITO_DOMAIN}/oauth2/authorize?` +
     `response_type=code&` +
