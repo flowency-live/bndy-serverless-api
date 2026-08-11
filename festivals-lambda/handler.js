@@ -95,6 +95,8 @@ function getCorsHeaders(event) {
   const allowedOrigins = [
     'https://live.bndy.co.uk',
     'https://gigmap.bndy.co.uk',
+    'https://map.bndy.co.uk',       // Map (canonical)
+    'https://gigs.bndy.co.uk',      // Gigs
     'https://backstage.bndy.co.uk',
     'http://localhost:3000',
     'http://localhost:3001'

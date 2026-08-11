@@ -65,6 +65,8 @@ const ALLOWED_ORIGINS = [
   'https://bndy.co.uk',
   'https://live.bndy.co.uk',
   'https://gigmap.bndy.co.uk',
+  'https://map.bndy.co.uk',       // Map (canonical)
+  'https://gigs.bndy.co.uk',      // Gigs
   'http://localhost:3000'
 ];
 
