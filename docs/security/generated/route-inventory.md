@@ -1,15 +1,15 @@
 # BNDY SAM Route Inventory
 
-Generated: 2026-08-02T15:56:08.834Z
+Generated: 2026-08-09T19:07:42.438Z
 
 > Baseline only. This report does not change production behaviour. A missing event-level authorizer is reported from the SAM declaration; handler-level checks require separate review.
 
 ## Summary
 
-- Total routes: 199
-- Mutation routes: 123
-- Mutation routes without a declared event authorizer: 123
-- HTTP routes containing /mcp: 6
+- Total routes: 208
+- Mutation routes: 127
+- Mutation routes without a declared event authorizer: 127
+- HTTP routes containing /mcp: 7
 - Duplicate method/path declarations: 0
 
 ## Routes
@@ -106,6 +106,11 @@ Generated: 2026-08-02T15:56:08.834Z
 | PUT | `/api/builders/{id}/venues/{venueId}` | BuildersFunction | UpdateBuilderVenue | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/builders/by-subdomain/{slug}` | BuildersFunction | GetBuilderBySubdomain | None | public-read-review-required |  |
 | GET | `/api/calendar/ical/{token}` | CalendarFunction | GetCalendarIcal | None | public-read-review-required |  |
+| POST | `/api/community/artists/find-or-create` | ArtistsFunction | CommunityFindOrCreateArtist | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/community/events` | EventsFunction | CommunityCreateEvent | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/community/places/autocomplete` | VenuesFunction | CommunityPlacesAutocomplete | None | public-read-review-required |  |
+| GET | `/api/community/places/details` | VenuesFunction | CommunityPlacesDetails | None | public-read-review-required |  |
+| POST | `/api/community/venues/find-or-create` | VenuesFunction | CommunityFindOrCreateVenue | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/events` | EventsFunction | GetAllEvents | None | public-read-review-required |  |
 | POST | `/api/events` | EventsFunction | CreateEvent | None | admin | unauthenticated-mutation-declared-in-sam |
 | DELETE | `/api/events/{id}` | EventsFunction | DeleteEvent | None | admin | unauthenticated-mutation-declared-in-sam |
@@ -158,6 +163,8 @@ Generated: 2026-08-02T15:56:08.834Z
 | PUT | `/api/notifications/{id}/dismiss` | NotificationsFunction | DismissNotification | None | admin | unauthenticated-mutation-declared-in-sam |
 | PUT | `/api/notifications/{id}/read` | NotificationsFunction | MarkNotificationRead | None | admin | unauthenticated-mutation-declared-in-sam |
 | POST | `/api/notifications/mark-all-read` | NotificationsFunction | MarkAllNotificationsRead | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/places/details` | VenuesFunction | PlacesDetails | None | public-read-review-required |  |
+| GET | `/api/places/suggest` | VenuesFunction | PlacesSuggest | None | public-read-review-required |  |
 | GET | `/api/review-items` | SourceRunsFunc | F | None | public-read-review-required |  |
 | GET | `/api/setlists` | SetlistsFunction | GetSetlists | None | public-read-review-required |  |
 | POST | `/api/setlists` | SetlistsFunction | CreateSetlist | None | admin | unauthenticated-mutation-declared-in-sam |
@@ -172,8 +179,10 @@ Generated: 2026-08-02T15:56:08.834Z
 | GET | `/api/source-runs` | SourceRunsFunc | A | None | public-read-review-required |  |
 | GET | `/api/source-runs/{sourceId}` | SourceRunsFunc | D | None | public-read-review-required |  |
 | GET | `/api/source-runs/{sourceId}/{runId}` | SourceRunsFunc | E | None | public-read-review-required |  |
+| PUT | `/api/source-runs/{sourceId}/{runId}` | SourceRunsFunc | RecordRun | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/source-runs/coverage` | SourceRunsFunc | C | None | public-read-review-required |  |
 | GET | `/api/source-runs/summaries` | SourceRunsFunc | B | None | public-read-review-required |  |
+| GET | `/api/source-runs/timeseries` | SourceRunsFunc | Timeseries | None | public-read-review-required |  |
 | GET | `/api/spotify/search` | SpotifyFunction | SpotifySearch | None | public-read-review-required |  |
 | POST | `/api/users/me/unavailability` | CalendarFunction | CreateUserUnavailability | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/venue-crm` | VenueCRMFunction | GetVenueCRM | None | public-read-review-required |  |
@@ -185,9 +194,9 @@ Generated: 2026-08-02T15:56:08.834Z
 | PUT | `/api/venues/{id}` | VenuesFunction | UpdateVenue | None | admin | unauthenticated-mutation-declared-in-sam |
 | POST | `/api/venues/{id}/enrich` | VenuesFunction | EnrichVenueMcp | None | admin | unauthenticated-mutation-declared-in-sam |
 | DELETE | `/api/venues/{id}/mcp` | VenuesFunction | DeleteVenueMcp | None | deprecated | unauthenticated-mutation-declared-in-sam |
+| PUT | `/api/venues/{id}/mcp` | VenuesFunction | UpdateVenueMcp | None | deprecated | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/venues/{venueId}/events` | EventsFunction | GetVenueEvents | None | public-read-review-required |  |
 | GET | `/api/venues/by-external-id` | VenuesFunction | GetVenueByExternalId | None | public-read-review-required |  |
-| POST | `/api/venues/community` | VenuesFunction | CreateCommunityVenue | None | admin | unauthenticated-mutation-declared-in-sam |
 | POST | `/api/venues/find-or-create` | VenuesFunction | FindOrCreateVenue | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/venues/list` | VenuesFunction | ListVenuesMcp | None | public-read-review-required |  |
 | GET | `/auth/apple` | AuthFunction | AppleOAuthInit | None | public-read-review-required |  |
