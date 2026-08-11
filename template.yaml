@@ -19,7 +19,7 @@ Parameters:
 
 Globals:
   Function:
-    Runtime: nodejs24.x
+    Runtime: nodejs20.x
     MemorySize: 512
     Timeout: 30
     Tracing: Active
@@ -89,6 +89,24 @@ Resources:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
           MCP_SERVICE_TOKEN: '{{resolve:secretsmanager:bndy/mcp-service:SecretString:token}}'
       Events:
+        CuratorUpdateArtist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/curator/artists/{id}
+            Method: PUT
+        CuratorHideArtist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/curator/artists/{id}/hide
+            Method: POST
+        CuratorRestoreArtist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/curator/artists/{id}/restore
+            Method: POST
         # Core CRUD
         GetAllArtists:
           Type: HttpApi
@@ -377,6 +395,57 @@ Resources:
             Path: /api/events/batch
             Method: POST
   # Calendar Lambda (split from Events to reduce Lambda policy size)
+
+  # Curator routes for events (feature 4/7). SAME code as EventsFunction —
+  # split out to keep each function under the 30-route guardrail. The shared
+  # router matches by path, so this is a template-only concern split.
+  EventsCuratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: BNDY Events Curator API - /api/curator/events routes (same codebase as EventsFunction)
+      CodeUri: ./events-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
+      MemorySize: 1024
+      Timeout: 60
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          MCP_SERVICE_TOKEN: '{{resolve:secretsmanager:bndy/mcp-service:SecretString:token}}'
+      Events:
+        CuratorUpdateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/curator/events/{id}
+            Method: PUT
+        CuratorHideEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/curator/events/{id}/hide
+            Method: POST
+        CuratorRestoreEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/curator/events/{id}/restore
+            Method: POST
+        CuratorCancelEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/curator/events/{id}/cancel
+            Method: POST
+        CuratorUncancelEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/curator/events/{id}/uncancel
+            Method: POST
+
   CalendarFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -458,6 +527,24 @@ Resources:
           GOOGLE_PLACES_API_KEY: '{{resolve:secretsmanager:bndy/google-places:SecretString:api_key}}'
           MCP_SERVICE_TOKEN: '{{resolve:secretsmanager:bndy/mcp-service:SecretString:token}}'
       Events:
+        CuratorUpdateVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/curator/venues/{id}
+            Method: PUT
+        CuratorHideVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/curator/venues/{id}/hide
+            Method: POST
+        CuratorRestoreVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/curator/venues/{id}/restore
+            Method: POST
         GetAllVenues:
           Type: HttpApi
           Properties:
@@ -793,6 +880,42 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /users/favourites/toggle
             Method: POST
+        GetUserActivity:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /users/activity
+            Method: GET
+        GetAllUserActivity:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /users/activity/all
+            Method: GET
+        SetUserRole:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /users/{userId}/role
+            Method: PUT
+        CreateCommunityFlag:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/community/flags
+            Method: POST
+        GetFlags:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /users/flags
+            Method: GET
+        ResolveFlag:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /users/flags/{flagId}/resolve
+            Method: PUT
 
   # Memberships Lambda
   MembershipsFunction:
@@ -1739,6 +1862,67 @@ Resources:
       KeySchema:
         - AttributeName: key
           KeyType: HASH
+
+  # Activity log (backlog feature 4). One entry per curator/admin write.
+  # PK = actor cognito_id, SK = at#suffix. GSI AllByTime = the godmode feed.
+  # Retained on stack delete: this is the audit trail.
+  ActivityLogTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: bndy-activity-log
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi_pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: AllByTime
+          KeySchema:
+            - AttributeName: gsi_pk
+              KeyType: HASH
+            - AttributeName: sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # Flags (backlog feature 6): anyone reports a problem on a record.
+  # Feature 5's review queue reads this store. Retained on stack delete.
+  FlagsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: bndy-flags
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: gsi_status
+          AttributeType: S
+        - AttributeName: created_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ByStatus
+          KeySchema:
+            - AttributeName: gsi_status
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
 
 Outputs:
   BndyHttpApiUrl:

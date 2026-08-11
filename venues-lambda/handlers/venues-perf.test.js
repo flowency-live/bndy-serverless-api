@@ -3,6 +3,23 @@
  * queries, slim payload, gzip + Cache-Control.
  */
 const zlib = require('zlib');
+
+// Mock Google Places API to avoid real API calls in tests
+jest.mock('../lib/google-places', () => ({
+  ...jest.requireActual('../lib/google-places'),
+  getPlaceDetails: jest.fn().mockResolvedValue({
+    name: 'Test Venue',
+    address: '1 Test Street, Leek',
+    types: ['bar', 'establishment', 'point_of_interest'],
+    addressComponents: [
+      { types: ['street_number'], long_name: '1' },
+      { types: ['route'], long_name: 'Test Street' },
+      { types: ['postal_town'], long_name: 'Leek' },
+      { types: ['postal_code'], long_name: 'ST13 5AA' }
+    ]
+  })
+}));
+
 const { handleGetAllVenues, handleListVenuesMcp, handleCreateVenue } = require('./venues-routes');
 
 const getCorsHeaders = () => ({ 'Access-Control-Allow-Origin': 'https://live.bndy.co.uk' });

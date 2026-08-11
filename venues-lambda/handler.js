@@ -188,7 +188,8 @@ const {
   handleUpdateVenue,
   handleDeleteVenue,
   handleMCPDeleteVenue,
-  handleEnrichVenue
+  handleEnrichVenue,
+  handleAuditVenueAdmission
 } = require('./handlers/venues-routes');
 
 // Deduplication handlers
@@ -196,6 +197,13 @@ const {
   handleFindOrCreateVenue,
   handleIntegrationCreateVenue
 } = require('./lib/venue-deduplication');
+
+// Curator handlers (backlog feature 4)
+const {
+  handleCuratorUpdateVenue,
+  handleCuratorHideVenue,
+  handleCuratorRestoreVenue
+} = require('./handlers/curator');
 
 // Places proxy handlers (B1: community gig wizard)
 const {
@@ -291,6 +299,19 @@ exports.handler = async (event, context) => {
       return await handleListVenuesMcp(deps, event);
     }
 
+    // RUNBOOK §0.23: Venue admission audit - requires platform admin
+    if (method === 'GET' && path === '/api/venues/audit/admission') {
+      const authResult = await requirePlatformAdmin(event);
+      if (authResult.error) {
+        return {
+          statusCode: authResult.statusCode || 401,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({ error: authResult.error })
+        };
+      }
+      return await handleAuditVenueAdmission(deps, event);
+    }
+
     // SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)
     if (method === 'POST' && path === '/api/community/venues/find-or-create') {
       return await handleFindOrCreateVenue(deps, parseBody(event.body), event);
@@ -323,7 +344,23 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'GET' && event.pathParameters?.id) {
+      // Feature 4: godmode can read a hidden venue with ?includeHidden=1 + platform admin
+      if (event.queryStringParameters?.includeHidden === '1') {
+        const adminCheck = await requirePlatformAdmin(event);
+        if (!adminCheck.error) event.__allowHidden = true;
+      }
       return await handleGetVenueById(deps, event.pathParameters.id, event);
+    }
+
+    // Curator routes (backlog feature 4) — role gate lives inside the handlers
+    if (method === 'PUT' && path.startsWith('/api/curator/venues/')) {
+      return await handleCuratorUpdateVenue(deps, event);
+    }
+    if (method === 'POST' && path.startsWith('/api/curator/venues/') && path.endsWith('/hide')) {
+      return await handleCuratorHideVenue(deps, event);
+    }
+    if (method === 'POST' && path.startsWith('/api/curator/venues/') && path.endsWith('/restore')) {
+      return await handleCuratorRestoreVenue(deps, event);
     }
 
     if (method === 'POST' && path === '/api/venues') {

@@ -12,6 +12,10 @@ const ssm = new AWS.SSM({ region: 'eu-west-2' });
 // Configuration
 const USERS_TABLE = 'bndy-users';
 const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
+const ACTIVITY_TABLE = 'bndy-activity-log';
+
+// Role ladder (backlog feature 4). platformAdmin stays the godmode gate.
+const VALID_ROLES = ['user', 'curator', 'owner', 'staff'];
 
 // JWT Secret - cached after first retrieval
 let JWT_SECRET = null;
@@ -170,6 +174,314 @@ const requirePlatformAdmin = async (event) => {
   }
 };
 
+// ========== ACTIVITY LOG (backlog feature 4) ==========
+// One entry per curator/admin write. PK = actor cognito_id, SK = at#suffix.
+// GSI AllByTime (gsi_pk='ALL', sk) gives godmode the recent feed.
+
+const writeActivity = async ({ actorCognitoId, actorName, action, entityType, entityId, entityName, detail }) => {
+  const at = new Date().toISOString();
+  const suffix = Math.random().toString(36).slice(2, 10);
+  await dynamodb.put({
+    TableName: ACTIVITY_TABLE,
+    Item: {
+      user_id: actorCognitoId,
+      sk: `${at}#${suffix}`,
+      at,
+      actor_name: actorName || null,
+      action,
+      entity_type: entityType,
+      entity_id: entityId,
+      entity_name: entityName || null,
+      detail: detail || null,
+      gsi_pk: 'ALL'
+    }
+  }).promise();
+};
+
+const toActivityEntry = (item) => ({
+  at: item.at,
+  actorName: item.actor_name || null,
+  actorId: item.user_id,
+  action: item.action,
+  entityType: item.entity_type,
+  entityId: item.entity_id,
+  entityName: item.entity_name || null,
+  detail: item.detail || null
+});
+
+// ========== FLAG A PROBLEM (backlog feature 6) ==========
+// Anyone flags a record, no account needed. Signed in, the reporter is
+// recorded so bndy can come back to them. Flags land in bndy-flags (the
+// feature-5 queue store) AND in the activity feed so godmode sees them now.
+
+const FLAGS_TABLE = 'bndy-flags';
+const FLAG_ENTITY_TYPES = ['artist', 'venue', 'event'];
+
+// POST /api/community/flags — PUBLIC, WAF rate-limited like the other community routes
+const handleCreateFlag = async (event) => {
+  let body;
+  try {
+    body = JSON.parse(event.body || '{}');
+  } catch (e) {
+    return createResponse(400, { error: 'Invalid JSON body' });
+  }
+
+  const { entityType, entityId, entityName, reason } = body;
+
+  if (!FLAG_ENTITY_TYPES.includes(entityType)) {
+    return createResponse(400, { error: "entityType must be 'artist', 'venue' or 'event'" });
+  }
+  if (typeof entityId !== 'string' || entityId.length === 0 || entityId.length > 200) {
+    return createResponse(400, { error: 'entityId must be a non-empty string' });
+  }
+  if (typeof reason !== 'string' || reason.trim().length < 3 || reason.trim().length > 500) {
+    return createResponse(400, { error: 'reason must be 3 to 500 characters' });
+  }
+
+  // Optional identity: a valid session records the reporter. Failure = anonymous.
+  let reporterId = null;
+  let reporterName = null;
+  const authResult = await requireAuth(event);
+  if (!authResult.error) {
+    reporterId = authResult.user.userId;
+    try {
+      const u = await dynamodb.get({ TableName: USERS_TABLE, Key: { cognito_id: reporterId } }).promise();
+      reporterName = u.Item?.display_name || null;
+    } catch (e) { /* name is optional */ }
+  }
+
+  const now = new Date().toISOString();
+  const flagId = `flag_${now.replace(/[:.]/g, '')}_${Math.random().toString(36).slice(2, 8)}`;
+
+  try {
+    await dynamodb.put({
+      TableName: FLAGS_TABLE,
+      Item: {
+        id: flagId,
+        entity_type: entityType,
+        entity_id: entityId,
+        entity_name: (typeof entityName === 'string' && entityName.length <= 300) ? entityName : null,
+        reason: reason.trim(),
+        reporter_user_id: reporterId,
+        reporter_name: reporterName,
+        status: 'open',
+        gsi_status: 'open',
+        created_at: now
+      }
+    }).promise();
+
+    // Surface in the godmode activity feed immediately.
+    await writeActivity({
+      actorCognitoId: reporterId || 'anonymous',
+      actorName: reporterName || 'Anonymous visitor',
+      action: 'flag',
+      entityType,
+      entityId,
+      entityName: (typeof entityName === 'string' && entityName.length <= 300) ? entityName : null,
+      detail: reason.trim()
+    });
+
+    console.log('USERS: Flag created', { entityType, anonymous: !reporterId });
+    return createResponse(200, { success: true, flagId });
+  } catch (error) {
+    console.error('USERS: Create flag error:', error);
+    return createResponse(500, { error: 'Internal server error' });
+  }
+};
+
+// GET /users/flags — platformAdmin, open flags newest first
+const handleGetFlags = async (event) => {
+  const authResult = await requirePlatformAdmin(event);
+  if (authResult.statusCode) {
+    return createResponse(authResult.statusCode, { error: authResult.error });
+  }
+
+  try {
+    const status = event.queryStringParameters?.status === 'resolved' ? 'resolved' : 'open';
+    const result = await dynamodb.query({
+      TableName: FLAGS_TABLE,
+      IndexName: 'ByStatus',
+      KeyConditionExpression: 'gsi_status = :open',
+      ExpressionAttributeValues: { ':open': status },
+      ScanIndexForward: false,
+      Limit: 200
+    }).promise();
+
+    const flags = (result.Items || []).map((f) => ({
+      id: f.id,
+      entityType: f.entity_type,
+      entityId: f.entity_id,
+      entityName: f.entity_name || null,
+      reason: f.reason,
+      reporterUserId: f.reporter_user_id || null,
+      reporterName: f.reporter_name || null,
+      status: f.status,
+      createdAt: f.created_at,
+      resolvedAt: f.resolved_at || null
+    }));
+
+    return createResponse(200, { flags });
+  } catch (error) {
+    console.error('USERS: Get flags error:', error);
+    return createResponse(500, { error: 'Internal server error' });
+  }
+};
+
+// PUT /users/flags/{flagId}/resolve — platformAdmin
+const handleResolveFlag = async (event) => {
+  const authResult = await requirePlatformAdmin(event);
+  if (authResult.statusCode) {
+    return createResponse(authResult.statusCode, { error: authResult.error });
+  }
+
+  const flagId = event.pathParameters?.flagId;
+  if (!flagId) return createResponse(400, { error: 'Flag ID is required' });
+
+  try {
+    await dynamodb.update({
+      TableName: FLAGS_TABLE,
+      Key: { id: flagId },
+      ConditionExpression: 'attribute_exists(id)',
+      UpdateExpression: 'SET #status = :resolved, gsi_status = :resolved, resolved_at = :at, resolved_by = :by',
+      ExpressionAttributeNames: { '#status': 'status' },
+      ExpressionAttributeValues: {
+        ':resolved': 'resolved',
+        ':at': new Date().toISOString(),
+        ':by': authResult.user.userId
+      }
+    }).promise();
+
+    return createResponse(200, { success: true, flagId, status: 'resolved' });
+  } catch (error) {
+    if (error.code === 'ConditionalCheckFailedException') {
+      return createResponse(404, { error: 'Flag not found' });
+    }
+    console.error('USERS: Resolve flag error:', error);
+    return createResponse(500, { error: 'Internal server error' });
+  }
+};
+
+// PUT /users/{userId}/role — platformAdmin only
+const handleSetUserRole = async (event) => {
+  const authResult = await requirePlatformAdmin(event);
+  if (authResult.statusCode) {
+    return createResponse(authResult.statusCode, { error: authResult.error });
+  }
+
+  const userId = event.pathParameters?.userId;
+  if (!userId) {
+    return createResponse(400, { error: 'User ID is required' });
+  }
+
+  let body;
+  try {
+    body = JSON.parse(event.body || '{}');
+  } catch (e) {
+    return createResponse(400, { error: 'Invalid JSON body' });
+  }
+
+  if (!VALID_ROLES.includes(body.role)) {
+    return createResponse(400, { error: `role must be one of: ${VALID_ROLES.join(', ')}` });
+  }
+
+  try {
+    // user_id (uuid) → cognito_id, same pattern as delete
+    const found = await dynamodb.scan({
+      TableName: USERS_TABLE,
+      FilterExpression: 'user_id = :userId',
+      ExpressionAttributeValues: { ':userId': userId }
+    }).promise();
+
+    if (!found.Items || found.Items.length === 0) {
+      return createResponse(404, { error: 'User not found' });
+    }
+
+    const target = found.Items[0];
+
+    await dynamodb.update({
+      TableName: USERS_TABLE,
+      Key: { cognito_id: target.cognito_id },
+      UpdateExpression: 'SET #role = :role, updated_at = :updatedAt',
+      ExpressionAttributeNames: { '#role': 'role' },
+      ExpressionAttributeValues: {
+        ':role': body.role,
+        ':updatedAt': new Date().toISOString()
+      }
+    }).promise();
+
+    await writeActivity({
+      actorCognitoId: authResult.user.userId,
+      actorName: authResult.dbUser?.display_name,
+      action: 'set-role',
+      entityType: 'user',
+      entityId: userId,
+      entityName: target.display_name || target.username || null,
+      detail: body.role
+    });
+
+    console.log('USERS: Role set', { role: body.role });
+    return createResponse(200, { success: true, userId, role: body.role });
+  } catch (error) {
+    console.error('USERS: Set role error:', error);
+    return createResponse(500, { error: 'Internal server error' });
+  }
+};
+
+// GET /users/activity — the caller's own activity, newest first
+const handleGetMyActivity = async (event) => {
+  const authResult = await requireAuth(event);
+  if (authResult.error) {
+    return createResponse(401, { error: authResult.error });
+  }
+
+  try {
+    const limit = Math.min(Number(event.queryStringParameters?.limit) || 50, 100);
+    const result = await dynamodb.query({
+      TableName: ACTIVITY_TABLE,
+      KeyConditionExpression: 'user_id = :uid',
+      ExpressionAttributeValues: { ':uid': authResult.user.userId },
+      ScanIndexForward: false,
+      Limit: limit
+    }).promise();
+
+    return createResponse(200, { entries: (result.Items || []).map(toActivityEntry) });
+  } catch (error) {
+    console.error('USERS: Get activity error:', error);
+    return createResponse(500, { error: 'Internal server error' });
+  }
+};
+
+// GET /users/activity/all — platformAdmin recent feed, optional ?action= filter
+const handleGetAllActivity = async (event) => {
+  const authResult = await requirePlatformAdmin(event);
+  if (authResult.statusCode) {
+    return createResponse(authResult.statusCode, { error: authResult.error });
+  }
+
+  try {
+    const qp = event.queryStringParameters || {};
+    const limit = Math.min(Number(qp.limit) || 100, 200);
+    const params = {
+      TableName: ACTIVITY_TABLE,
+      IndexName: 'AllByTime',
+      KeyConditionExpression: 'gsi_pk = :all',
+      ExpressionAttributeValues: { ':all': 'ALL' },
+      ScanIndexForward: false,
+      Limit: limit
+    };
+    if (qp.action) {
+      params.FilterExpression = '#action = :action';
+      params.ExpressionAttributeNames = { '#action': 'action' };
+      params.ExpressionAttributeValues[':action'] = qp.action;
+    }
+    const result = await dynamodb.query(params).promise();
+    return createResponse(200, { entries: (result.Items || []).map(toActivityEntry) });
+  } catch (error) {
+    console.error('USERS: Get all activity error:', error);
+    return createResponse(500, { error: 'Internal server error' });
+  }
+};
+
 // Get user profile
 const handleGetProfile = async (event) => {
   const authResult = await requireAuth(event);
@@ -209,6 +521,7 @@ const handleGetProfile = async (event) => {
       instrument: dbUser.instrument,
       profileCompleted: dbUser.profile_complete,
       platformAdmin: dbUser.platformAdmin || false,
+      role: dbUser.role || (dbUser.platformAdmin ? 'staff' : 'user'),
       createdAt: dbUser.created_at,
       updatedAt: dbUser.updated_at
     };
@@ -427,7 +740,8 @@ const handleListUsers = async (event) => {
     // Fetch all users
     const usersResult = await dynamodb.scan({
       TableName: USERS_TABLE,
-      ProjectionExpression: 'user_id, cognito_id, email, phone, username, first_name, last_name, display_name, profile_complete, user_source, created_at'
+      ProjectionExpression: 'user_id, cognito_id, email, phone, username, first_name, last_name, display_name, profile_complete, user_source, #role, platformAdmin, created_at',
+      ExpressionAttributeNames: { '#role': 'role' }
     }).promise();
 
     // Fetch all memberships to count per user
@@ -457,6 +771,8 @@ const handleListUsers = async (event) => {
       membershipCount: membershipCounts[user.cognito_id] || 0,
       authType: getAuthType(user.cognito_id, user.username),
       userSource: user.user_source || null,
+      role: user.role || (user.platformAdmin ? 'staff' : 'user'),
+      platformAdmin: user.platformAdmin || false,
       createdAt: user.created_at
     }));
 
@@ -592,6 +908,30 @@ exports.handler = async (event, context) => {
 
     if (routeKey === 'PUT /users/profile') {
       return await handleUpdateProfile(event);
+    }
+
+    if (routeKey === 'POST /api/community/flags') {
+      return await handleCreateFlag(event);
+    }
+
+    if (routeKey === 'GET /users/flags') {
+      return await handleGetFlags(event);
+    }
+
+    if (routeKey.startsWith('PUT /users/flags/') && routeKey.endsWith('/resolve')) {
+      return await handleResolveFlag(event);
+    }
+
+    if (routeKey === 'GET /users/activity') {
+      return await handleGetMyActivity(event);
+    }
+
+    if (routeKey === 'GET /users/activity/all') {
+      return await handleGetAllActivity(event);
+    }
+
+    if (routeKey.startsWith('PUT /users/') && routeKey.endsWith('/role')) {
+      return await handleSetUserRole(event);
     }
 
     if (routeKey === 'GET /users') {

@@ -221,7 +221,10 @@ async function handleGetPublicEventsGeo(deps, event) {
   const events = items.map(e => ({
     id: e.id, artistId: e.artistId, venueId: e.venueId,
     date: e.date, startTime: e.startTime, geoLat: e.geoLat, geoLng: e.geoLng,
-    ticketed: !!e.ticketed
+    ticketed: !!e.ticketed,
+    // Feature 7: only present when the GSI projects it — MapView joins the
+    // full gigs cache as the fallback, same pattern as `ticketed`.
+    cancelled: !!e.cancelled
   }));
 
   console.log('PUBLIC_GEO: Found events', { count: events.length, truncated });

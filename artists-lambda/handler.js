@@ -18,6 +18,7 @@ const { gatedPut, rekeyUniqueKeys, releaseUniqueKeys, duplicateResponseBody, gat
 const { validateArtistData } = require('./lib/data-quality');
 const { deleteArtistEvents } = require('./lib/cascade-delete-events');
 const { hasEventsForArtist, countEventsForArtist } = require('./lib/artist-event-guard');
+const { requireRole: requireCuratorRole, logActivity: logCuratorActivity, pickFields: pickCuratorFields, hideEntity: hideArtistEntity, restoreEntity: restoreArtistEntity } = require('./curator-core');
 
 /**
  * Sentinel keys for an artist record (2026-07-27 gate plan):
@@ -500,7 +501,12 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'GET' && event.pathParameters?.id) {
-      return await handleGetArtistById(event.pathParameters.id);
+      // Feature 4: godmode can read a hidden artist with ?includeHidden=1 + platform admin
+      if (event.queryStringParameters?.includeHidden === '1') {
+        const adminCheck = await requirePlatformAdmin(event);
+        if (!adminCheck.error) event.__allowHidden = true;
+      }
+      return await handleGetArtistById(event.pathParameters.id, event);
     }
 
     if (method === 'POST' && path === '/api/artists') {
@@ -516,6 +522,17 @@ exports.handler = async (event, context) => {
     // SEC-COMMUNITY: Also handles /api/community/artists/find-or-create (public wizard)
     if (method === 'POST' && (path === '/api/artists/find-or-create' || path === '/api/community/artists/find-or-create')) {
       return await handleFindOrCreateArtist(event);
+    }
+
+    // Curator routes (backlog feature 4) — role gate lives inside the handlers
+    if (method === 'PUT' && path.startsWith('/api/curator/artists/')) {
+      return await handleCuratorUpdateArtist(event);
+    }
+    if (method === 'POST' && path.startsWith('/api/curator/artists/') && path.endsWith('/hide')) {
+      return await handleCuratorHideArtist(event);
+    }
+    if (method === 'POST' && path.startsWith('/api/curator/artists/') && path.endsWith('/restore')) {
+      return await handleCuratorRestoreArtist(event);
     }
 
     // Acts CRUD routes - #60 Acts Model
@@ -598,16 +615,19 @@ async function handleGetAllArtists(event) {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, availabilityMode, contactMethod, phoneNumber, whatsappNumber, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt',
+    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, availabilityMode, contactMethod, phoneNumber, whatsappNumber, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt, #hidden',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
-      '#source': 'source'
+      '#source': 'source',
+      '#hidden': 'hidden'
     }
   };
 
   try {
-    const allItems = await scanAll(dynamodb, params);
+    const scannedItems = await scanAll(dynamodb, params);
+    // Feature 4: hidden artists never reach a public list.
+    const allItems = scannedItems.filter(a => a.hidden !== true);
 
     // Transform to match expected API format
     const formattedArtists = allItems.map(artist => ({
@@ -662,7 +682,7 @@ async function handleGetAllArtists(event) {
   }
 }
 
-async function handleGetArtistById(artistId) {
+async function handleGetArtistById(artistId, event) {
   console.log(` Artists Lambda: Getting artist by ID: ${artistId}`);
 
   const params = {
@@ -678,6 +698,15 @@ async function handleGetArtistById(artistId) {
         statusCode: 404,
         headers: getCorsHeaders(),
         body: JSON.stringify({ error: 'Artist not found' })
+      };
+    }
+
+    // Feature 4: a hidden artist is off every public surface.
+    if (result.Item.hidden === true && !event?.__allowHidden) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Artist not found', code: 'HIDDEN' })
       };
     }
 
@@ -1156,8 +1185,10 @@ async function handleUpdateArtist(event) {
     };
   }
 
-  // Check access - platform admin OR member
-  if (!user.platformAdmin) {
+  // Check access - platform admin OR member OR an approved curator wrapper
+  // (feature 4: __curatorApproved is set internally after a role gate — it can
+  // never arrive on an external request object)
+  if (!user.platformAdmin && event.__curatorApproved !== true) {
     const membershipResult = await dynamodb.query({
       TableName: MEMBERSHIPS_TABLE,
       IndexName: 'user_id-index',
@@ -3874,4 +3905,142 @@ function getCorsHeaders() {
     'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
     'Access-Control-Allow-Credentials': 'true'
   };
+}
+// ========== CURATOR HANDLERS (backlog feature 4) ==========
+// Role gate + whitelist + activity log. Edits delegate to handleUpdateArtist
+// via the internal __curatorApproved flag, so geocoding and validation apply.
+// The whitelist excludes `name`: artist identity stays with staff and the
+// uniqueness sentinels stay coherent.
+
+const CURATOR_ARTIST_FIELDS = [
+  'bio', 'location', 'genres', 'actType',
+  'facebookUrl', 'instagramUrl', 'websiteUrl', 'socialMediaUrls', 'profileImageUrl'
+];
+
+// This lambda holds JWT_SECRET in env — hand curator-core a stub SSM client
+// that fails fast, so its env fallback path is the one that runs.
+const ARTIST_CURATOR_DEPS = {
+  dynamodb,
+  ssm: { getParameter: () => ({ promise: () => Promise.reject(new Error('no SSM in artists-lambda')) }) }
+};
+
+async function getArtistNameForLog(artistId) {
+  try {
+    const r = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();
+    return r.Item?.name || null;
+  } catch {
+    return null;
+  }
+}
+
+async function handleCuratorUpdateArtist(event) {
+  const gate = await requireCuratorRole(ARTIST_CURATOR_DEPS, event, ['curator', 'staff']);
+  if (gate.error) {
+    return { statusCode: gate.statusCode, headers: getCorsHeaders(), body: JSON.stringify({ error: gate.error }) };
+  }
+
+  const artistId = event.pathParameters?.id;
+  if (!artistId) {
+    return { statusCode: 400, headers: getCorsHeaders(), body: JSON.stringify({ error: 'Artist ID is required' }) };
+  }
+
+  let body;
+  try {
+    body = JSON.parse(event.body || '{}');
+  } catch {
+    return { statusCode: 400, headers: getCorsHeaders(), body: JSON.stringify({ error: 'Invalid JSON body' }) };
+  }
+
+  const fields = pickCuratorFields(body, CURATOR_ARTIST_FIELDS);
+  if (Object.keys(fields).length === 0) {
+    return { statusCode: 400, headers: getCorsHeaders(), body: JSON.stringify({ error: `No editable field in body. Allowed: ${CURATOR_ARTIST_FIELDS.join(', ')}` }) };
+  }
+
+  const delegateEvent = { ...event, body: JSON.stringify(fields), __curatorApproved: true };
+  const result = await handleUpdateArtist(delegateEvent);
+
+  if (result.statusCode === 200) {
+    await logCuratorActivity(dynamodb, {
+      actorCognitoId: gate.user.userId,
+      actorName: gate.dbUser.display_name,
+      action: 'edit',
+      entityType: 'artist',
+      entityId: artistId,
+      entityName: await getArtistNameForLog(artistId),
+      detail: Object.keys(fields).join(',')
+    });
+  }
+  return result;
+}
+
+async function handleCuratorHideArtist(event) {
+  const gate = await requireCuratorRole(ARTIST_CURATOR_DEPS, event, ['curator', 'staff']);
+  if (gate.error) {
+    return { statusCode: gate.statusCode, headers: getCorsHeaders(), body: JSON.stringify({ error: gate.error }) };
+  }
+
+  const artistId = event.pathParameters?.id;
+  if (!artistId) {
+    return { statusCode: 400, headers: getCorsHeaders(), body: JSON.stringify({ error: 'Artist ID is required' }) };
+  }
+
+  let reason = null;
+  try {
+    reason = JSON.parse(event.body || '{}').reason || null;
+  } catch { /* body optional */ }
+
+  const name = await getArtistNameForLog(artistId);
+  try {
+    await hideArtistEntity(dynamodb, { tableName: 'bndy-artists', id: artistId, actor: gate.user.userId, reason });
+  } catch (e) {
+    if (e.code === 'ConditionalCheckFailedException') {
+      return { statusCode: 404, headers: getCorsHeaders(), body: JSON.stringify({ error: 'Artist not found' }) };
+    }
+    throw e;
+  }
+
+  await logCuratorActivity(dynamodb, {
+    actorCognitoId: gate.user.userId,
+    actorName: gate.dbUser.display_name,
+    action: 'hide',
+    entityType: 'artist',
+    entityId: artistId,
+    entityName: name,
+    detail: reason
+  });
+
+  return { statusCode: 200, headers: getCorsHeaders(), body: JSON.stringify({ success: true, id: artistId, hidden: true }) };
+}
+
+async function handleCuratorRestoreArtist(event) {
+  const gate = await requireCuratorRole(ARTIST_CURATOR_DEPS, event, ['staff']);
+  if (gate.error) {
+    return { statusCode: gate.statusCode, headers: getCorsHeaders(), body: JSON.stringify({ error: gate.error }) };
+  }
+
+  const artistId = event.pathParameters?.id;
+  if (!artistId) {
+    return { statusCode: 400, headers: getCorsHeaders(), body: JSON.stringify({ error: 'Artist ID is required' }) };
+  }
+
+  const name = await getArtistNameForLog(artistId);
+  try {
+    await restoreArtistEntity(dynamodb, { tableName: 'bndy-artists', id: artistId });
+  } catch (e) {
+    if (e.code === 'ConditionalCheckFailedException') {
+      return { statusCode: 404, headers: getCorsHeaders(), body: JSON.stringify({ error: 'Artist not found' }) };
+    }
+    throw e;
+  }
+
+  await logCuratorActivity(dynamodb, {
+    actorCognitoId: gate.user.userId,
+    actorName: gate.dbUser.display_name,
+    action: 'restore',
+    entityType: 'artist',
+    entityId: artistId,
+    entityName: name
+  });
+
+  return { statusCode: 200, headers: getCorsHeaders(), body: JSON.stringify({ success: true, id: artistId, hidden: false }) };
 }

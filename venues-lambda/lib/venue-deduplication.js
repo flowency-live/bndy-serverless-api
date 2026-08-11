@@ -14,6 +14,7 @@
 
 const { mergeExternalIds } = require('./external-ids');
 const { findPlaceFromGoogle, validateApiKey } = require('./google-places');
+const { validateVenueAdmission } = require('./venue-admission');
 const {
   normalizeForSearch,
   isWithinDistance,
@@ -276,6 +277,31 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
 
         if (placeData) {
           console.log(`[Venues] Geocoded to place_id: ${placeData.placeId}`);
+
+          // RUNBOOK §0.23: "No fixed building, no venue"
+          // Validate that the resolved place is a building, not a locality
+          const admissionResult = validateVenueAdmission({
+            types: placeData.types,
+            name: placeData.name,
+            formatted_address: placeData.address,
+            address_components: placeData.addressComponents,
+          });
+
+          if (!admissionResult.valid) {
+            console.log(`[REJECT] Venue admission failed: ${admissionResult.code} - ${admissionResult.reason}`);
+            return {
+              statusCode: 422,
+              headers: getCorsHeaders(event),
+              body: JSON.stringify({
+                error: admissionResult.reason,
+                code: admissionResult.code,
+                providedName: venueData.name,
+                providedCity: venueData.city,
+                resolvedPlaceId: placeData.placeId,
+                resolvedTypes: placeData.types,
+              }),
+            };
+          }
 
           // Check if this place_id already exists in our database (re-run L1 check)
           const googlePlaceMatch = existingVenues.find(

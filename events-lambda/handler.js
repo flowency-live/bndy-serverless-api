@@ -53,6 +53,9 @@ const { handleCreateArtistEvent, handleCreateUserUnavailability, handleGetEvent,
 // Calendar handlers (mixed auth)
 const { handleGetCalendar, handleGetAllArtistEvents, handleCreateCalendarSubscription, handleGetCalendarSubscriptions, handleRevokeCalendarSubscription, handleGetIcalFeed, handleGetEventIcal } = require('./handlers/calendar');
 
+// Curator handlers (backlog feature 4) — role gate lives inside the handlers
+const { handleCuratorUpdateEvent, handleCuratorHideEvent, handleCuratorRestoreEvent, handleCuratorCancelEvent, handleCuratorUncancelEvent } = require('./handlers/curator');
+
 // Dependency injection object for handlers
 const deps = { dynamodb, ssm, lambda, getCorsHeaders };
 
@@ -116,6 +119,23 @@ exports.handler = async (event, context) => {
 
     if (routeKey.match(/PUT \/api\/events\/[^/]+\/mcp$/)) {
       return await handleUpdateEventMcp(deps, event);
+    }
+
+    // Curator routes (backlog feature 4)
+    if (routeKey.match(/^PUT \/api\/curator\/events\/[^/]+$/)) {
+      return await handleCuratorUpdateEvent(deps, event);
+    }
+    if (routeKey.match(/^POST \/api\/curator\/events\/[^/]+\/hide$/)) {
+      return await handleCuratorHideEvent(deps, event);
+    }
+    if (routeKey.match(/^POST \/api\/curator\/events\/[^/]+\/restore$/)) {
+      return await handleCuratorRestoreEvent(deps, event);
+    }
+    if (routeKey.match(/^POST \/api\/curator\/events\/[^/]+\/cancel$/)) {
+      return await handleCuratorCancelEvent(deps, event);
+    }
+    if (routeKey.match(/^POST \/api\/curator\/events\/[^/]+\/uncancel$/)) {
+      return await handleCuratorUncancelEvent(deps, event);
     }
 
     if (routeKey.match(/GET \/api\/events\/[^/]+\/mcp$/)) {

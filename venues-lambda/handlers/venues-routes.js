@@ -7,8 +7,9 @@
 
 const { normalizeForSearch, calculateSimilarity } = require('../lib/fuzzy-matcher');
 const { computeGeohashFields, cascadeLocationToEvents } = require('../lib/geohash');
-const { findPlaceFromGoogle } = require('../lib/google-places');
+const { findPlaceFromGoogle, getPlaceDetails } = require('../lib/google-places');
 const { formatVenueResponse, triggerVenueEnrichment } = require('../lib/venue-deduplication');
+const { validateVenueAdmission } = require('../lib/venue-admission');
 const { jsonResponse } = require('../lib/http-response');
 const { scanAll } = require('../lib/scan-all');
 const { venuePlaceKey } = require('../lib/identity');
@@ -33,9 +34,11 @@ async function handleGetAllVenues(deps, event) {
     const allItems = await scanAll(dynamodb, params);
 
     // Filter venues with valid coordinates (like the PostgreSQL query)
+    // Feature 4: hidden venues never reach a public list.
     let validVenues = allItems.filter(venue =>
       venue.latitude && venue.longitude &&
-      venue.latitude !== 0 && venue.longitude !== 0
+      venue.latitude !== 0 && venue.longitude !== 0 &&
+      venue.hidden !== true
     );
 
     // If search term provided, filter by name or address (with stop word normalization)
@@ -313,6 +316,16 @@ async function handleGetVenueById(deps, venueId, event) {
       };
     }
 
+    // Feature 4: a hidden venue is off every public surface.
+    // The router sets __allowHidden after a platform-admin check.
+    if (result.Item.hidden === true && !event.__allowHidden) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ error: 'Venue not found', code: 'HIDDEN' })
+      };
+    }
+
     // Transform to match expected API format
     const venue = {
       id: result.Item.id,
@@ -341,6 +354,10 @@ async function handleGetVenueById(deps, venueId, event) {
       ai_created: result.Item.ai_created,
       needs_review: result.Item.needs_review,
       created_source: result.Item.created_source,
+      hidden: result.Item.hidden || false,
+      hiddenBy: result.Item.hidden_by || null,
+      hiddenAt: result.Item.hidden_at || null,
+      hiddenReason: result.Item.hidden_reason || null,
       createdAt: result.Item.createdAt,
       updatedAt: result.Item.updated_at
     };
@@ -468,6 +485,58 @@ async function handleCreateVenue(deps, venueData, event) {
     };
   }
 
+  // RUNBOOK §0.23: "No fixed building, no venue"
+  // Fetch place details and validate before creating
+  try {
+    const placeDetails = await getPlaceDetails(venueData.googlePlaceId);
+
+    if (!placeDetails) {
+      console.log(`[REJECT] handleCreateVenue: Could not fetch place details for ${venueData.googlePlaceId}`);
+      return {
+        statusCode: 422,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({
+          error: 'Could not verify place_id with Google Places API',
+          code: 'PLACE_NOT_FOUND',
+          googlePlaceId: venueData.googlePlaceId
+        })
+      };
+    }
+
+    const admissionResult = validateVenueAdmission({
+      types: placeDetails.types,
+      name: placeDetails.name,
+      formatted_address: placeDetails.address,
+      address_components: placeDetails.addressComponents,
+    });
+
+    if (!admissionResult.valid) {
+      console.log(`[REJECT] handleCreateVenue: Venue admission failed: ${admissionResult.code} - ${admissionResult.reason}`);
+      return {
+        statusCode: 422,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({
+          error: admissionResult.reason,
+          code: admissionResult.code,
+          googlePlaceId: venueData.googlePlaceId,
+          resolvedTypes: placeDetails.types,
+        })
+      };
+    }
+  } catch (error) {
+    // Fail closed: if we can't validate, we can't create
+    console.error(`[REJECT] handleCreateVenue: Place validation failed:`, error.message);
+    return {
+      statusCode: 422,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        error: 'Could not validate venue - Google Places API unavailable',
+        code: 'VALIDATION_ERROR',
+        googlePlaceId: venueData.googlePlaceId
+      })
+    };
+  }
+
   const now = new Date().toISOString();
   const venue = {
     id: require('crypto').randomUUID(),
@@ -580,6 +649,60 @@ async function handleUpdateVenue(deps, venueId, venueData, event) {
       console.log(`[Venues] Existing venue coords: ${existingVenue?.latitude}, ${existingVenue?.longitude}`);
     } catch (getError) {
       console.error('[Venues] Failed to get existing venue for location check:', getError.message);
+    }
+  }
+
+  // RUNBOOK §0.23: "No fixed building, no venue"
+  // If googlePlaceId is being updated, validate the new place
+  if (venueData.googlePlaceId !== undefined && venueData.googlePlaceId !== null && venueData.googlePlaceId.trim() !== '') {
+    try {
+      const placeDetails = await getPlaceDetails(venueData.googlePlaceId);
+
+      if (!placeDetails) {
+        console.log(`[REJECT] handleUpdateVenue: Could not fetch place details for ${venueData.googlePlaceId}`);
+        return {
+          statusCode: 422,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({
+            error: 'Could not verify new place_id with Google Places API',
+            code: 'PLACE_NOT_FOUND',
+            googlePlaceId: venueData.googlePlaceId
+          })
+        };
+      }
+
+      const admissionResult = validateVenueAdmission({
+        types: placeDetails.types,
+        name: placeDetails.name,
+        formatted_address: placeDetails.address,
+        address_components: placeDetails.addressComponents,
+      });
+
+      if (!admissionResult.valid) {
+        console.log(`[REJECT] handleUpdateVenue: Venue admission failed: ${admissionResult.code} - ${admissionResult.reason}`);
+        return {
+          statusCode: 422,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({
+            error: admissionResult.reason,
+            code: admissionResult.code,
+            googlePlaceId: venueData.googlePlaceId,
+            resolvedTypes: placeDetails.types,
+          })
+        };
+      }
+    } catch (error) {
+      // Fail closed: if we can't validate, we can't update place_id
+      console.error(`[REJECT] handleUpdateVenue: Place validation failed:`, error.message);
+      return {
+        statusCode: 422,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({
+          error: 'Could not validate venue - Google Places API unavailable',
+          code: 'VALIDATION_ERROR',
+          googlePlaceId: venueData.googlePlaceId
+        })
+      };
     }
   }
 
@@ -959,6 +1082,103 @@ async function handleEnrichVenue(deps, venueId, body, event) {
   }
 }
 
+/**
+ * GET /api/venues/audit/admission - Audit existing venues for admission rule compliance
+ * RUNBOOK §0.23: Identifies venues that would fail the "no fixed building, no venue" rule
+ *
+ * Returns list of flagged venues with their rejection reasons.
+ * This is a diagnostic endpoint for periodic auditing - does not modify data.
+ */
+async function handleAuditVenueAdmission(deps, event) {
+  const { dynamodb, getCorsHeaders } = deps;
+
+  console.log('[AUDIT] Starting venue admission audit');
+
+  try {
+    // Scan all venues
+    const allVenues = await scanAll(dynamodb, { TableName: 'bndy-venues' });
+    console.log(`[AUDIT] Scanning ${allVenues.length} venues`);
+
+    const flagged = [];
+    const errors = [];
+    let checked = 0;
+
+    for (const venue of allVenues) {
+      // Skip venues without google_place_id
+      if (!venue.google_place_id || venue.google_place_id.trim() === '') {
+        continue;
+      }
+
+      checked++;
+
+      try {
+        const placeDetails = await getPlaceDetails(venue.google_place_id);
+
+        if (!placeDetails) {
+          errors.push({
+            venueId: venue.id,
+            name: venue.name,
+            googlePlaceId: venue.google_place_id,
+            error: 'Could not fetch place details from Google'
+          });
+          continue;
+        }
+
+        const admissionResult = validateVenueAdmission({
+          types: placeDetails.types,
+          name: placeDetails.name,
+          formatted_address: placeDetails.address,
+          address_components: placeDetails.addressComponents,
+        });
+
+        if (!admissionResult.valid) {
+          flagged.push({
+            venueId: venue.id,
+            name: venue.name,
+            googlePlaceId: venue.google_place_id,
+            city: venue.city,
+            address: venue.address,
+            code: admissionResult.code,
+            reason: admissionResult.reason,
+            types: placeDetails.types
+          });
+        }
+      } catch (error) {
+        errors.push({
+          venueId: venue.id,
+          name: venue.name,
+          googlePlaceId: venue.google_place_id,
+          error: error.message
+        });
+      }
+    }
+
+    console.log(`[AUDIT] Complete: ${checked} checked, ${flagged.length} flagged, ${errors.length} errors`);
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        summary: {
+          totalVenues: allVenues.length,
+          venuesWithPlaceId: checked,
+          flagged: flagged.length,
+          errors: errors.length
+        },
+        flaggedVenues: flagged,
+        apiErrors: errors
+      })
+    };
+  } catch (error) {
+    console.error('[AUDIT] Audit failed:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'Audit failed', details: error.message })
+    };
+  }
+}
+
 module.exports = {
   handleGetAllVenues,
   handleListVenuesMcp,
@@ -968,5 +1188,6 @@ module.exports = {
   handleUpdateVenue,
   handleDeleteVenue,
   handleMCPDeleteVenue,
-  handleEnrichVenue
+  handleEnrichVenue,
+  handleAuditVenueAdmission
 };
