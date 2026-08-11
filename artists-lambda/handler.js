@@ -347,6 +347,47 @@ const parseCookies = (cookieHeader) => {
   }, {});
 };
 
+/**
+ * Timing-safe string comparison to prevent timing attacks on token verification.
+ * SEC-AUD-004: Added for MCP service token authentication
+ */
+const timingSafeCompare = (a, b) => {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+};
+
+/**
+ * Require MCP service token authentication
+ * SEC-AUD-004: MCP routes now require Bearer token auth, not unauthenticated access
+ * Returns { user } on success, { error, statusCode } on failure
+ */
+const requireMcpAuth = (event) => {
+  const bearer = event.headers?.Authorization || event.headers?.authorization || '';
+  const token = bearer.startsWith('Bearer ') ? bearer.slice(7) : null;
+  const serviceToken = process.env.MCP_SERVICE_TOKEN;
+
+  // MCP_SERVICE_TOKEN must be configured
+  if (!serviceToken) {
+    console.error('[SEC-AUD-004] MCP_SERVICE_TOKEN not configured');
+    return { error: 'MCP service not configured', statusCode: 500 };
+  }
+
+  // Require Bearer token
+  if (!token) {
+    return { error: 'MCP service token required', statusCode: 401 };
+  }
+
+  // Validate service token
+  if (!timingSafeCompare(token, serviceToken)) {
+    return { error: 'Invalid MCP service token', statusCode: 401 };
+  }
+
+  return { user: { userId: 'mcp-service', platformAdmin: true, isService: true } };
+};
+
 // Authentication middleware
 const requireAuth = async (event) => {
   let sessionToken = null;
@@ -504,8 +545,16 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'DELETE' && event.pathParameters?.id) {
-      // Check if this is an MCP delete request (public, no auth)
+      // SEC-AUD-004: MCP delete now requires service token auth
       if (path.includes('/mcp')) {
+        const mcpAuth = requireMcpAuth(event);
+        if (mcpAuth.error) {
+          return {
+            statusCode: mcpAuth.statusCode || 401,
+            headers: getCorsHeaders(),
+            body: JSON.stringify({ error: mcpAuth.error })
+          };
+        }
         return await handleMCPDeleteArtist(event.pathParameters.id);
       }
 
@@ -3506,6 +3555,18 @@ async function handleMCPUpdateArtist(event) {
     if (artistData.facebookUrl !== undefined) {
       updateParts.push('facebookUrl = :facebookUrl');
       expressionAttributeValues[':facebookUrl'] = artistData.facebookUrl || null;
+
+      // Auto-fetch Facebook profile image if facebookUrl is being set and profileImageUrl is not explicitly provided
+      // (Same behaviour as web/godmode handler - enrichment runs add facebookUrl, should also get the image)
+      if (artistData.facebookUrl && artistData.profileImageUrl === undefined) {
+        console.log('[MCP_UPDATE_ARTIST] Attempting to fetch Facebook profile image...');
+        const fbImage = await fetchFacebookProfilePicture(artistData.facebookUrl);
+        if (fbImage) {
+          console.log('[MCP_UPDATE_ARTIST] Facebook image fetched successfully:', fbImage);
+          updateParts.push('profileImageUrl = :profileImageUrl');
+          expressionAttributeValues[':profileImageUrl'] = fbImage;
+        }
+      }
     }
     if (artistData.instagramUrl !== undefined) {
       updateParts.push('instagramUrl = :instagramUrl');

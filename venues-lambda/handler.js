@@ -149,6 +149,35 @@ const requirePlatformAdmin = async (event) => {
   return authResult;
 };
 
+/**
+ * Require MCP service token authentication
+ * SEC-AUD-004: MCP DELETE routes now require Bearer token auth, not unauthenticated access
+ * Returns { user } on success, { error, statusCode } on failure
+ */
+const requireMcpAuth = (event) => {
+  const bearer = event.headers?.Authorization || event.headers?.authorization || '';
+  const token = bearer.startsWith('Bearer ') ? bearer.slice(7) : null;
+  const serviceToken = process.env.MCP_SERVICE_TOKEN;
+
+  // MCP_SERVICE_TOKEN must be configured
+  if (!serviceToken) {
+    console.error('[SEC-AUD-004] MCP_SERVICE_TOKEN not configured');
+    return { error: 'MCP service not configured', statusCode: 500 };
+  }
+
+  // Require Bearer token
+  if (!token) {
+    return { error: 'MCP service token required', statusCode: 401 };
+  }
+
+  // Validate service token
+  if (!timingSafeCompare(token, serviceToken)) {
+    return { error: 'Invalid MCP service token', statusCode: 401 };
+  }
+
+  return { user: { userId: 'mcp-service', platformAdmin: true, isService: true } };
+};
+
 // Route handlers
 const {
   handleGetAllVenues,
@@ -343,7 +372,16 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'DELETE' && event.pathParameters?.id) {
+      // SEC-AUD-004: MCP delete now requires service token auth
       if (path.includes('/mcp')) {
+        const mcpAuth = requireMcpAuth(event);
+        if (mcpAuth.error) {
+          return {
+            statusCode: mcpAuth.statusCode || 401,
+            headers: getCorsHeaders(event),
+            body: JSON.stringify({ error: mcpAuth.error })
+          };
+        }
         return await handleMCPDeleteVenue(deps, event.pathParameters.id, event);
       }
 

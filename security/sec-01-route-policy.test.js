@@ -42,7 +42,7 @@ const MUTATION_ROUTE_BASELINE = {
   'POST /api/artists': 'handler-auth',
   'PUT /api/artists/{id}': 'handler-auth',
   'PUT /api/artists/{id}/mcp': 'mcp',
-  // SEC-AUD-004: DELETE /api/artists/{id}/mcp removed from template.yaml
+  'DELETE /api/artists/{id}/mcp': 'mcp', // SEC-AUD-004: now requires service token auth
   'DELETE /api/artists/{id}': 'handler-auth',
   'POST /api/artists/{id}/refresh-facebook-image': 'handler-auth',
 
@@ -58,7 +58,7 @@ const MUTATION_ROUTE_BASELINE = {
   'POST /api/events': 'handler-auth',
   'PUT /api/events/{id}': 'handler-auth',
   'PUT /api/events/{id}/mcp': 'mcp',
-  // SEC-AUD-004: DELETE /api/events/{id}/mcp removed from template.yaml
+  'DELETE /api/events/{id}/mcp': 'mcp', // SEC-AUD-004: now requires service token auth
   'DELETE /api/events/{id}': 'handler-auth',
   'POST /api/artists/{artistId}/events': 'handler-auth',
   'PUT /api/artists/{artistId}/events/{id}': 'handler-auth',
@@ -81,7 +81,7 @@ const MUTATION_ROUTE_BASELINE = {
   'POST /api/venues/find-or-create': 'handler-auth',
   'PUT /api/venues/{id}': 'handler-auth',
   'DELETE /api/venues/{id}': 'handler-auth',
-  // SEC-AUD-004: DELETE /api/venues/{id}/mcp removed from template.yaml
+  'DELETE /api/venues/{id}/mcp': 'mcp', // SEC-AUD-004: now requires service token auth
   'PUT /api/venues/{id}/mcp': 'mcp',
   'POST /api/venues/{id}/enrich': 'mcp',
   'POST /api/integration/venues': 'handler-auth',

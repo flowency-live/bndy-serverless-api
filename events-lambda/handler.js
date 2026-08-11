@@ -30,12 +30,12 @@ const ssm = new AWS.SSM({ region: 'eu-west-2' });
 const lambda = new AWS.Lambda({ region: 'eu-west-2' });
 
 // Auth
-const { requireAuth } = require('./lib/auth');
+const { requireAuth, requireMcpAuth } = require('./lib/auth');
 
 // CORS
 const { getCorsHeaders } = require('./lib/cors');
 
-// MCP handlers (NO AUTH)
+// MCP handlers (SEC-AUD-004: DELETE now requires service token auth)
 const { handleGetEventByExternalId, handleUpdateEventMcp, handleDeleteEventMcp, handleGetEventMcp, handleLeaveEvent } = require('./handlers/mcp');
 
 // Public handlers (NO AUTH for most)
@@ -122,7 +122,10 @@ exports.handler = async (event, context) => {
       return await handleGetEventMcp(deps, event);
     }
 
+    // SEC-AUD-004: MCP DELETE now requires service token auth
     if (routeKey.match(/DELETE \/api\/events\/[^/]+\/mcp$/)) {
+      const mcpAuth = requireMcpAuth(deps, event);
+      if (mcpAuth.statusCode) return mcpAuth;
       return await handleDeleteEventMcp(deps, event);
     }
 

@@ -6,6 +6,7 @@
  */
 
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { parseCookies } = require('./cors');
 
 // Configuration
@@ -138,6 +139,63 @@ function validateApiKey(event) {
 }
 
 /**
+ * Timing-safe string comparison to prevent timing attacks on token verification.
+ * SEC-AUD-004: Added for MCP service token authentication
+ */
+const timingSafeCompare = (a, b) => {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+};
+
+/**
+ * Require MCP service token authentication
+ * SEC-AUD-004: MCP routes now require Bearer token auth, not unauthenticated access
+ * @param {Object} deps - Dependencies { getCorsHeaders }
+ * @param {Object} event - Lambda event
+ * @returns {Object} { user } on success, { statusCode, headers, body } on failure
+ */
+function requireMcpAuth(deps, event) {
+  const { getCorsHeaders } = deps;
+
+  const bearer = event.headers?.Authorization || event.headers?.authorization || '';
+  const token = bearer.startsWith('Bearer ') ? bearer.slice(7) : null;
+  const serviceToken = process.env.MCP_SERVICE_TOKEN;
+
+  // MCP_SERVICE_TOKEN must be configured
+  if (!serviceToken) {
+    console.error('[SEC-AUD-004] MCP_SERVICE_TOKEN not configured');
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'MCP service not configured' })
+    };
+  }
+
+  // Require Bearer token
+  if (!token) {
+    return {
+      statusCode: 401,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'MCP service token required' })
+    };
+  }
+
+  // Validate service token
+  if (!timingSafeCompare(token, serviceToken)) {
+    return {
+      statusCode: 401,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'Invalid MCP service token' })
+    };
+  }
+
+  return { user: { userId: 'mcp-service', platformAdmin: true, isService: true } };
+}
+
+/**
  * Reset JWT secret cache (for testing)
  */
 function resetJWTCache() {
@@ -147,6 +205,7 @@ function resetJWTCache() {
 module.exports = {
   getJWTSecret,
   requireAuth,
+  requireMcpAuth,
   verifyMembership,
   validateApiKey,
   resetJWTCache,

@@ -87,6 +87,7 @@ Resources:
       Environment:
         Variables:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          MCP_SERVICE_TOKEN: '{{resolve:secretsmanager:bndy/mcp-service:SecretString:token}}'
       Events:
         # Core CRUD
         GetAllArtists:
@@ -142,7 +143,13 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{id}/mcp
             Method: PUT
-        # SEC-AUD-004: DeleteArtistMcp removed - MCP uses Lambda invoke, not HTTP
+        # SEC-AUD-004: MCP DELETE now requires service token auth
+        DeleteArtistMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}/mcp
+            Method: DELETE
         DeleteArtist:
           Type: HttpApi
           Properties:
@@ -202,6 +209,7 @@ Resources:
       Environment:
         Variables:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          MCP_SERVICE_TOKEN: '{{resolve:secretsmanager:bndy/mcp-service:SecretString:token}}'
       Events:
         # Core CRUD
         GetAllEvents:
@@ -253,7 +261,13 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/events/{id}/mcp
             Method: GET
-        # SEC-AUD-004: DeleteEventMcp removed - MCP uses Lambda invoke, not HTTP
+        # SEC-AUD-004: MCP DELETE now requires service token auth
+        DeleteEventMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/{id}/mcp
+            Method: DELETE
         DeleteEvent:
           Type: HttpApi
           Properties:
@@ -513,7 +527,13 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues/{id}
             Method: DELETE
-        # SEC-AUD-004: DeleteVenueMcp removed - MCP uses Lambda invoke, not HTTP
+        # SEC-AUD-004: MCP DELETE now requires service token auth
+        DeleteVenueMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{id}/mcp
+            Method: DELETE
         UpdateVenueMcp:
           Type: HttpApi
           Properties:
