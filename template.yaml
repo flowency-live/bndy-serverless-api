@@ -43,17 +43,15 @@ Resources:
       StageName: $default
       Description: BNDY Platform HTTP API
       CorsConfiguration:
-        # Note: *.bndy.live CORS is handled dynamically in Lambda handlers
-        # AWS HTTP API doesn't support wildcard subdomains in AllowOrigins
+        # Single source of truth for CORS - Lambda handlers should NOT duplicate this
         AllowOrigins:
-          - https://backstage.bndy.co.uk
-          - https://frontstage.bndy.co.uk
-          - https://live.bndy.co.uk
-          - https://gigmap.bndy.co.uk
           - https://www.bndy.co.uk
           - https://bndy.co.uk
-          - https://klmasot.bndy.co.uk
-          - https://d3cewujswmjafa.cloudfront.net
+          - https://backstage.bndy.co.uk
+          - https://map.bndy.co.uk
+          - https://live.bndy.co.uk
+          - https://gigmap.bndy.co.uk
+          - https://gigs.bndy.co.uk
           - http://localhost:3000
           - http://localhost:3001
         AllowHeaders:
