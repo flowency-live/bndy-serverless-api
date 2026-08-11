@@ -427,7 +427,7 @@ const handleListUsers = async (event) => {
     // Fetch all users
     const usersResult = await dynamodb.scan({
       TableName: USERS_TABLE,
-      ProjectionExpression: 'user_id, cognito_id, email, phone, username, first_name, last_name, display_name, profile_complete, created_at'
+      ProjectionExpression: 'user_id, cognito_id, email, phone, username, first_name, last_name, display_name, profile_complete, user_source, created_at'
     }).promise();
 
     // Fetch all memberships to count per user
@@ -456,6 +456,7 @@ const handleListUsers = async (event) => {
       profileCompleted: user.profile_complete || false,
       membershipCount: membershipCounts[user.cognito_id] || 0,
       authType: getAuthType(user.cognito_id, user.username),
+      userSource: user.user_source || null,
       createdAt: user.created_at
     }));
 

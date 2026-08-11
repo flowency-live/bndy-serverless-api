@@ -313,11 +313,19 @@ const handleOAuthCallback = async (event) => {
       username
     });
 
+    // Derive user source from origin (where user registered)
+    const origin = stateValid?.origin || '';
+    const userSource = origin.includes('map.bndy') || origin.includes('gigmap') ? 'map'
+                     : origin.includes('backstage') ? 'backstage'
+                     : origin.includes('live.bndy') ? 'frontstage'
+                     : 'unknown';
+
     // Create or update user in DynamoDB
     await createOrUpdateUser({
       cognitoId: userId,
       email,
-      username
+      username,
+      userSource
     });
 
     // Create lightweight session
@@ -790,6 +798,13 @@ const handlePhoneVerifyAndOnboard = async (event) => {
     const username = `user_${phone.substring(phone.length - 4)}`;
     const displayName = lastName ? `${firstName} ${lastName}` : firstName;
 
+    // Derive user source from request origin
+    const origin = event.headers?.origin || event.headers?.Origin || '';
+    const userSource = origin.includes('map.bndy') || origin.includes('gigmap') ? 'map'
+                     : origin.includes('backstage') ? 'backstage'
+                     : origin.includes('live.bndy') ? 'frontstage'
+                     : 'unknown';
+
     await dynamodb.put({
       TableName: USERS_TABLE,
       Item: {
@@ -806,6 +821,7 @@ const handlePhoneVerifyAndOnboard = async (event) => {
         instrument: null,
         profile_complete: true,
         role: 'user',
+        user_source: userSource,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }
@@ -855,7 +871,7 @@ const handlePhoneVerifyAndOnboard = async (event) => {
 
 // Helper function to create or update user in DynamoDB
 const createOrUpdateUser = async (userData) => {
-  const { cognitoId, email, username } = userData;
+  const { cognitoId, email, username, userSource } = userData;
 
   try {
     // Check if user exists
@@ -867,7 +883,7 @@ const createOrUpdateUser = async (userData) => {
     if (existingUser.Item) {
       console.log('DB: User exists, updating');
 
-      // Update existing user
+      // Update existing user (don't change user_source on existing users)
       await dynamodb.update({
         TableName: USERS_TABLE,
         Key: { cognito_id: cognitoId },
@@ -879,7 +895,7 @@ const createOrUpdateUser = async (userData) => {
         }
       }).promise();
     } else {
-      console.log('DB: Creating new user');
+      console.log('DB: Creating new user', { userSource });
 
       // Generate new user ID
       const userId = crypto.randomUUID();
@@ -898,7 +914,8 @@ const createOrUpdateUser = async (userData) => {
           avatar_url: null,
           instrument: null,
           profile_complete: false,
-        role: 'user',
+          role: 'user',
+          user_source: userSource || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }
@@ -1118,6 +1135,13 @@ const handleMagicLinkAuth = async (event) => {
     const cognitoId = `email_${userId}`;
     const username = `user_${email.split('@')[0]}`;
 
+    // Derive user source from return_to origin
+    const returnToOrigin = tokenRecord.return_to ? new URL(tokenRecord.return_to).origin : '';
+    const userSource = returnToOrigin.includes('map.bndy') || returnToOrigin.includes('gigmap') ? 'map'
+                     : returnToOrigin.includes('backstage') ? 'backstage'
+                     : returnToOrigin.includes('live.bndy') ? 'frontstage'
+                     : 'unknown';
+
     await dynamodb.put({
       TableName: USERS_TABLE,
       Item: {
@@ -1127,6 +1151,7 @@ const handleMagicLinkAuth = async (event) => {
         username,
         profile_complete: false,
         role: 'user',
+        user_source: userSource,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }
