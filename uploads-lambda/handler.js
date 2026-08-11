@@ -53,6 +53,7 @@ const ALLOWED_ORIGINS = [
   'https://bndy.co.uk',            // Apex domain
   'https://live.bndy.co.uk',      // Frontstage
   'https://gigmap.bndy.co.uk',    // GigMap
+  'https://map.bndy.co.uk',       // bndy-app canonical
   'http://localhost:3000'          // Local development
 ];
 

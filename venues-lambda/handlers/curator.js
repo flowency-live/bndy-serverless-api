@@ -23,7 +23,9 @@ const CURATOR_VENUE_FIELDS = [
   'website',
   'facebookUrl', 'instagramUrl', 'socialMediaUrls',
   'standardTicketed', 'standardTicketUrl', 'standardTicketInformation',
-  'description'
+  'description',
+  // Jason 2026-08-11: curators change the photo from the page (AvatarUpload).
+  'profileImageUrl'
 ];
 
 const respond = (deps, event, statusCode, body) => ({
