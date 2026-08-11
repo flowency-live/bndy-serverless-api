@@ -1179,6 +1179,124 @@ async function handleAuditVenueAdmission(deps, event) {
   }
 }
 
+/**
+ * Handle enrichment action (accept/reject)
+ * PATCH /api/venues/:id/enrichment
+ *
+ * Body: { action: 'accept' | 'reject', fields?: string[] }
+ * - accept: Copy selected fields from enrichment_data to main profile
+ * - reject: Clear enrichment_data without applying changes
+ */
+async function handleEnrichmentAction(deps, venueId, body, event) {
+  const { dynamodb, getCorsHeaders } = deps;
+  const { action, fields } = body || {};
+
+  console.log(`[ENRICHMENT_ACTION] Venue ${venueId}: action=${action}, fields=${JSON.stringify(fields)}`);
+
+  if (!action || !['accept', 'reject'].includes(action)) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'action must be "accept" or "reject"' })
+    };
+  }
+
+  try {
+    // Get current venue
+    const result = await dynamodb.get({
+      TableName: 'bndy-venues',
+      Key: { id: venueId }
+    }).promise();
+
+    if (!result.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ error: 'Venue not found' })
+      };
+    }
+
+    const venue = result.Item;
+    const enrichmentData = venue.enrichment_data;
+
+    if (!enrichmentData) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ error: 'No enrichment data to process' })
+      };
+    }
+
+    const updateParts = ['updated_at = :updated_at'];
+    const expressionAttributeValues = {
+      ':updated_at': new Date().toISOString()
+    };
+
+    if (action === 'accept') {
+      // Determine which fields to accept
+      const fieldsToAccept = fields || Object.keys(enrichmentData)
+        .filter(k => k.startsWith('suggested_'))
+        .map(k => k.replace('suggested_', ''));
+
+      // Map field names to venue attribute names
+      const fieldMapping = {
+        website: 'website',
+        phone: 'phone',
+        socialMediaUrls: 'social_media_urls',
+        facilities: 'facilities',
+        postcode: 'postcode'
+      };
+
+      // Copy selected suggested fields to main profile
+      for (const field of fieldsToAccept) {
+        const suggestedKey = `suggested_${field}`;
+        if (enrichmentData[suggestedKey] !== undefined) {
+          const dbField = fieldMapping[field] || field;
+          updateParts.push(`${dbField} = :${field}`);
+          expressionAttributeValues[`:${field}`] = enrichmentData[suggestedKey];
+        }
+      }
+
+      // Mark as reviewed
+      updateParts.push('enrichment_status = :enrichment_status');
+      expressionAttributeValues[':enrichment_status'] = 'reviewed';
+    } else {
+      // Mark as rejected
+      updateParts.push('enrichment_status = :enrichment_status');
+      expressionAttributeValues[':enrichment_status'] = 'rejected';
+    }
+
+    // Clear enrichment_data after processing
+    updateParts.push('enrichment_data = :enrichment_data');
+    expressionAttributeValues[':enrichment_data'] = null;
+
+    const updateParams = {
+      TableName: 'bndy-venues',
+      Key: { id: venueId },
+      UpdateExpression: `SET ${updateParts.join(', ')}`,
+      ExpressionAttributeValues: expressionAttributeValues,
+      ReturnValues: 'ALL_NEW'
+    };
+
+    const updateResult = await dynamodb.update(updateParams).promise();
+
+    console.log(`[ENRICHMENT_ACTION] Successfully processed enrichment for venue ${venueId}`);
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify(formatVenueResponse(updateResult.Attributes))
+    };
+  } catch (error) {
+    console.error('[ENRICHMENT_ACTION] Error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+}
+
 module.exports = {
   handleGetAllVenues,
   handleListVenuesMcp,
@@ -1189,5 +1307,6 @@ module.exports = {
   handleDeleteVenue,
   handleMCPDeleteVenue,
   handleEnrichVenue,
-  handleAuditVenueAdmission
+  handleAuditVenueAdmission,
+  handleEnrichmentAction
 };

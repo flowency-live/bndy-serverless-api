@@ -553,6 +553,20 @@ exports.handler = async (event, context) => {
       return await handleDeleteAct(event);
     }
 
+    // Enrichment action endpoint (2026-08-11)
+    if (method === 'PATCH' && path.includes('/enrichment') && event.pathParameters?.id) {
+      // Require platform admin for enrichment actions
+      const authResult = await requirePlatformAdmin(event);
+      if (authResult.error) {
+        return {
+          statusCode: authResult.statusCode || 401,
+          headers: getCorsHeaders(),
+          body: JSON.stringify({ error: authResult.error })
+        };
+      }
+      return await handleEnrichmentAction(event);
+    }
+
     if ((method === 'PUT' || method === 'PATCH') && event.pathParameters?.id) {
       // Check if this is an MCP update request (public, no auth)
       if (path.includes('/mcp')) {
@@ -755,7 +769,11 @@ async function handleGetArtistById(artistId, event) {
       actsEnabled: result.Item.actsEnabled || false,
       acts: result.Item.acts || [],
       createdAt: result.Item.createdAt,
-      updatedAt: result.Item.updatedAt
+      updatedAt: result.Item.updatedAt,
+      // Enrichment fields (2026-08-11)
+      enrichmentStatus: result.Item.enrichment_status || null,
+      enrichmentData: result.Item.enrichment_data || null,
+      enrichmentDate: result.Item.enrichment_date || null
     };
 
     return {
@@ -1381,6 +1399,20 @@ async function handleUpdateArtist(event) {
     expressionAttributeValues[':validated'] = artistData.validated;
   }
 
+  // Enrichment fields (2026-08-11)
+  if (artistData.enrichmentStatus !== undefined) {
+    updateParts.push('enrichment_status = :enrichment_status');
+    expressionAttributeValues[':enrichment_status'] = artistData.enrichmentStatus;
+  }
+  if (artistData.enrichmentData !== undefined) {
+    updateParts.push('enrichment_data = :enrichment_data');
+    expressionAttributeValues[':enrichment_data'] = artistData.enrichmentData;
+  }
+  if (artistData.enrichmentDate !== undefined) {
+    updateParts.push('enrichment_date = :enrichment_date');
+    expressionAttributeValues[':enrichment_date'] = artistData.enrichmentDate;
+  }
+
   // Allow updating source (for enabling artists in backstage - platform admin only)
   if (artistData.source !== undefined) {
     expressionAttributeNames['#source'] = 'source';
@@ -1491,6 +1523,122 @@ async function handleUpdateArtist(event) {
   } catch (error) {
     console.error(' DynamoDB update failed:', error);
     throw error;
+  }
+}
+
+/**
+ * Handle enrichment action (accept/reject)
+ * PATCH /api/artists/:id/enrichment
+ *
+ * Body: { action: 'accept' | 'reject', fields?: string[] }
+ * - accept: Copy selected fields from enrichment_data to main profile
+ * - reject: Clear enrichment_data without applying changes
+ */
+async function handleEnrichmentAction(event) {
+  const artistId = event.pathParameters?.id;
+  const body = JSON.parse(event.body || '{}');
+  const { action, fields } = body;
+
+  console.log(`[ENRICHMENT_ACTION] Artist ${artistId}: action=${action}, fields=${JSON.stringify(fields)}`);
+
+  if (!action || !['accept', 'reject'].includes(action)) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'action must be "accept" or "reject"' })
+    };
+  }
+
+  try {
+    // Get current artist
+    const getParams = {
+      TableName: 'bndy-artists',
+      Key: { id: artistId }
+    };
+    const result = await dynamodb.get(getParams).promise();
+
+    if (!result.Item) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'Artist not found' })
+      };
+    }
+
+    const artist = result.Item;
+    const enrichmentData = artist.enrichment_data;
+
+    if (!enrichmentData) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(),
+        body: JSON.stringify({ error: 'No enrichment data to process' })
+      };
+    }
+
+    const updateParts = ['updatedAt = :updatedAt'];
+    const expressionAttributeValues = {
+      ':updatedAt': new Date().toISOString()
+    };
+
+    if (action === 'accept') {
+      // Determine which fields to accept
+      const fieldsToAccept = fields || Object.keys(enrichmentData)
+        .filter(k => k.startsWith('suggested_'))
+        .map(k => k.replace('suggested_', ''));
+
+      // Copy selected suggested fields to main profile
+      for (const field of fieldsToAccept) {
+        const suggestedKey = `suggested_${field}`;
+        if (enrichmentData[suggestedKey] !== undefined) {
+          updateParts.push(`${field} = :${field}`);
+          expressionAttributeValues[`:${field}`] = enrichmentData[suggestedKey];
+        }
+      }
+
+      // Mark as reviewed
+      updateParts.push('enrichment_status = :enrichment_status');
+      expressionAttributeValues[':enrichment_status'] = 'reviewed';
+    } else {
+      // Mark as rejected
+      updateParts.push('enrichment_status = :enrichment_status');
+      expressionAttributeValues[':enrichment_status'] = 'rejected';
+    }
+
+    // Clear enrichment_data after processing
+    updateParts.push('enrichment_data = :enrichment_data');
+    expressionAttributeValues[':enrichment_data'] = null;
+
+    const updateParams = {
+      TableName: 'bndy-artists',
+      Key: { id: artistId },
+      UpdateExpression: `SET ${updateParts.join(', ')}`,
+      ExpressionAttributeValues: expressionAttributeValues,
+      ReturnValues: 'ALL_NEW'
+    };
+
+    const updateResult = await dynamodb.update(updateParams).promise();
+
+    console.log(`[ENRICHMENT_ACTION] Successfully processed enrichment for artist ${artistId}`);
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({
+        ...updateResult.Attributes,
+        artistType: updateResult.Attributes.artist_type || null,
+        enrichmentStatus: updateResult.Attributes.enrichment_status || null,
+        enrichmentData: updateResult.Attributes.enrichment_data || null,
+        enrichmentDate: updateResult.Attributes.enrichment_date || null
+      })
+    };
+  } catch (error) {
+    console.error('[ENRICHMENT_ACTION] Error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(),
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
   }
 }
 
@@ -3640,6 +3788,20 @@ async function handleMCPUpdateArtist(event) {
       expressionAttributeValues[':name_variants'] = mergedNameVariants;
     }
 
+    // Enrichment fields (2026-08-11) - MCP agents populate these for human review
+    if (artistData.enrichmentStatus !== undefined) {
+      updateParts.push('enrichment_status = :enrichment_status');
+      expressionAttributeValues[':enrichment_status'] = artistData.enrichmentStatus;
+    }
+    if (artistData.enrichmentData !== undefined) {
+      updateParts.push('enrichment_data = :enrichment_data');
+      expressionAttributeValues[':enrichment_data'] = artistData.enrichmentData;
+    }
+    if (artistData.enrichmentDate !== undefined) {
+      updateParts.push('enrichment_date = :enrichment_date');
+      expressionAttributeValues[':enrichment_date'] = artistData.enrichmentDate;
+    }
+
     const params = {
       TableName: 'bndy-artists',
       Key: { id: artistId },
@@ -3913,7 +4075,7 @@ function getCorsHeaders() {
 // uniqueness sentinels stay coherent.
 
 const CURATOR_ARTIST_FIELDS = [
-  'bio', 'location', 'genres', 'actType',
+  'bio', 'location', 'locationType', 'locationLat', 'locationLng', 'genres', 'actType',
   'facebookUrl', 'instagramUrl', 'websiteUrl', 'socialMediaUrls', 'profileImageUrl'
 ];
 

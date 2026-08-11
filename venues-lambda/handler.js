@@ -189,7 +189,8 @@ const {
   handleDeleteVenue,
   handleMCPDeleteVenue,
   handleEnrichVenue,
-  handleAuditVenueAdmission
+  handleAuditVenueAdmission,
+  handleEnrichmentAction
 } = require('./handlers/venues-routes');
 
 // Deduplication handlers
@@ -390,6 +391,20 @@ exports.handler = async (event, context) => {
         }
       }
       return await handleUpdateVenue(deps, event.pathParameters.id, parseBody(event.body), event);
+    }
+
+    // Enrichment action endpoint (2026-08-11) - accept/reject enrichment suggestions
+    if (method === 'PATCH' && event.pathParameters?.id && path.endsWith('/enrichment')) {
+      // Require platform admin for enrichment actions
+      const authResult = await requirePlatformAdmin(event);
+      if (authResult.error) {
+        return {
+          statusCode: authResult.statusCode || 401,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({ error: authResult.error })
+        };
+      }
+      return await handleEnrichmentAction(deps, event.pathParameters.id, parseBody(event.body), event);
     }
 
     if (method === 'POST' && event.pathParameters?.id && path.includes('/enrich')) {

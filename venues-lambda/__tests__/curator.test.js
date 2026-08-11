@@ -99,19 +99,20 @@ describe('curator venue edit', () => {
     expect(logPut[0].Item.entity_type).toBe('venue');
   });
 
-  test('curator cannot blank the postcode', async () => {
+  test('address fields are stripped — the verified Google listing owns them', async () => {
     wireGets(userRecord('curator'));
     const res = await handleCuratorUpdateVenue(deps, makeEvent('PUT', '/api/curator/venues/v1', {
-      userId: 'u1', body: { postcode: '' }
+      userId: 'u1', body: { website: 'https://x', address: '1 Fake St', postcode: 'ZZ1 1ZZ', city: 'Nowhere' }
     }));
-    expect(res.statusCode).toBe(422);
-    expect(handleUpdateVenue).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    const passed = handleUpdateVenue.mock.calls[0][2];
+    expect(passed).toEqual({ website: 'https://x' });
   });
 
   test('body with only forbidden fields is a 400', async () => {
     wireGets(userRecord('curator'));
     const res = await handleCuratorUpdateVenue(deps, makeEvent('PUT', '/api/curator/venues/v1', {
-      userId: 'u1', body: { name: 'New Name' }
+      userId: 'u1', body: { name: 'New Name', address: '1 Fake St', postcode: 'ZZ1 1ZZ' }
     }));
     expect(res.statusCode).toBe(400);
   });

@@ -15,10 +15,13 @@ const { handleUpdateVenue } = require('./venues-routes');
 
 const VENUES_TABLE = 'bndy-venues';
 
-// No name, no googlePlaceId, no coordinates: identity stays with staff.
+// Jason ruling 2026-08-11: a venue's address/postcode/city come from its
+// VERIFIED Google Place ID and are NEVER hand-edited, by anyone, anywhere.
+// Curators touch presentation only: socials, website, ticketing, description.
+// No name, no googlePlaceId, no coordinates, no address fields.
 const CURATOR_VENUE_FIELDS = [
-  'address', 'postcode', 'city', 'phone', 'website',
-  'facebookUrl', 'instagramUrl', 'socialMediaUrls', 'profileImageUrl',
+  'website',
+  'facebookUrl', 'instagramUrl', 'socialMediaUrls',
   'standardTicketed', 'standardTicketUrl', 'standardTicketInformation',
   'description'
 ];
@@ -56,11 +59,6 @@ async function handleCuratorUpdateVenue(deps, event) {
   if (Object.keys(fields).length === 0) {
     return respond(deps, event, 400, { error: `No editable field in body. Allowed: ${CURATOR_VENUE_FIELDS.join(', ')}` });
   }
-  // A curator cannot blank the postcode (F4 rule holds).
-  if ('postcode' in fields && (!fields.postcode || String(fields.postcode).trim() === '')) {
-    return respond(deps, event, 422, { error: 'Postcode cannot be removed.' });
-  }
-
   const result = await handleUpdateVenue(deps, id, fields, event);
 
   if (result.statusCode === 200) {
