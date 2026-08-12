@@ -1276,13 +1276,24 @@ async function handleUpdateArtist(event) {
     updateParts.push('#location = :location');
     expressionAttributeValues[':location'] = artistData.location || '';
   }
+  // Track fields to REMOVE (DynamoDB doesn't accept null in ExpressionAttributeValues)
+  const removeParts = [];
+
   if (artistData.locationLat !== undefined) {
-    updateParts.push('locationLat = :locationLat');
-    expressionAttributeValues[':locationLat'] = artistData.locationLat;
+    if (artistData.locationLat === null) {
+      removeParts.push('locationLat');
+    } else {
+      updateParts.push('locationLat = :locationLat');
+      expressionAttributeValues[':locationLat'] = artistData.locationLat;
+    }
   }
   if (artistData.locationLng !== undefined) {
-    updateParts.push('locationLng = :locationLng');
-    expressionAttributeValues[':locationLng'] = artistData.locationLng;
+    if (artistData.locationLng === null) {
+      removeParts.push('locationLng');
+    } else {
+      updateParts.push('locationLng = :locationLng');
+      expressionAttributeValues[':locationLng'] = artistData.locationLng;
+    }
   }
   if (artistData.locationType !== undefined) {
     updateParts.push('locationType = :locationType');
@@ -1470,10 +1481,13 @@ async function handleUpdateArtist(event) {
     expressionAttributeValues[':name_variants'] = mergedNameVariants;
   }
 
+  // Build UpdateExpression with SET and optional REMOVE clauses
+  const updateExpression = `SET ${updateParts.join(', ')}${removeParts.length > 0 ? ` REMOVE ${removeParts.join(', ')}` : ''}`;
+
   const params = {
     TableName: 'bndy-artists',
     Key: { id: artistId },
-    UpdateExpression: `SET ${updateParts.join(', ')}`,
+    UpdateExpression: updateExpression,
     ExpressionAttributeNames: expressionAttributeNames,
     ExpressionAttributeValues: expressionAttributeValues,
     ReturnValues: 'ALL_NEW'
