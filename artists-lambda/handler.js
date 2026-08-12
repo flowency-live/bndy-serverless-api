@@ -4065,27 +4065,12 @@ async function handleListArtistsMcp(event) {
   }
 }
 
-// CORS headers for community endpoints (B2: dynamic allowlist for wizard)
-// Note: event param optional for backwards compat; pass it for proper origin echo
+// CORS headers for community endpoints
+// CORS is now handled by API Gateway CorsConfiguration in template.yaml
+// Lambda should NOT set Access-Control-Allow-Origin to avoid conflicts
 function getCommunityHeaders(event) {
-  const origin = event?.headers?.origin || event?.headers?.Origin || '';
-  const allowedOrigins = [
-    'https://live.bndy.co.uk',
-    'https://gigmap.bndy.co.uk',
-    'https://map.bndy.co.uk',       // Map (canonical)
-    'https://gigs.bndy.co.uk',      // Gigs
-    'https://www.bndy.co.uk',
-    'https://bndy.co.uk',
-    'http://localhost:3000'
-  ];
-  const allowOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
-
   return {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Credentials': 'false'
+    'Content-Type': 'application/json'
   };
 }
 

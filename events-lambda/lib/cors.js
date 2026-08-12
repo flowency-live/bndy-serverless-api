@@ -41,16 +41,14 @@ function getCorsHeaders(event) {
 }
 
 /**
- * CORS headers for integration API (allows x-api-key header)
- * @returns {Object} Integration CORS headers
+ * CORS headers for integration API
+ * CORS is now handled by API Gateway CorsConfiguration in template.yaml
+ * Lambda should NOT set Access-Control-Allow-Origin to avoid conflicts
+ * @returns {Object} Integration headers
  */
 function getIntegrationHeaders() {
   return {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type,x-api-key',
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Credentials': 'false'
+    'Content-Type': 'application/json'
   };
 }
 
