@@ -1926,8 +1926,8 @@ async function handleForceDeleteArtist(artistId) {
   }
 }
 
-// DELETE /api/artists/:id/mcp - Delete artist via MCP (NO AUTH)
-// Allows deletion of ANY artist record via MCP
+// DELETE /api/artists/:id/mcp - Delete artist via MCP (SEC-AUD-004: requires MCP service token)
+// Allows deletion of ANY artist record via MCP with valid service token
 async function handleMCPDeleteArtist(artistId) {
   console.log(` Artists Lambda MCP: Delete request for artist: ${artistId}`);
 
