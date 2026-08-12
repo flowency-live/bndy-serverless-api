@@ -46,6 +46,9 @@ const MUTATION_ROUTE_BASELINE = {
   'DELETE /api/artists/{id}': 'handler-auth',
   'POST /api/artists/{id}/refresh-facebook-image': 'handler-auth',
 
+  // === Enrichment: Artists ===
+  'PATCH /api/artists/{id}/enrichment': 'handler-auth',
+
   // === Curator: Artists ===
   'PUT /api/curator/artists/{id}': 'handler-auth',
   'POST /api/curator/artists/{id}/hide': 'handler-auth',
@@ -97,6 +100,9 @@ const MUTATION_ROUTE_BASELINE = {
   'PUT /api/venues/{id}/mcp': 'mcp',
   'POST /api/venues/{id}/enrich': 'mcp',
   'POST /api/integration/venues': 'handler-auth',
+
+  // === Enrichment: Venues ===
+  'PATCH /api/venues/{id}/enrichment': 'handler-auth',
 
   // === Curator: Venues ===
   'PUT /api/curator/venues/{id}': 'handler-auth',
