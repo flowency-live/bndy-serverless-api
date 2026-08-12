@@ -117,7 +117,10 @@ exports.handler = async (event, context) => {
       return await handleIntegrationFindOrCreateEvent(deps, event);
     }
 
+    // SEC-AUD-005: MCP PUT now requires service token auth (was public, fixed 2026-08-12)
     if (routeKey.match(/PUT \/api\/events\/[^/]+\/mcp$/)) {
+      const mcpAuth = requireMcpAuth(deps, event);
+      if (mcpAuth.statusCode) return mcpAuth;
       return await handleUpdateEventMcp(deps, event);
     }
 

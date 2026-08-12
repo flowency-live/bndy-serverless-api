@@ -570,8 +570,16 @@ exports.handler = async (event, context) => {
     }
 
     if ((method === 'PUT' || method === 'PATCH') && event.pathParameters?.id) {
-      // Check if this is an MCP update request (public, no auth)
+      // SEC-AUD-005: MCP update now requires service token auth (was public, fixed 2026-08-12)
       if (path.includes('/mcp')) {
+        const mcpAuth = requireMcpAuth(event);
+        if (mcpAuth.error) {
+          return {
+            statusCode: mcpAuth.statusCode || 401,
+            headers: getCorsHeaders(),
+            body: JSON.stringify({ error: mcpAuth.error })
+          };
+        }
         return await handleMCPUpdateArtist(event);
       }
       return await handleUpdateArtist(event);
@@ -4068,12 +4076,10 @@ function getCommunityHeaders(event) {
 }
 
 function getCorsHeaders() {
+  // CORS headers are now handled by API Gateway CorsConfiguration in template.yaml
+  // Lambda should NOT set Access-Control-Allow-Origin to avoid conflicts
   return {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': getAllowedOrigin(),
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Credentials': 'true'
+    'Content-Type': 'application/json'
   };
 }
 // ========== CURATOR HANDLERS (backlog feature 4) ==========
