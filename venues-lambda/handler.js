@@ -235,28 +235,12 @@ function parseBody(body) {
 
 /**
  * CORS headers for API responses
+ * CORS is now handled by API Gateway CorsConfiguration in template.yaml
+ * Lambda should NOT set Access-Control-Allow-Origin to avoid conflicts
  */
 function getCorsHeaders(event) {
-  const origin = event?.headers?.origin || event?.headers?.Origin;
-  const allowedOrigins = [
-    'https://www.bndy.co.uk',
-    'https://backstage.bndy.co.uk',
-    'https://bndy.co.uk',
-    'https://live.bndy.co.uk',
-    'https://gigmap.bndy.co.uk',
-    'https://map.bndy.co.uk',       // Map (canonical)
-    'https://gigs.bndy.co.uk',      // Gigs
-    'http://localhost:3000'
-  ];
-
-  const allowOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
-
   return {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie,x-api-key',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Credentials': 'true'
+    'Content-Type': 'application/json'
   };
 }
 

@@ -564,12 +564,9 @@ async function handleForceDeleteSong(songId) {
   }
 }
 
+// CORS is now handled by API Gateway CorsConfiguration in template.yaml
 function getCorsHeaders() {
   return {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': getAllowedOrigin(),
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Credentials': 'true'
+    'Content-Type': 'application/json'
   };
 }

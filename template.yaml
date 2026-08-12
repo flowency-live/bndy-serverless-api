@@ -63,6 +63,7 @@ Resources:
           - GET
           - POST
           - PUT
+          - PATCH
           - DELETE
           - OPTIONS
         AllowCredentials: true
@@ -202,6 +203,13 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{id}/refresh-facebook-image
             Method: POST
+        # Enrichment actions (accept/reject AI enrichment)
+        ArtistEnrichmentAction:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}/enrichment
+            Method: PATCH
         # Artist nested routes
         GetArtistEvents:
           Type: HttpApi
@@ -631,6 +639,13 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues/{id}/enrich
             Method: POST
+        # Enrichment actions (accept/reject AI enrichment)
+        VenueEnrichmentAction:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{id}/enrichment
+            Method: PATCH
         GetVenueByExternalId:
           Type: HttpApi
           Properties:

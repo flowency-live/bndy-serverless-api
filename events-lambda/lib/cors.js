@@ -29,15 +29,14 @@ function getAllowedOrigin(event) {
 
 /**
  * Generate CORS headers with dynamic origin
+ * CORS is now handled by API Gateway CorsConfiguration in template.yaml
+ * Lambda should NOT set Access-Control-Allow-Origin to avoid conflicts
  * @param {Object} event - Lambda event object
  * @returns {Object} CORS headers
  */
 function getCorsHeaders(event) {
   return {
-    'Access-Control-Allow-Origin': getAllowedOrigin(event),
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Credentials': 'true'
+    'Content-Type': 'application/json'
   };
 }
 

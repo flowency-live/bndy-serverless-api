@@ -90,25 +90,10 @@ const requireAuth = async (event) => {
   }
 };
 
+// CORS is now handled by API Gateway CorsConfiguration in template.yaml
 function getCorsHeaders(event) {
-  const origin = event?.headers?.origin || event?.headers?.Origin || 'https://live.bndy.co.uk';
-  const allowedOrigins = [
-    'https://live.bndy.co.uk',
-    'https://gigmap.bndy.co.uk',
-    'https://map.bndy.co.uk',       // Map (canonical)
-    'https://gigs.bndy.co.uk',      // Gigs
-    'https://backstage.bndy.co.uk',
-    'http://localhost:3000',
-    'http://localhost:3001'
-  ];
-
-  const allowOrigin = allowedOrigins.includes(origin) ? origin : 'https://live.bndy.co.uk';
-
   return {
-    'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
-    'Access-Control-Allow-Credentials': 'true'
+    'Content-Type': 'application/json'
   };
 }
 

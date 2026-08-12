@@ -26,13 +26,12 @@ const getAllowedOrigin = () => {
   return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
 };
 
+// CORS is now handled by API Gateway CorsConfiguration in template.yaml
 function buildResponse(statusCode, body) {
   return {
     statusCode,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': getAllowedOrigin(),
-      'Access-Control-Allow-Credentials': true,
     },
     body: JSON.stringify(body),
   };

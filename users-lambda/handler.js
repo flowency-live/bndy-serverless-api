@@ -70,12 +70,9 @@ const getAllowedOrigin = () => {
   return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
 };
 
-// Generate CORS headers with dynamic origin
+// CORS is now handled by API Gateway CorsConfiguration in template.yaml
 const getCorsHeaders = () => ({
-  'Access-Control-Allow-Origin': getAllowedOrigin(),
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
-  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-  'Access-Control-Allow-Credentials': 'true'
+  'Content-Type': 'application/json'
 });
 
 // Create response

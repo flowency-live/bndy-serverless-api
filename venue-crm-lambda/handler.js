@@ -106,13 +106,12 @@ function parseBody(event) {
 }
 
 // Helper: Create response
+// CORS is now handled by API Gateway CorsConfiguration in template.yaml
 function createResponse(statusCode, body) {
   return {
     statusCode,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': getAllowedOrigin(),
-      'Access-Control-Allow-Credentials': true,
     },
     body: JSON.stringify(body),
   };

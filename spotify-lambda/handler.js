@@ -175,9 +175,8 @@ exports.handler = async (event) => {
   currentEvent = event;
   console.log('Spotify Lambda invoked:', event.requestContext.http.method, event.requestContext.http.path);
 
+  // CORS is now handled by API Gateway CorsConfiguration in template.yaml
   const headers = {
-    'Access-Control-Allow-Origin': getAllowedOrigin(),
-    'Access-Control-Allow-Credentials': true,
     'Content-Type': 'application/json'
   };
 

@@ -69,13 +69,12 @@ const ExtractSchema = z.object({
   events: z.array(EventSchema).max(200)
 });
 
+// CORS is now handled by API Gateway CorsConfiguration in template.yaml
 function createResponse(statusCode, body, additionalHeaders = {}) {
   return {
     statusCode,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': getAllowedOrigin(),
-      'Access-Control-Allow-Credentials': 'true',
       ...additionalHeaders
     },
     body: JSON.stringify(body)
