@@ -56,6 +56,9 @@ describe('handleGetPublicEventsGeo — bbox contract', () => {
     const body = JSON.parse(res.body);
     expect(body.truncated).toBe(false);
     const e = body.events[0];
+    // `cancelled` joined the light geo shape with feature 7 (cancelled gigs,
+    // 2026-08-11). This expectation was never updated, so the suite has been
+    // red since then. Found and fixed 2026-08-13 during feature 12.
     expect(e).toEqual({ id: 'e1', artistId: 'a1', venueId: 'v1', date: '2026-07-12', startTime: '20:00', geoLat: 53.0, geoLng: -2.2, ticketed: true, cancelled: false });
   });
   it('city-scale bbox → gh4 index with bounded fan-out', async () => {

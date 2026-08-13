@@ -189,6 +189,10 @@ async function handleUpdateEventMcp(deps, event) {
     'eventUrl': 'eventUrl',
     'notes': 'notes',
     'externalIds': 'external_ids',
+    // Feature 12 (2026-08-13): the bill. Without these two, MCP could not set or
+    // correct a support act, so every imported multi-act bill stayed single-act.
+    'collaboratingArtistIds': 'collaboratingArtistIds',
+    'headlineArtistIds': 'headlineArtistIds',
     // Festival fields (Phase 1a)
     'festivalId': 'festivalId',
     'festivalName': 'festivalName',
@@ -231,6 +235,35 @@ async function handleUpdateEventMcp(deps, event) {
     updateExpressions.push('#type = :type');
   }
 
+  // Feature 12: every headline act must be ON the bill, and a gig carries at most
+  // four acts. Same rule as the community create, enforced on the edit path too.
+  if (updates.headlineArtistIds !== undefined || updates.collaboratingArtistIds !== undefined) {
+    const bill = [
+      updates.artistId !== undefined ? updates.artistId : existing.Item.artistId,
+      ...(updates.collaboratingArtistIds !== undefined
+        ? (updates.collaboratingArtistIds || [])
+        : (existing.Item.collaboratingArtistIds || []))
+    ].filter(Boolean);
+    if (bill.length > 4) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ error: 'A gig carries at most 4 acts. Use a festival for a bigger bill.', code: 'TOO_MANY_ACTS' })
+      };
+    }
+    const heads = updates.headlineArtistIds !== undefined
+      ? (updates.headlineArtistIds || []).filter(Boolean)
+      : (existing.Item.headlineArtistIds || []);
+    const stray = heads.filter((h) => !bill.includes(h));
+    if (stray.length > 0) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ error: 'Every headline act must be on the bill', code: 'INVALID_HEADLINERS', strayHeadliners: stray })
+      };
+    }
+  }
+
   // AUDIT FIX F4 (2026-07-27): updates could previously edit an event INTO
   // being a duplicate with no check. If this update changes any identity
   // field (artist, venue, date) on a public gig, re-run the duplicate check
@@ -239,16 +272,26 @@ async function handleUpdateEventMcp(deps, event) {
     : (updates.artist_id !== undefined ? updates.artist_id : existing.Item.artistId);
   const effVenueId = updates.venueId !== undefined ? updates.venueId : existing.Item.venueId;
   const effDate = updates.date !== undefined ? updates.date : existing.Item.date;
+  // GATE FIX 2026-08-13 (feature 12): the identity test previously ignored
+  // collaboratingArtistIds. Every sentinel key is (venue|artist|date) and there
+  // is ONE PER ACT, so adding a support act creates a new identity that was
+  // never gated, and removing one stranded its sentinel forever — that act could
+  // then never play that venue on that date again. Now the whole bill counts.
+  const effCollabs = updates.collaboratingArtistIds !== undefined
+    ? (updates.collaboratingArtistIds || []).filter(Boolean)
+    : (existing.Item.collaboratingArtistIds || []);
+  const sameSet = (a, b) => a.length === b.length && [...a].sort().every((v, i) => v === [...b].sort()[i]);
   const identityChanged = effArtistId !== existing.Item.artistId
     || effVenueId !== existing.Item.venueId
-    || effDate !== existing.Item.date;
+    || effDate !== existing.Item.date
+    || !sameSet(effCollabs, existing.Item.collaboratingArtistIds || []);
   const isPublicGig = existing.Item.isPublic === true || existing.Item.type === 'gig' || existing.Item.type === 'public_gig';
 
   if (identityChanged && isPublicGig && effVenueId && effArtistId) {
     // GATE FIX 2026-07-28: cover collaborators too, not just the primary artist
     const effAllArtists = [effArtistId,
       ...(existing.Item.artistIds || []),
-      ...(existing.Item.collaboratingArtistIds || [])].filter(Boolean);
+      ...effCollabs].filter(Boolean);
     const dup = await checkForDuplicateEvent(dynamodb, effVenueId, effDate, effAllArtists);
     if (dup && dup.id !== id) {
       const detail = { eventId: id, conflictsWith: dup.id, effArtistId, effVenueId, effDate };
@@ -277,6 +320,7 @@ async function handleUpdateEventMcp(deps, event) {
       artistId: effArtistId,
       venueId: effVenueId,
       date: effDate,
+      collaboratingArtistIds: effCollabs,
     };
     const rekey = await rekeyUniqueKeys(dynamodb, {
       oldKeys: eventGateKeys(existing.Item),
@@ -568,13 +612,31 @@ async function handleLeaveEvent(deps, event) {
 
     // Remove artist from collaboratingArtistIds
     const updatedCollaboratingIds = collaboratingArtistIds.filter(collabId => collabId !== artistId);
+    // Feature 12 fix 2026-08-13: this route removed the act but never released
+    // its uniqueness sentinel. The key is (venue|artist|date), one per act, so a
+    // departed act kept holding that slot and could never be booked at that venue
+    // on that date again by anyone. Release before the write, and drop the act
+    // from the headline set so no card names an act that is not playing.
+    await rekeyUniqueKeys(dynamodb, {
+      oldKeys: eventGateKeys(existingEvent),
+      newKeys: eventGateKeys({ ...existingEvent, collaboratingArtistIds: updatedCollaboratingIds }),
+      refId: id,
+      entityType: 'event',
+      source: 'leave-event'
+    });
+
+    const remainingHeadliners = (existingEvent.headlineArtistIds || []).filter(h => h !== artistId);
+    const nextHeadliners = remainingHeadliners.length > 0
+      ? remainingHeadliners
+      : [existingEvent.artistId].filter(Boolean);
 
     await dynamodb.update({
       TableName: EVENTS_TABLE,
       Key: { id },
-      UpdateExpression: 'SET collaboratingArtistIds = :ids, updatedAt = :now',
+      UpdateExpression: 'SET collaboratingArtistIds = :ids, headlineArtistIds = :heads, updatedAt = :now',
       ExpressionAttributeValues: {
         ':ids': updatedCollaboratingIds,
+        ':heads': nextHeadliners,
         ':now': new Date().toISOString()
       }
     }).promise();

@@ -267,4 +267,114 @@ describe('Event Deduplication (checkForDuplicateEvent)', () => {
       expect(body.error).toContain('Duplicate');
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Feature 12 (2026-08-13). The backlog claimed a second act at one venue on one
+  // night was blocked. It never was: the sentinel key is (venue|artist|date) and
+  // the gate writes ONE PER ACT. These tests pin that rule down so nobody
+  // "fixes" it back into a venue+date block later.
+  // ---------------------------------------------------------------------------
+  describe('the bill and the uniqueness gate', () => {
+    const venue = { id: 'venue-123', name: 'The Music Hall', city: 'Stoke', latitude: 53.0, longitude: -2.1 };
+    const NAMES = { 'artist-1': 'Not Guilty', 'artist-2': 'The Remedy', 'artist-3': 'Jazz Trio', 'artist-4': 'Small Hours' };
+
+    /** No existing gigs at the venue, all artists resolve. */
+    const emptyVenue = () => {
+      mockDynamoDB.get.mockImplementation((params) => {
+        if (params.TableName === 'bndy-venues') return Promise.resolve({ Item: venue });
+        if (params.TableName === 'bndy-artists') {
+          const name = NAMES[params.Key.id];
+          return Promise.resolve(name ? { Item: { id: params.Key.id, name } } : {});
+        }
+        // The create path reads the event back to prove the write persisted.
+        if (params.TableName === 'bndy-events') return Promise.resolve({ Item: { id: params.Key.id } });
+        return Promise.resolve({});
+      });
+      mockDynamoDB.scan.mockResolvedValue({ Items: [] });
+      mockDynamoDB.query.mockResolvedValue({ Items: [] });
+    };
+
+    const sentinelKeys = () => {
+      const call = mockDynamoDB.transactWrite.mock.calls.at(-1)[0];
+      return call.TransactItems.filter(i => i.Put.TableName === 'bndy-unique-keys').map(i => i.Put.Item.key);
+    };
+
+    it('claims one sentinel per act on a three-act bill', async () => {
+      emptyVenue();
+      const result = await handler(createCommunityEvent({
+        artistIds: ['artist-1', 'artist-2', 'artist-3'],
+        venueId: 'venue-123', date: '2026-06-20', startTime: '20:00'
+      }), {});
+
+      expect(result.statusCode).toBe(201);
+      const keys = sentinelKeys();
+      expect(keys).toHaveLength(3);
+      expect(new Set(keys).size).toBe(3); // one distinct key per act, never a shared venue+date key
+    });
+
+    it('ALLOWS a different act at the same venue on the same night', async () => {
+      // This is the case the backlog wrongly recorded as blocked. An existing gig
+      // is at this venue on this date, but with acts 1 and 2. Act 4 is free.
+      mockDynamoDB.get.mockImplementation((params) => {
+        if (params.TableName === 'bndy-venues') return Promise.resolve({ Item: venue });
+        if (params.TableName === 'bndy-artists') return Promise.resolve({ Item: { id: params.Key.id, name: NAMES[params.Key.id] } });
+        if (params.TableName === 'bndy-events') return Promise.resolve({ Item: { id: params.Key.id } });
+        return Promise.resolve({});
+      });
+      mockDynamoDB.scan.mockResolvedValue({ Items: [] });
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.IndexName === 'venueId-date-index') {
+          return Promise.resolve({ Items: [{ id: 'other', title: 'Earlier set', artistId: 'artist-1', collaboratingArtistIds: ['artist-2'], startTime: '18:00' }] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+
+      const result = await handler(createCommunityEvent({
+        artistId: 'artist-4', venueId: 'venue-123', date: '2026-06-20', startTime: '21:00'
+      }), {});
+
+      expect(result.statusCode).toBe(201);
+    });
+
+    it('BLOCKS an act already playing that venue that night as a support act', async () => {
+      mockDynamoDB.get.mockImplementation((params) => {
+        if (params.TableName === 'bndy-venues') return Promise.resolve({ Item: venue });
+        if (params.TableName === 'bndy-artists') return Promise.resolve({ Item: { id: params.Key.id, name: NAMES[params.Key.id] } });
+        if (params.TableName === 'bndy-events') return Promise.resolve({ Item: { id: params.Key.id } });
+        return Promise.resolve({});
+      });
+      mockDynamoDB.scan.mockResolvedValue({ Items: [] });
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.IndexName === 'venueId-date-index') {
+          return Promise.resolve({ Items: [{ id: 'other', title: 'Earlier set', artistId: 'artist-1', collaboratingArtistIds: ['artist-2'], startTime: '18:00' }] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+
+      const result = await handler(createCommunityEvent({
+        artistIds: ['artist-4', 'artist-2'], // artist-2 supports the earlier gig too
+        venueId: 'venue-123', date: '2026-06-20', startTime: '21:00'
+      }), {});
+
+      expect(result.statusCode).toBe(409);
+    });
+
+    it('gives a co-headline bill the same keys as a supported bill', async () => {
+      // Billing is presentation. It must never change the identity of the gig.
+      emptyVenue();
+      await handler(createCommunityEvent({
+        artistIds: ['artist-1', 'artist-2'],
+        venueId: 'venue-123', date: '2026-06-20', startTime: '20:00'
+      }), {});
+      const supported = sentinelKeys().sort();
+
+      emptyVenue();
+      await handler(createCommunityEvent({
+        artistIds: ['artist-1', 'artist-2'],
+        headlineArtistIds: ['artist-1', 'artist-2'],
+        venueId: 'venue-123', date: '2026-06-20', startTime: '20:00'
+      }), {});
+      expect(sentinelKeys().sort()).toEqual(supported);
+    });
+  });
 });

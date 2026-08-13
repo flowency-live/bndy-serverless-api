@@ -382,6 +382,81 @@ describe('Multi-Artist Events', () => {
     });
   });
 
+  // Feature 12 fix 2026-08-13: leaving an event must RELEASE that act's sentinel.
+  // The key is (venue|artist|date), one per act. Before this fix the act stayed
+  // holding the slot forever and could never be booked at that venue on that date
+  // again, by anyone. The act must also drop out of the headline set.
+  // Feature 12 fix 2026-08-13. The MCP edit path decided "did the identity
+  // change?" from artistId, venueId and date ALONE. collaboratingArtistIds was
+  // invisible to it. Every sentinel is (venue|artist|date) with one per act, so
+  // adding a support act created an UNGATED identity and removing one stranded a
+  // sentinel. Now the whole bill counts.
+  describe('MCP edit: the bill is part of the identity', () => {
+    const editRequest = (updates) => ({
+      requestContext: { http: { method: 'PUT', path: '/api/events/event-123/mcp' } },
+      pathParameters: { id: 'event-123' },
+      headers: { 'Content-Type': 'application/json', authorization: 'Bearer test-secret' },
+      body: JSON.stringify(updates)
+    });
+
+    const existingEvent = {
+      id: 'event-123',
+      artistId: 'artist-1',
+      collaboratingArtistIds: ['artist-2'],
+      headlineArtistIds: ['artist-1'],
+      venueId: 'venue-123',
+      date: '2025-06-15',
+      isPublic: true,
+      type: 'gig'
+    };
+
+    const OLD_TOKEN = process.env.MCP_SERVICE_TOKEN;
+    beforeAll(() => { process.env.MCP_SERVICE_TOKEN = 'test-secret'; });
+    afterAll(() => { if (OLD_TOKEN === undefined) delete process.env.MCP_SERVICE_TOKEN; else process.env.MCP_SERVICE_TOKEN = OLD_TOKEN; });
+
+    beforeEach(() => {
+      mockDynamoDB.get.mockImplementation((params) => {
+        if (params.TableName === 'bndy-unique-keys') return Promise.resolve({ Item: { key: params.Key.key, refId: 'event-123' } });
+        return Promise.resolve({ Item: existingEvent });
+      });
+      mockDynamoDB.query.mockResolvedValue({ Items: [] });
+      mockDynamoDB.update.mockResolvedValue({ Attributes: existingEvent });
+    });
+
+    it('re-keys the gate when an act is ADDED to the bill', async () => {
+      await handler(editRequest({ collaboratingArtistIds: ['artist-2', 'artist-3'] }), {});
+      const claims = mockDynamoDB.transactWrite.mock.calls
+        .flatMap(c => c[0].TransactItems)
+        .filter(i => i.Put && i.Put.TableName === 'bndy-unique-keys');
+      expect(claims).toHaveLength(1); // exactly the new act's key
+    });
+
+    it('re-keys the gate when an act is REMOVED from the bill', async () => {
+      await handler(editRequest({ collaboratingArtistIds: [] }), {});
+      const deletes = mockDynamoDB.transactWrite.mock.calls
+        .flatMap(c => c[0].TransactItems)
+        .filter(i => i.Delete && i.Delete.TableName === 'bndy-unique-keys');
+      expect(deletes).toHaveLength(1); // the departed act's key is freed
+    });
+
+    it('does NOT re-key when only presentation changes', async () => {
+      await handler(editRequest({ title: 'A new title' }), {});
+      expect(mockDynamoDB.transactWrite).not.toHaveBeenCalled();
+    });
+
+    it('rejects a headline act that is not on the bill', async () => {
+      const result = await handler(editRequest({ headlineArtistIds: ['artist-9'] }), {});
+      expect(result.statusCode).toBe(400);
+      expect(JSON.parse(result.body).code).toBe('INVALID_HEADLINERS');
+    });
+
+    it('rejects a bill of more than four acts', async () => {
+      const result = await handler(editRequest({ collaboratingArtistIds: ['a', 'b', 'c', 'd'] }), {});
+      expect(result.statusCode).toBe(400);
+      expect(JSON.parse(result.body).code).toBe('TOO_MANY_ACTS');
+    });
+  });
+
   describe('Leave Event Endpoint', () => {
     // Helper to create authenticated request with session cookie
     const createLeaveEventRequest = (artistId, eventId) => ({
@@ -430,6 +505,70 @@ describe('Multi-Artist Events', () => {
 
       // Verify update was called to remove artist from collaboratingArtistIds
       expect(mockDynamoDB.update).toHaveBeenCalled();
+    });
+
+    /** artist-2 leaves a three-act bill it was billed on. */
+    const leavingSetup = () => {
+      const existingEvent = {
+        id: 'event-123',
+        artistId: 'artist-1',
+        collaboratingArtistIds: ['artist-2', 'artist-3'],
+        headlineArtistIds: ['artist-1', 'artist-2'],
+        venueId: 'venue-123',
+        date: '2025-06-15',
+        isPublic: true,
+        type: 'gig'
+      };
+      mockDynamoDB.get.mockImplementation((params) => {
+        if (params.TableName === 'bndy-users') {
+          return Promise.resolve({ Item: { cognito_id: 'test-user-123', name: 'Test User' } });
+        }
+        // The sentinel this event owns, so the release is allowed to proceed.
+        if (params.TableName === 'bndy-unique-keys') {
+          return Promise.resolve({ Item: { key: params.Key.key, refId: 'event-123', entityType: 'event' } });
+        }
+        return Promise.resolve({ Item: existingEvent });
+      });
+      mockDynamoDB.update.mockResolvedValue({ Attributes: existingEvent });
+      return existingEvent;
+    };
+
+    it("releases the departing act's uniqueness sentinel", async () => {
+      leavingSetup();
+      const result = await handler(createLeaveEventRequest('artist-2', 'event-123'), {});
+      expect(result.statusCode).toBe(200);
+
+      const deletes = mockDynamoDB.transactWrite.mock.calls
+        .flatMap(c => c[0].TransactItems)
+        .filter(i => i.Delete && i.Delete.TableName === 'bndy-unique-keys');
+      expect(deletes).toHaveLength(1);
+    });
+
+    it('drops the departing act from the headline set', async () => {
+      leavingSetup();
+      await handler(createLeaveEventRequest('artist-2', 'event-123'), {});
+
+      const update = mockDynamoDB.update.mock.calls.at(-1)[0];
+      expect(update.UpdateExpression).toContain('headlineArtistIds');
+      expect(update.ExpressionAttributeValues[':heads']).toEqual(['artist-1']);
+      expect(update.ExpressionAttributeValues[':ids']).toEqual(['artist-3']);
+    });
+
+    it('never leaves a bill with no headliner', async () => {
+      // artist-2 was the ONLY billed headliner. Act 1 must take over.
+      mockDynamoDB.get.mockImplementation((params) => {
+        if (params.TableName === 'bndy-users') return Promise.resolve({ Item: { cognito_id: 'u', name: 'U' } });
+        if (params.TableName === 'bndy-unique-keys') return Promise.resolve({ Item: { key: params.Key.key, refId: 'event-123' } });
+        return Promise.resolve({ Item: {
+          id: 'event-123', artistId: 'artist-1', collaboratingArtistIds: ['artist-2'],
+          headlineArtistIds: ['artist-2'], venueId: 'venue-123', date: '2025-06-15', isPublic: true, type: 'gig'
+        } });
+      });
+      mockDynamoDB.update.mockResolvedValue({ Attributes: {} });
+
+      await handler(createLeaveEventRequest('artist-2', 'event-123'), {});
+      const update = mockDynamoDB.update.mock.calls.at(-1)[0];
+      expect(update.ExpressionAttributeValues[':heads']).toEqual(['artist-1']);
     });
 
     it('should not allow primary artist to leave (must delete instead)', async () => {
