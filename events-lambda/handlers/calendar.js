@@ -682,8 +682,7 @@ async function handleGetIcalFeed(deps, event) {
       return {
         statusCode: 401,
         headers: {
-          'Content-Type': 'text/plain',
-          'Access-Control-Allow-Origin': '*'
+          'Content-Type': 'text/plain'
         },
         body: 'Invalid or revoked token'
       };
@@ -738,7 +737,6 @@ async function handleGetIcalFeed(deps, event) {
       headers: {
         'Content-Type': 'text/calendar; charset=utf-8',
         'Content-Disposition': `attachment; filename="${artistName.replace(/[^a-z0-9]/gi, '-')}-calendar.ics"`,
-        'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'max-age=300' // 5 minute cache
       },
       body: icalContent
@@ -748,8 +746,7 @@ async function handleGetIcalFeed(deps, event) {
     return {
       statusCode: 500,
       headers: {
-        'Content-Type': 'text/plain',
-        'Access-Control-Allow-Origin': '*'
+        'Content-Type': 'text/plain'
       },
       body: 'Error generating calendar feed'
     };
