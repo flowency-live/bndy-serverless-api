@@ -8,7 +8,8 @@
     "security:inventory": "node scripts/security-route-inventory.js",
     "security:test": "node --test security/sec-01-route-policy.test.js",
     "test:security-inventory": "node --test scripts/__tests__/security-route-inventory.test.js",
-    "predeploy": "npm run validate && npm run verify-routes && npm run security:test",
+    "test:artist-taxonomy": "node --test shared/artist-domain/taxonomy.test.js",
+    "predeploy": "npm run validate && npm run verify-routes && npm run security:test && npm run test:artist-taxonomy",
     "deploy": "sam build && sam deploy --no-confirm-changeset",
     "deploy:guided": "sam build && sam deploy --guided",
     "smoke-test": "bash scripts/smoke-test.sh"
