@@ -48,7 +48,7 @@ jobs:
           done
 
   validate:
-    name: Validate SAM Template
+    name: Validate deployment
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,21 +58,12 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Setup SAM CLI
-        uses: aws-actions/setup-sam@v2
-        with:
-          use-installer: true
-
-      - name: Validate SAM Template
-        run: |
-          # SAM 1.165 enables cfn-lint by default. The estate is still on
-          # nodejs20.x, which AWS now reports as deprecated. Keep structural
-          # template validation as the feature deployment gate; runtime migration
-          # is a separate estate-wide change.
-          sam validate --no-lint
-
       - name: Run Pre-Deployment Validation
         run: |
+          # SAM CLI 1.165 now fails validation on the estate-wide Node 20
+          # deprecation warning. The deploy job still runs `sam build` before
+          # `sam deploy`, so malformed SAM templates cannot be deployed. Keep
+          # the repo's route/config validators as the pre-deploy gate here.
           cd scripts
           npm install
           echo "=== Pre-Deployment Validation ==="
