@@ -480,6 +480,62 @@ const handleGetAllActivity = async (event) => {
   }
 };
 
+// ========== SAVED GIG FILTER ==========
+// Stored as a small document on the existing bndy-users record. The profile
+// route is intentionally reused so this feature needs no additional API route.
+const EMPTY_GIG_FILTER = { genres: [], actTypes: [], includeOpenMic: false, enabled: false };
+const VALID_GIG_ACT_TYPES = new Set(['originals', 'covers', 'tribute', 'acoustic']);
+
+const normaliseGigFilter = (value) => {
+  if (!value || typeof value !== 'object') return { ...EMPTY_GIG_FILTER };
+  return {
+    genres: Array.isArray(value.genres) ? value.genres.filter((x) => typeof x === 'string') : [],
+    actTypes: Array.isArray(value.actTypes) ? value.actTypes.filter((x) => typeof x === 'string') : [],
+    includeOpenMic: value.includeOpenMic === true,
+    enabled: value.enabled === true
+  };
+};
+
+const validateGigFilter = (value) => {
+  if (!value || typeof value !== 'object') return { error: 'gigFilter must be an object' };
+  if (!Array.isArray(value.genres) || value.genres.length > 20 || value.genres.some((x) => typeof x !== 'string' || !x.trim() || x.length > 40)) {
+    return { error: 'gigFilter.genres must be an array of up to 20 genre names' };
+  }
+  if (!Array.isArray(value.actTypes) || value.actTypes.length > 4 || value.actTypes.some((x) => typeof x !== 'string' || !VALID_GIG_ACT_TYPES.has(x))) {
+    return { error: 'gigFilter.actTypes contains an invalid act type' };
+  }
+  if (typeof value.includeOpenMic !== 'boolean' || typeof value.enabled !== 'boolean') {
+    return { error: 'gigFilter includeOpenMic and enabled must be booleans' };
+  }
+  return {
+    value: {
+      genres: [...new Set(value.genres.map((x) => x.trim()))],
+      actTypes: [...new Set(value.actTypes)],
+      includeOpenMic: value.includeOpenMic,
+      enabled: value.enabled
+    }
+  };
+};
+
+const toProfileData = (dbUser) => ({
+  id: dbUser.user_id,
+  cognitoId: dbUser.cognito_id,
+  email: dbUser.email,
+  username: dbUser.username,
+  firstName: dbUser.first_name,
+  lastName: dbUser.last_name,
+  displayName: dbUser.display_name,
+  hometown: dbUser.hometown,
+  avatarUrl: dbUser.avatar_url,
+  instrument: dbUser.instrument,
+  profileCompleted: dbUser.profile_complete,
+  platformAdmin: dbUser.platformAdmin || false,
+  role: dbUser.role || (dbUser.platformAdmin ? 'staff' : 'user'),
+  gigFilter: normaliseGigFilter(dbUser.gig_filter),
+  createdAt: dbUser.created_at,
+  updatedAt: dbUser.updated_at
+});
+
 // Get user profile
 const handleGetProfile = async (event) => {
   const authResult = await requireAuth(event);
@@ -503,28 +559,8 @@ const handleGetProfile = async (event) => {
       return createResponse(404, { error: 'User not found' });
     }
 
-    const dbUser = userResult.Item;
     console.log(' USERS: User profile retrieved');
-
-    const profileData = {
-      id: dbUser.user_id,
-      cognitoId: dbUser.cognito_id,
-      email: dbUser.email,
-      username: dbUser.username,
-      firstName: dbUser.first_name,
-      lastName: dbUser.last_name,
-      displayName: dbUser.display_name,
-      hometown: dbUser.hometown,
-      avatarUrl: dbUser.avatar_url,
-      instrument: dbUser.instrument,
-      profileCompleted: dbUser.profile_complete,
-      platformAdmin: dbUser.platformAdmin || false,
-      role: dbUser.role || (dbUser.platformAdmin ? 'staff' : 'user'),
-      createdAt: dbUser.created_at,
-      updatedAt: dbUser.updated_at
-    };
-
-    return createResponse(200, { user: profileData });
+    return createResponse(200, { user: toProfileData(userResult.Item) });
 
   } catch (error) {
     console.error(' USERS: Get profile error:', error);
@@ -532,7 +568,8 @@ const handleGetProfile = async (event) => {
   }
 };
 
-// Update user profile
+// Update user profile. A gigFilter-only body updates only the saved discovery
+// preference, never blanking normal profile fields.
 const handleUpdateProfile = async (event) => {
   const authResult = await requireAuth(event);
 
@@ -543,7 +580,42 @@ const handleUpdateProfile = async (event) => {
   const { user } = authResult;
 
   try {
-    const requestBody = JSON.parse(event.body);
+    const requestBody = JSON.parse(event.body || '{}');
+
+    const userResult = await dynamodb.get({
+      TableName: USERS_TABLE,
+      Key: { cognito_id: user.userId }
+    }).promise();
+
+    if (!userResult.Item) {
+      console.error(' USERS: User not found for profile update');
+      return createResponse(404, { error: 'User not found' });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(requestBody, 'gigFilter')) {
+      const checked = validateGigFilter(requestBody.gigFilter);
+      if (checked.error) return createResponse(400, { error: checked.error });
+
+      const updateResult = await dynamodb.update({
+        TableName: USERS_TABLE,
+        Key: { cognito_id: user.userId },
+        UpdateExpression: 'SET gig_filter = :gigFilter, updated_at = :updatedAt',
+        ExpressionAttributeValues: {
+          ':gigFilter': checked.value,
+          ':updatedAt': new Date().toISOString()
+        },
+        ReturnValues: 'ALL_NEW'
+      }).promise();
+
+      console.log(' USERS: Saved gig filter updated', {
+        genres: checked.value.genres.length,
+        actTypes: checked.value.actTypes.length,
+        includeOpenMic: checked.value.includeOpenMic,
+        enabled: checked.value.enabled
+      });
+      return createResponse(200, { user: toProfileData(updateResult.Attributes), message: 'Gig preferences updated' });
+    }
+
     const { firstName, lastName, displayName, avatarUrl, instrument, hometown } = requestBody;
 
     console.log(' USERS: Update profile request', {
@@ -554,17 +626,6 @@ const handleUpdateProfile = async (event) => {
 
     // Validate required fields for profile completion
     const profileComplete = !!(firstName && lastName && displayName);
-
-    // Get current user to verify exists
-    const userResult = await dynamodb.get({
-      TableName: USERS_TABLE,
-      Key: { cognito_id: user.userId }
-    }).promise();
-
-    if (!userResult.Item) {
-      console.error(' USERS: User not found for profile update');
-      return createResponse(404, { error: 'User not found' });
-    }
 
     // Update user profile
     const updateResult = await dynamodb.update({
@@ -591,24 +652,8 @@ const handleUpdateProfile = async (event) => {
       displayName: updatedUser.display_name
     });
 
-    const responseData = {
-      id: updatedUser.user_id,
-      cognitoId: updatedUser.cognito_id,
-      email: updatedUser.email,
-      username: updatedUser.username,
-      firstName: updatedUser.first_name,
-      lastName: updatedUser.last_name,
-      displayName: updatedUser.display_name,
-      hometown: updatedUser.hometown,
-      avatarUrl: updatedUser.avatar_url,
-      instrument: updatedUser.instrument,
-      profileCompleted: updatedUser.profile_complete,
-      createdAt: updatedUser.created_at,
-      updatedAt: updatedUser.updated_at
-    };
-
     return createResponse(200, {
-      user: responseData,
+      user: toProfileData(updatedUser),
       message: profileComplete ? 'Profile completed successfully!' : 'Profile updated successfully!'
     });
 
