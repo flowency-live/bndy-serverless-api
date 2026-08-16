@@ -47,6 +47,14 @@ jobs:
             fi
           done
 
+      - name: Run Shared Artist Domain Guards
+        run: |
+          echo "=== Artist taxonomy contract + copy drift ==="
+          node --test shared/artist-domain/taxonomy.test.js
+          echo ""
+          echo "=== Identity/domain copy drift ==="
+          node shared/identity/check-sync.test.js
+
   validate:
     name: Validate deployment
     runs-on: ubuntu-latest
