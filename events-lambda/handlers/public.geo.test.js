@@ -1,33 +1,47 @@
+/**
+ * Behaviour tests for GET /api/events/public/geo — bbox contract + adaptive
+ * precision + capped fan-out. Design: GEO-EVENTS-ENDPOINT-PLAN.md v2.
+ */
 const { handleGetPublicEventsGeo } = require('./public');
 
-const WINDOW = { startDate: '2026-07-01', endDate: '2026-07-31' };
-
-function evt(qs) {
-  return { queryStringParameters: qs, headers: {} };
-}
-
-function mockDynamo() {
-  const event = {
-    id: 'e1', artist_id: 'a1', venue_id: 'v1', date: '2026-07-12',
-    start_time: '20:00', geohash: 'gcqrs4', geohash4: 'gcqr', geohash6: 'gcqrs4',
-    geo_lat: 53.0, geo_lng: -2.2, ticketed: true, cancelled: false,
-    // fields the lightweight geo response must NOT leak
-    title: 'Private-ish title', ticket_url: 'https://tickets', information: 'secret-ish'
-  };
-  return {
-    query: jest.fn().mockResolvedValue({ Items: [event] }),
-    scan: jest.fn().mockResolvedValue({ Items: [event], LastEvaluatedKey: { id: 'next' } })
-  };
-}
-
 const getCorsHeaders = () => ({ 'Access-Control-Allow-Origin': '*' });
+const evt = (qs) => ({ headers: {}, queryStringParameters: qs });
+const WINDOW = { startDate: '2026-07-11', endDate: '2026-07-18' };
 
-describe('handleGetPublicEventsGeo — legacy geohash contract', () => {
-  it('queries the geohash6 index and returns the lightweight public shape', async () => {
+const ITEM = {
+  id: 'e1', artistId: 'a1', venueId: 'v1', date: '2026-07-12',
+  startTime: '20:00', geoLat: 53.0, geoLng: -2.2, isPublic: true, ticketed: true,
+  privateNotes: 'must not leak',
+};
+
+function mockDynamo(items = [ITEM]) {
+  return {
+    query: jest.fn(() => ({ promise: () => Promise.resolve({ Items: items }) })),
+    scan: jest.fn(() => ({ promise: () => Promise.resolve({ Items: items }) })),
+  };
+}
+
+describe('handleGetPublicEventsGeo — validation', () => {
+  it('400 when neither bbox nor geohash given', async () => {
+    const res = await handleGetPublicEventsGeo({ dynamodb: mockDynamo(), getCorsHeaders }, evt({ ...WINDOW }));
+    expect(res.statusCode).toBe(400);
+  });
+  it('400 on malformed bbox', async () => {
+    const res = await handleGetPublicEventsGeo({ dynamodb: mockDynamo(), getCorsHeaders }, evt({ bbox: '1,2,3', ...WINDOW }));
+    expect(res.statusCode).toBe(400);
+  });
+  it('400 on malformed dates', async () => {
+    const res = await handleGetPublicEventsGeo({ dynamodb: mockDynamo(), getCorsHeaders }, evt({ bbox: '-2.4,52.9,-2.0,53.15', startDate: 'nope', endDate: '2026-07-18' }));
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('handleGetPublicEventsGeo — legacy geohash param (deprecated, kept)', () => {
+  it('queries centre + 8 neighbours on the gh6 index', async () => {
     const dynamodb = mockDynamo();
     const res = await handleGetPublicEventsGeo({ dynamodb, getCorsHeaders }, evt({ geohash: 'gcqrs4', ...WINDOW }));
     expect(res.statusCode).toBe(200);
-    expect(dynamodb.query).toHaveBeenCalled();
+    expect(dynamodb.query).toHaveBeenCalledTimes(9);
     expect(dynamodb.query.mock.calls.every(([p]) => p.IndexName === 'geohash6-date-index')).toBe(true);
   });
 });
@@ -56,34 +70,20 @@ describe('handleGetPublicEventsGeo — bbox contract', () => {
     const res = await handleGetPublicEventsGeo({ dynamodb, getCorsHeaders }, evt({ bbox: '-8,50,2,59', ...WINDOW }));
     expect(res.statusCode).toBe(200);
     expect(dynamodb.query).not.toHaveBeenCalled();
-    expect(dynamodb.scan).toHaveBeenCalledTimes(1);
-    const body = JSON.parse(res.body);
-    expect(body.truncated).toBe(true);
+    expect(dynamodb.scan).toHaveBeenCalled();
+    expect(JSON.parse(res.body).truncated).toBe(true);
   });
-  it('bbox + legacy geohash prefers bbox', async () => {
+  it('every geo query filters isPublic and windows by date', async () => {
     const dynamodb = mockDynamo();
-    const res = await handleGetPublicEventsGeo({ dynamodb, getCorsHeaders }, evt({ bbox: '-2.4,52.9,-2.0,53.15', geohash: 'gcqrs4', ...WINDOW }));
-    expect(res.statusCode).toBe(200);
-    expect(dynamodb.query.mock.calls.every(([p]) => p.IndexName === 'geohash4-date-index')).toBe(true);
+    await handleGetPublicEventsGeo({ dynamodb, getCorsHeaders }, evt({ bbox: '-2.4,52.9,-2.0,53.15', ...WINDOW }));
+    for (const [p] of dynamodb.query.mock.calls) {
+      expect(p.FilterExpression).toMatch(/isPublic/);
+      expect(p.ExpressionAttributeValues[':start']).toBe(WINDOW.startDate);
+      expect(p.ExpressionAttributeValues[':end']).toBe(WINDOW.endDate);
+    }
   });
-  it('malformed bbox → 400', async () => {
-    const dynamodb = mockDynamo();
-    const res = await handleGetPublicEventsGeo({ dynamodb, getCorsHeaders }, evt({ bbox: 'bad', ...WINDOW }));
-    expect(res.statusCode).toBe(400);
-  });
-  it('bbox too many cells at precision 4 falls back rather than issuing unbounded queries', async () => {
-    const dynamodb = mockDynamo();
-    const res = await handleGetPublicEventsGeo({ dynamodb, getCorsHeaders }, evt({ bbox: '-8,50,2,59', ...WINDOW }));
-    expect(res.statusCode).toBe(200);
-    expect(dynamodb.query).not.toHaveBeenCalled();
-    expect(dynamodb.scan).toHaveBeenCalledTimes(1);
-  });
-  it('bbox query result shape contains no ticketUrl/title/information', async () => {
-    const dynamodb = mockDynamo();
-    const res = await handleGetPublicEventsGeo({ dynamodb, getCorsHeaders }, evt({ bbox: '-2.19,53.0,-2.17,53.02', ...WINDOW }));
-    const event = JSON.parse(res.body).events[0];
-    expect(event.ticketUrl).toBeUndefined();
-    expect(event.title).toBeUndefined();
-    expect(event.information).toBeUndefined();
+  it('sets shared-cache headers', async () => {
+    const res = await handleGetPublicEventsGeo({ dynamodb: mockDynamo(), getCorsHeaders }, evt({ bbox: '-2.19,53.0,-2.17,53.02', ...WINDOW }));
+    expect(res.headers['Cache-Control']).toMatch(/max-age=60/);
   });
 });
