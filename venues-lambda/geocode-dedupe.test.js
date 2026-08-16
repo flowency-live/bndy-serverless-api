@@ -20,6 +20,17 @@ const mockDynamoDB = {
 
 const mockPlacesClient = {
   findPlaceFromText: jest.fn(),
+  placeDetails: jest.fn().mockResolvedValue({
+    data: {
+      status: 'OK',
+      result: {
+        types: ['bar'],
+        address_components: [
+          { long_name: 'ST1 1AA', types: ['postal_code'] }
+        ]
+      }
+    }
+  })
 };
 
 jest.mock('aws-sdk', () => ({
