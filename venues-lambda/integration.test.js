@@ -38,6 +38,11 @@ jest.mock('aws-sdk', () => ({
     invoke: () => ({
       promise: () => Promise.resolve({ Payload: '{}' })
     })
+  })),
+  SSM: jest.fn(() => ({
+    getParameter: () => ({
+      promise: () => Promise.resolve({ Parameter: { Value: 'test-jwt-secret' } })
+    })
   }))
 }));
 
