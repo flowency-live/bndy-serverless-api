@@ -212,6 +212,15 @@ const {
   handlePlacesDetails
 } = require('./handlers/places');
 
+// Feature 19: venue ownership groups.
+const {
+  handleListGroups,
+  handleGetGroup,
+  handleCreateGroup,
+  handleUpdateGroup,
+  handleSetVenueGroup
+} = require('./handlers/groups');
+
 /**
  * Safe JSON parse helper - handles both string and object body
  */
@@ -271,6 +280,26 @@ exports.handler = async (event, context) => {
 
     if (method === 'GET' && (path === '/api/places/details' || path === '/api/community/places/details')) {
       return await handlePlacesDetails(deps, event);
+    }
+
+    // Feature 19: venue ownership groups. Reads are public so the godmode screen
+    // and, later, Editions can use them without a second lambda. Writes are staff.
+    // These sit ABOVE the generic /api/venues/{id} route, or the slug read gets
+    // swallowed by it.
+    if (method === 'GET' && path === '/api/venue-groups') {
+      return await handleListGroups(deps, event);
+    }
+    if (method === 'GET' && path.startsWith('/api/venue-groups/')) {
+      return await handleGetGroup(deps, event);
+    }
+    if (method === 'POST' && path === '/api/venue-groups') {
+      return await handleCreateGroup(deps, event);
+    }
+    if (method === 'PUT' && path.startsWith('/api/venue-groups/')) {
+      return await handleUpdateGroup(deps, event);
+    }
+    if (method === 'PUT' && path.startsWith('/api/venues/') && path.endsWith('/group')) {
+      return await handleSetVenueGroup(deps, event);
     }
 
     // Route requests

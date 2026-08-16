@@ -100,6 +100,9 @@ const MUTATION_ROUTE_BASELINE = {
   'PUT /api/venues/{id}/mcp': 'mcp',
   'POST /api/venues/{id}/enrich': 'mcp',
   'POST /api/integration/venues': 'handler-auth',
+  'POST /api/venue-groups': 'handler-auth',
+  'PUT /api/venue-groups/{id}': 'handler-auth',
+  'PUT /api/venues/{id}/group': 'handler-auth',
 
   // === Enrichment: Venues ===
   'PATCH /api/venues/{id}/enrichment': 'handler-auth',

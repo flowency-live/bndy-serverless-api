@@ -90,6 +90,9 @@ async function handleGetAllVenues(deps, event) {
       externalIds: venue.external_ids || [],
       standardTicketed: venue.standard_ticketed || false,
       standardTicketInformation: venue.standard_ticket_information || '',
+      ownerGroupId: venue.ownerGroupId,
+      ownerGroupName: venue.ownerGroupName,
+      tenure: venue.tenure,
       standardTicketUrl: venue.standard_ticket_url || '',
       enrichment_status: venue.enrichment_status,
       enrichment_date: venue.enrichment_date,
@@ -256,6 +259,9 @@ async function handleListVenuesMcp(deps, event) {
       profileImageUrl: venue.profile_image_url || '',
       standardTicketed: venue.standard_ticketed || false,
       standardTicketInformation: venue.standard_ticket_information || '',
+      ownerGroupId: venue.ownerGroupId,
+      ownerGroupName: venue.ownerGroupName,
+      tenure: venue.tenure,
       standardTicketUrl: venue.standard_ticket_url || '',
       externalIds: venue.external_ids || [],
       isClaimed: !!venue.claimedByUserId,
@@ -348,6 +354,13 @@ async function handleGetVenueById(deps, venueId, event) {
       standardTicketed: result.Item.standard_ticketed || false,
       standardTicketInformation: result.Item.standard_ticket_information || '',
       standardTicketUrl: result.Item.standard_ticket_url || '',
+      // Feature 19: ownership. Without these an MCP importer cannot verify its
+      // own write, and a read-then-write caller cannot tell an unassigned venue
+      // from one it has already assigned. Found live 2026-08-14.
+      ownerGroupId: result.Item.ownerGroupId,
+      ownerGroupName: result.Item.ownerGroupName,
+      tenure: result.Item.tenure,
+      tenureCheckedAt: result.Item.tenureCheckedAt,
       enrichment_status: result.Item.enrichment_status,
       enrichment_data: result.Item.enrichment_data,
       enrichment_date: result.Item.enrichment_date,
@@ -706,6 +719,21 @@ async function handleUpdateVenue(deps, venueId, venueData, event) {
     }
   }
 
+  // Feature 19, change A. The only enum this route validates.
+  // `tenure` drives who may claim a page later, so a typo must fail loudly here
+  // rather than sit in the record as a value nothing recognises.
+  const TENURES = ['unknown', 'independent', 'owned'];
+  if (venueData.tenure !== undefined && !TENURES.includes(venueData.tenure)) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({
+        error: `tenure must be one of: ${TENURES.join(', ')}`,
+        code: 'INVALID_TENURE'
+      })
+    };
+  }
+
   const now = new Date().toISOString();
 
   // Build dynamic update expression - separate SET and REMOVE operations
@@ -741,7 +769,21 @@ async function handleUpdateVenue(deps, venueId, venueData, event) {
     ticketUrl: 'standard_ticket_url',  // alias for backstage UI
     externalIds: 'external_ids',
     enrichment_status: 'enrichment_status',
-    enrichment_data: 'enrichment_data'
+    enrichment_data: 'enrichment_data',
+    // Feature 19, change A. The owner group, writable through the MCP route.
+    //
+    // ⚠ `ownerGroupName` IS DELIBERATELY ABSENT AND MUST STAY ABSENT.
+    // It is denormalised from the group record by PUT /api/venues/{id}/group,
+    // which also moves the estate count. Two writers for one derived value is
+    // how the group page and the venue row start to disagree.
+    //
+    // PREFER THE GROUP ROUTE. It validates that the group exists and keeps the
+    // name in step. This mapping is the fallback for a correction, and it does
+    // NOT check that `ownerGroupId` names a real group: handleUpdateVenue does
+    // not read the groups table, and adding that read to the venue hot path
+    // costs more than the defect.
+    ownerGroupId: 'ownerGroupId',
+    tenure: 'tenure'
   };
 
   // Track which DB fields have been processed (avoid duplicates from aliases)

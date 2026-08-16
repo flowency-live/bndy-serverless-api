@@ -532,6 +532,9 @@ Resources:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
           GOOGLE_PLACES_API_KEY: '{{resolve:secretsmanager:bndy/google-places:SecretString:api_key}}'
           MCP_SERVICE_TOKEN: '{{resolve:secretsmanager:bndy/mcp-service:SecretString:token}}'
+          # Retained production table; it currently exists outside this stack
+          # after its DeletionPolicy retained it during the 2026-08-16 rollback.
+          VENUE_GROUPS_TABLE: bndy-venue-groups
       Events:
         CuratorUpdateVenue:
           Type: HttpApi
@@ -664,6 +667,39 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/integration/venues
             Method: POST
+        # Feature 19: venue ownership groups. Reads are public so the godmode
+        # screen and, later, Editions can use them without a second lambda.
+        # Writes are staff only, checked in the handler against bndy_session.
+        ListVenueGroups:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venue-groups
+            Method: GET
+        GetVenueGroup:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venue-groups/{slug}
+            Method: GET
+        CreateVenueGroup:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venue-groups
+            Method: POST
+        UpdateVenueGroup:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venue-groups/{id}
+            Method: PUT
+        SetVenueGroup:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{id}/group
+            Method: PUT
 
   # Festivals Lambda (Phase 1a - festival-mcp-write-api-spec §1)
   FestivalsFunction:
