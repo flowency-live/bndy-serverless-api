@@ -36,6 +36,11 @@ jest.mock('aws-sdk', () => ({
   Lambda: jest.fn(() => ({
     invoke: () => ({ promise: () => Promise.resolve({ Payload: '{}' }) }),
   })),
+  SSM: jest.fn(() => ({
+    getParameter: () => ({
+      promise: () => Promise.resolve({ Parameter: { Value: 'test-jwt-secret' } })
+    })
+  })),
 }));
 
 jest.mock('@googlemaps/google-maps-services-js', () => ({
