@@ -316,29 +316,22 @@ async function handleBatchEventsWithJoins(deps, event) {
 async function handleGetVenueEvents(deps, event) {
   const { dynamodb, getCorsHeaders } = deps;
   const { venueId } = event.pathParameters;
-  const { startDate, endDate } = event.queryStringParameters || {};
+  const { startDate } = event.queryStringParameters || {};
+  const start = startDate || new Date().toISOString().split('T')[0];
 
-  if (!startDate || !endDate) {
-    return {
-      statusCode: 400,
-      headers: getCorsHeaders(event),
-      body: JSON.stringify({ error: 'startDate and endDate required' })
-    };
-  }
+  console.log('VENUE_EVENTS: Query received', { venueId, startDate: start });
 
-  console.log('VENUE_EVENTS: Query received', { venueId, startDate, endDate });
-
-  // Query events by venueId
+  // Query all public events for the venue from startDate onwards.
+  // There is deliberately no end date for an upcoming-events feed.
   const result = await dynamodb.query({
     TableName: EVENTS_TABLE,
     IndexName: 'venueId-date-index',
-    KeyConditionExpression: 'venueId = :venueId AND #date BETWEEN :start AND :end',
+    KeyConditionExpression: 'venueId = :venueId AND #date >= :start',
     FilterExpression: 'isPublic = :isPublic',
     ExpressionAttributeNames: { '#date': 'date' },
     ExpressionAttributeValues: {
       ':venueId': venueId,
-      ':start': startDate,
-      ':end': endDate,
+      ':start': start,
       ':isPublic': true
     }
   }).promise();
