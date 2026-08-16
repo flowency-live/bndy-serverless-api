@@ -51,9 +51,9 @@ jest.mock('@googlemaps/google-maps-services-js', () => ({
   PlaceInputType: { textQuery: 'textQuery' }
 }));
 
-// Set environment variables before requiring handler
 process.env.INTEGRATION_API_KEYS = 'test-api-key-123,another-valid-key';
 process.env.GOOGLE_PLACES_API_KEY = 'test-google-key';
+process.env.MCP_SERVICE_TOKEN = 'test-service-token';
 
 const { handler } = require('./handler');
 
@@ -71,7 +71,8 @@ describe('Venues Integration API', () => {
     },
     headers: {
       'x-api-key': apiKey,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer test-service-token'
     },
     body: JSON.stringify(body)
   });
@@ -134,7 +135,6 @@ describe('Venues Integration API', () => {
         validated: true
       };
 
-      // Mock BNDY database returns existing venue
       mockDynamoDB.scan.mockResolvedValue({
         Items: [existingVenue]
       });
@@ -151,15 +151,13 @@ describe('Venues Integration API', () => {
       expect(body.isNew).toBe(false);
       expect(body.venue.id).toBe('existing-venue-123');
       expect(body.matchMethod).toBe('bndy_name_city_match');
-
-      // CRITICAL: Google Places should NOT have been called
       expect(mockPlacesClient.findPlaceFromText).not.toHaveBeenCalled();
     });
 
     it('should match venue with fuzzy name similarity >= 80%', async () => {
       const existingVenue = {
         id: 'existing-venue-456',
-        name: 'The Fleece', // Exact name in DB
+        name: 'The Fleece',
         address: '12 St Thomas St, Bristol BS1 6JJ',
         city: 'Bristol',
         latitude: 51.4545,
@@ -172,7 +170,7 @@ describe('Venues Integration API', () => {
       });
 
       const event = createIntegrationEvent({
-        name: 'The Flece', // Typo - one letter missing = ~90% similarity
+        name: 'The Flece',
         city: 'Bristol'
       });
 
@@ -182,8 +180,6 @@ describe('Venues Integration API', () => {
       const body = JSON.parse(result.body);
       expect(body.isNew).toBe(false);
       expect(body.venue.id).toBe('existing-venue-456');
-
-      // Google Places should NOT have been called
       expect(mockPlacesClient.findPlaceFromText).not.toHaveBeenCalled();
     });
 
@@ -198,7 +194,7 @@ describe('Venues Integration API', () => {
 
       const londonVenue = {
         id: 'london-venue',
-        name: 'The Fleece', // Same name, different city
+        name: 'The Fleece',
         city: 'London',
         latitude: 51.5074,
         longitude: -0.1278
@@ -217,19 +213,16 @@ describe('Venues Integration API', () => {
 
       expect(result.statusCode).toBe(200);
       const body = JSON.parse(result.body);
-      expect(body.venue.id).toBe('bristol-venue'); // Should match Bristol, not London
-
+      expect(body.venue.id).toBe('bristol-venue');
       expect(mockPlacesClient.findPlaceFromText).not.toHaveBeenCalled();
     });
   });
 
   describe('Google Places Fallback', () => {
     it('should call Google Places only when no BNDY match found', async () => {
-      // No existing venues in BNDY
       mockDynamoDB.scan.mockResolvedValue({ Items: [] });
       mockDynamoDB.put.mockResolvedValue({});
 
-      // Mock Google Places response
       mockPlacesClient.findPlaceFromText.mockResolvedValue({
         data: {
           status: 'OK',
@@ -255,16 +248,12 @@ describe('Venues Integration API', () => {
       const body = JSON.parse(result.body);
       expect(body.isNew).toBe(true);
       expect(body.matchMethod).toBe('new_venue_created');
-
-      // Google Places SHOULD have been called since no BNDY match
       expect(mockPlacesClient.findPlaceFromText).toHaveBeenCalledTimes(1);
     });
 
     it('should return 404 when venue not found in BNDY or Google Places', async () => {
-      // No BNDY matches
       mockDynamoDB.scan.mockResolvedValue({ Items: [] });
 
-      // Google Places returns no results
       mockPlacesClient.findPlaceFromText.mockResolvedValue({
         data: {
           status: 'ZERO_RESULTS',
