@@ -4,10 +4,16 @@
  * Users domain boundary for saved gig filters.
  *
  * The historical Users Lambda is preserved in handler-legacy.js. This wrapper
- * fixes the cross-domain contract for My Filters without risking unrelated
- * profile/user behaviour: artistTypes are now persisted, taxonomy values are
- * canonicalised, and the legacy `acoustic` saved-filter token remains supported
- * while matching it against artist.acoustic in bndy-app.
+ * extends its saved-filter contract with canonical Artist Type while keeping
+ * the legacy route/auth/profile behaviour intact.
+ *
+ * Important distinction:
+ * - WRITES are strict: malformed or unknown values are rejected.
+ * - READS are tolerant: malformed historical members are dropped and valid
+ *   members are canonicalised, so one bad old token never blanks the filter.
+ *
+ * `acoustic` remains a saved filter token for storage compatibility only. It is
+ * matched against Artist.acoustic in bndy-app and is never an Artist actType.
  */
 
 const AWS = require('aws-sdk');
@@ -17,15 +23,23 @@ const {
   GENRES,
   ARTIST_TYPES,
   ACT_TYPES,
-  normaliseGenres,
+  normaliseGenre,
   normaliseArtistType,
-  normaliseActTypes
+  normaliseActType
 } = require('./lib/taxonomy');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 const ssm = new AWS.SSM({ region: 'eu-west-2' });
 const USERS_TABLE = 'bndy-users';
 let JWT_SECRET = null;
+
+const EMPTY_GIG_FILTER = Object.freeze({
+  genres: [],
+  actTypes: [],
+  artistTypes: [],
+  includeOpenMic: false,
+  enabled: false
+});
 
 function methodOf(event) {
   return event.requestContext?.http?.method || event.httpMethod || '';
@@ -98,33 +112,131 @@ function parseBody(event) {
   }
 }
 
-function normaliseGigFilter(value) {
-  const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+function unique(values) {
+  return [...new Set(values)];
+}
 
-  const genreResult = normaliseGenres(Array.isArray(input.genres) ? input.genres : []);
-  if (genreResult.invalid.length) {
+/** Tolerant read normaliser for historical DynamoDB values. */
+function normaliseStoredGigFilter(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { ...EMPTY_GIG_FILTER, genres: [], actTypes: [], artistTypes: [] };
+  }
+
+  const genres = [];
+  for (const raw of Array.isArray(value.genres) ? value.genres : []) {
+    if (typeof raw !== 'string') continue;
+    const normalised = normaliseGenre(raw);
+    if (normalised) genres.push(normalised);
+  }
+
+  const actTypes = [];
+  for (const raw of Array.isArray(value.actTypes) ? value.actTypes : []) {
+    if (typeof raw !== 'string') continue;
+    const key = raw.trim().toLowerCase();
+    if (key === 'acoustic') {
+      actTypes.push('acoustic');
+      continue;
+    }
+    const normalised = normaliseActType(raw);
+    if (normalised) actTypes.push(normalised);
+  }
+
+  const artistTypes = [];
+  for (const raw of Array.isArray(value.artistTypes) ? value.artistTypes : []) {
+    if (typeof raw !== 'string') continue;
+    const normalised = normaliseArtistType(raw);
+    if (normalised) artistTypes.push(normalised);
+  }
+
+  return {
+    genres: unique(genres),
+    actTypes: unique(actTypes),
+    artistTypes: unique(artistTypes),
+    includeOpenMic: value.includeOpenMic === true,
+    enabled: value.enabled === true
+  };
+}
+
+/** Strict write validator. Old clients may omit artistTypes; all other fields are required. */
+function validateGigFilter(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { error: { error: 'gigFilter must be an object', code: 'INVALID_GIG_FILTER' } };
+  }
+
+  if (!Array.isArray(value.genres) || value.genres.length > 20) {
+    return { error: { error: 'gigFilter.genres must be an array of up to 20 genre names', code: 'INVALID_GENRES' } };
+  }
+  const genres = [];
+  const invalidGenres = [];
+  for (const raw of value.genres) {
+    if (typeof raw !== 'string' || !raw.trim() || raw.length > 40) {
+      invalidGenres.push(raw);
+      continue;
+    }
+    const normalised = normaliseGenre(raw);
+    if (!normalised) invalidGenres.push(raw);
+    else genres.push(normalised);
+  }
+  if (invalidGenres.length) {
     return {
       error: {
-        error: 'Invalid genres',
+        error: 'gigFilter.genres contains an invalid genre',
         code: 'INVALID_GENRES',
-        invalidGenres: genreResult.invalid,
+        invalidGenres,
         validGenres: GENRES
       }
     };
   }
 
-  const rawArtistTypes = Array.isArray(input.artistTypes) ? input.artistTypes : [];
+  if (!Array.isArray(value.actTypes) || value.actTypes.length > 4) {
+    return { error: { error: 'gigFilter.actTypes contains an invalid act type', code: 'INVALID_ACT_TYPE' } };
+  }
+  const actTypes = [];
+  const invalidActTypes = [];
+  for (const raw of value.actTypes) {
+    if (typeof raw !== 'string' || !raw.trim()) {
+      invalidActTypes.push(raw);
+      continue;
+    }
+    const key = raw.trim().toLowerCase();
+    if (key === 'acoustic') {
+      actTypes.push('acoustic');
+      continue;
+    }
+    const normalised = normaliseActType(raw);
+    if (!normalised) invalidActTypes.push(raw);
+    else actTypes.push(normalised);
+  }
+  if (invalidActTypes.length) {
+    return {
+      error: {
+        error: 'gigFilter.actTypes contains an invalid act type',
+        code: 'INVALID_ACT_TYPE',
+        invalidActTypes,
+        validActTypes: ACT_TYPES
+      }
+    };
+  }
+
+  const rawArtistTypes = value.artistTypes === undefined ? [] : value.artistTypes;
+  if (!Array.isArray(rawArtistTypes) || rawArtistTypes.length > ARTIST_TYPES.length) {
+    return { error: { error: 'gigFilter.artistTypes contains an invalid artist type', code: 'INVALID_ARTIST_TYPE' } };
+  }
   const artistTypes = [];
   const invalidArtistTypes = [];
   for (const raw of rawArtistTypes) {
+    if (typeof raw !== 'string' || !raw.trim()) {
+      invalidArtistTypes.push(raw);
+      continue;
+    }
     const normalised = normaliseArtistType(raw);
     if (!normalised) invalidArtistTypes.push(raw);
-    else if (!artistTypes.includes(normalised)) artistTypes.push(normalised);
+    else artistTypes.push(normalised);
   }
   if (invalidArtistTypes.length) {
     return {
       error: {
-        error: 'Invalid artist type',
+        error: 'gigFilter.artistTypes contains an invalid artist type',
         code: 'INVALID_ARTIST_TYPE',
         invalidArtistTypes,
         validArtistTypes: ARTIST_TYPES
@@ -132,30 +244,22 @@ function normaliseGigFilter(value) {
     };
   }
 
-  const actResult = normaliseActTypes(Array.isArray(input.actTypes) ? input.actTypes : []);
-  if (actResult.invalid.length) {
+  if (typeof value.includeOpenMic !== 'boolean' || typeof value.enabled !== 'boolean') {
     return {
       error: {
-        error: 'Invalid act type',
-        code: 'INVALID_ACT_TYPE',
-        invalidActTypes: actResult.invalid,
-        validActTypes: ACT_TYPES
+        error: 'gigFilter includeOpenMic and enabled must be booleans',
+        code: 'INVALID_GIG_FILTER'
       }
     };
   }
 
-  // `acoustic` remains a saved-filter token for storage compatibility only.
-  // It is NOT an artist actType; bndy-app interprets it against artist.acoustic.
-  const actTypes = [...actResult.valid];
-  if (actResult.acoustic) actTypes.push('acoustic');
-
   return {
     value: {
-      genres: genreResult.valid,
-      actTypes,
-      artistTypes,
-      includeOpenMic: input.includeOpenMic === true,
-      enabled: input.enabled === true
+      genres: unique(genres),
+      actTypes: unique(actTypes),
+      artistTypes: unique(artistTypes),
+      includeOpenMic: value.includeOpenMic,
+      enabled: value.enabled
     }
   };
 }
@@ -178,9 +282,7 @@ async function rawGigFilter(userId) {
     Key: { cognito_id: userId },
     ProjectionExpression: 'gig_filter'
   }).promise();
-  return normaliseGigFilter(result.Item?.gig_filter).value || {
-    genres: [], actTypes: [], artistTypes: [], includeOpenMic: false, enabled: false
-  };
+  return normaliseStoredGigFilter(result.Item?.gig_filter);
 }
 
 async function patchProfileResponseWithRawFilter(event, result, knownFilter) {
@@ -200,7 +302,7 @@ async function patchProfileResponseWithRawFilter(event, result, knownFilter) {
     ...result,
     body: JSON.stringify({
       ...parsed,
-      user: { ...parsed.user, gigFilter: filter }
+      user: { ...parsed.user, gigFilter: normaliseStoredGigFilter(filter) }
     })
   };
 }
@@ -209,12 +311,11 @@ async function handleGigFilterUpdate(event, context, body) {
   const auth = await requireAuth(event);
   if (auth.error) return response(auth.statusCode, { error: auth.error });
 
-  const checked = normaliseGigFilter(body.gigFilter);
+  const checked = validateGigFilter(body.gigFilter);
   if (checked.error) return response(400, checked.error);
 
-  // If a caller mixed normal profile fields with gigFilter, preserve existing
-  // behaviour for those fields first. The current bndy-app sends only gigFilter,
-  // but this keeps the route backwards-compatible for any other active client.
+  // Preserve normal profile updates if a future client sends them alongside
+  // gigFilter. Current bndy-app sends only the filter.
   const rest = { ...body };
   delete rest.gigFilter;
   if (Object.keys(rest).length > 0) {
@@ -250,10 +351,9 @@ exports.handler = async (event, context) => {
 
   const result = await legacy.handler(event, context || {});
 
-  // The legacy profile formatter predates artistTypes and would otherwise hide
-  // the field even when it is correctly stored. Overlay the canonical raw filter
-  // on reads so current clients receive the complete contract.
-  if (path === '/users/profile' && method === 'GET') {
+  // The legacy profile formatter predates artistTypes and drops that dimension.
+  // Overlay the complete canonical raw filter on GET and ordinary profile PUTs.
+  if (path === '/users/profile' && ['GET', 'PUT'].includes(method) && result?.statusCode === 200) {
     return patchProfileResponseWithRawFilter(event, result);
   }
 
