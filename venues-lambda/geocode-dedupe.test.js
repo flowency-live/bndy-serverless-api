@@ -48,6 +48,7 @@ jest.mock('@googlemaps/google-maps-services-js', () => ({
   PlaceInputType: { textQuery: 'textquery' },
 }));
 
+process.env.MCP_SERVICE_TOKEN = 'test-service-token';
 const { handler } = require('./handler');
 
 describe('Geocode-based Venue Deduplication (ADR-018)', () => {
@@ -60,13 +61,15 @@ describe('Geocode-based Venue Deduplication (ADR-018)', () => {
     requestContext: {
       http: { method: 'POST', path: '/api/venues/find-or-create' },
     },
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer test-service-token',
+    },
     body: JSON.stringify(body),
   });
 
   describe('when caller sends only name+city (no googlePlaceId)', () => {
     it('should geocode via Google and match existing venue by place_id', async () => {
-      // Existing venue in DB with place_id
       const existingVenue = {
         id: 'venue-123',
         name: 'The Fountain Inn',
@@ -79,13 +82,12 @@ describe('Geocode-based Venue Deduplication (ADR-018)', () => {
       mockDynamoDB.scan.mockResolvedValue({ Items: [existingVenue] });
       mockDynamoDB.update.mockResolvedValue({});
 
-      // Google returns same place_id
       mockPlacesClient.findPlaceFromText.mockResolvedValue({
         data: {
           status: 'OK',
           candidates: [
             {
-              place_id: 'ChIJ_fountain_inn', // Same as existing
+              place_id: 'ChIJ_fountain_inn',
               name: 'The Fountain Inn',
               formatted_address: '14 Fountain St, Leek',
               geometry: { location: { lat: 53.1, lng: -2.0 } },
@@ -95,25 +97,23 @@ describe('Geocode-based Venue Deduplication (ADR-018)', () => {
       });
 
       const event = createFindOrCreateRequest({
-        name: 'Fountain Inn, Leek', // Variant name
+        name: 'Fountain Inn, Leek',
         city: 'Leek',
-        // No googlePlaceId - must geocode
       });
 
       const result = await handler(event, {});
       const body = JSON.parse(result.body);
 
-      expect(result.statusCode).toBe(200); // Matched, not created
+      expect(result.statusCode).toBe(200);
       expect(body.id).toBe('venue-123');
       expect(body.matchMethod).toBe('google_place_id');
-      expect(mockDynamoDB.put).not.toHaveBeenCalled(); // No new venue created
+      expect(mockDynamoDB.put).not.toHaveBeenCalled();
     });
 
     it('should create venue with geocoded place_id when no match exists', async () => {
-      mockDynamoDB.scan.mockResolvedValue({ Items: [] }); // No existing venues
+      mockDynamoDB.scan.mockResolvedValue({ Items: [] });
       mockDynamoDB.put.mockResolvedValue({});
 
-      // Google finds the place
       mockPlacesClient.findPlaceFromText.mockResolvedValue({
         data: {
           status: 'OK',
@@ -141,7 +141,6 @@ describe('Geocode-based Venue Deduplication (ADR-018)', () => {
       expect(body.latitude).toBe(53.0);
       expect(body.longitude).toBe(-2.1);
 
-      // Verify venue was created WITH place_id and coords
       expect(mockDynamoDB.transactWrite).toHaveBeenCalledWith(
         expect.objectContaining({
           TransactItems: expect.arrayContaining([
@@ -162,7 +161,6 @@ describe('Geocode-based Venue Deduplication (ADR-018)', () => {
     it('should return 422 needsReview when Google finds no match', async () => {
       mockDynamoDB.scan.mockResolvedValue({ Items: [] });
 
-      // Google finds nothing
       mockPlacesClient.findPlaceFromText.mockResolvedValue({
         data: { status: 'ZERO_RESULTS', candidates: [] },
       });
@@ -178,13 +176,12 @@ describe('Geocode-based Venue Deduplication (ADR-018)', () => {
       expect(result.statusCode).toBe(422);
       expect(body.needsReview).toBe(true);
       expect(body.error).toContain('geocode');
-      expect(mockDynamoDB.put).not.toHaveBeenCalled(); // No placeless venue created
+      expect(mockDynamoDB.put).not.toHaveBeenCalled();
     });
 
     it('should NOT create venue with lat/lng=0 (the bug we are fixing)', async () => {
       mockDynamoDB.scan.mockResolvedValue({ Items: [] });
 
-      // Google finds nothing
       mockPlacesClient.findPlaceFromText.mockResolvedValue({
         data: { status: 'ZERO_RESULTS', candidates: [] },
       });
@@ -196,8 +193,6 @@ describe('Geocode-based Venue Deduplication (ADR-018)', () => {
 
       await handler(event, {});
 
-      // The bug was: venue created with lat/lng=0, google_place_id=''
-      // After fix: no venue created at all
       const putCalls = mockDynamoDB.put.mock.calls;
       const venueCreatedWithZeroCoords = putCalls.some(
         (call) => call[0].Item && call[0].Item.latitude === 0 && call[0].Item.longitude === 0
@@ -219,8 +214,8 @@ describe('Geocode-based Venue Deduplication (ADR-018)', () => {
       mockDynamoDB.scan.mockResolvedValue({ Items: [existingVenue] });
 
       const event = createFindOrCreateRequest({
-        name: "The Banker's Draught", // Apostrophe variant
-        googlePlaceId: 'ChIJ_bankers', // Direct place_id
+        name: "The Banker's Draught",
+        googlePlaceId: 'ChIJ_bankers',
       });
 
       const result = await handler(event, {});
@@ -244,7 +239,7 @@ describe('Geocode-based Venue Deduplication (ADR-018)', () => {
 
       const event = createFindOrCreateRequest({
         name: 'Market Quarter',
-        latitude: 53.1500001, // Very close
+        latitude: 53.1500001,
         longitude: -2.1500001,
       });
 
