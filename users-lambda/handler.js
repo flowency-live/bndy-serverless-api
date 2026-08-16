@@ -484,13 +484,34 @@ const handleGetAllActivity = async (event) => {
 // Stored as a small document on the existing bndy-users record. The profile
 // route is intentionally reused so this feature needs no additional API route.
 const EMPTY_GIG_FILTER = { genres: [], actTypes: [], includeOpenMic: false, enabled: false };
-const VALID_GIG_ACT_TYPES = new Set(['originals', 'covers', 'tribute', 'acoustic']);
+const GIG_ACT_TYPE_ALIASES = new Map([
+  ['originals', 'originals'],
+  ['covers', 'covers'],
+  ['tribute', 'tribute'],
+  ['tribute act', 'tribute'],
+  ['acoustic', 'acoustic']
+]);
+
+const normaliseGigActType = (value) => {
+  if (typeof value !== 'string') return null;
+  return GIG_ACT_TYPE_ALIASES.get(value.trim().toLowerCase()) || null;
+};
 
 const normaliseGigFilter = (value) => {
   if (!value || typeof value !== 'object') return { ...EMPTY_GIG_FILTER };
+  const genres = Array.isArray(value.genres)
+    ? value.genres
+      .filter((x) => typeof x === 'string')
+      .map((x) => x.trim())
+      .filter((x) => x && x.length <= 40)
+      .slice(0, 20)
+    : [];
+  const actTypes = Array.isArray(value.actTypes)
+    ? value.actTypes.map(normaliseGigActType).filter(Boolean).slice(0, 4)
+    : [];
   return {
-    genres: Array.isArray(value.genres) ? value.genres.filter((x) => typeof x === 'string') : [],
-    actTypes: Array.isArray(value.actTypes) ? value.actTypes.filter((x) => typeof x === 'string') : [],
+    genres: [...new Set(genres)],
+    actTypes: [...new Set(actTypes)],
     includeOpenMic: value.includeOpenMic === true,
     enabled: value.enabled === true
   };
@@ -501,7 +522,8 @@ const validateGigFilter = (value) => {
   if (!Array.isArray(value.genres) || value.genres.length > 20 || value.genres.some((x) => typeof x !== 'string' || !x.trim() || x.length > 40)) {
     return { error: 'gigFilter.genres must be an array of up to 20 genre names' };
   }
-  if (!Array.isArray(value.actTypes) || value.actTypes.length > 4 || value.actTypes.some((x) => typeof x !== 'string' || !VALID_GIG_ACT_TYPES.has(x))) {
+  const actTypes = Array.isArray(value.actTypes) ? value.actTypes.map(normaliseGigActType) : [];
+  if (!Array.isArray(value.actTypes) || value.actTypes.length > 4 || actTypes.some((x) => !x)) {
     return { error: 'gigFilter.actTypes contains an invalid act type' };
   }
   if (typeof value.includeOpenMic !== 'boolean' || typeof value.enabled !== 'boolean') {
@@ -510,7 +532,7 @@ const validateGigFilter = (value) => {
   return {
     value: {
       genres: [...new Set(value.genres.map((x) => x.trim()))],
-      actTypes: [...new Set(value.actTypes)],
+      actTypes: [...new Set(actTypes)],
       includeOpenMic: value.includeOpenMic,
       enabled: value.enabled
     }
@@ -614,6 +636,11 @@ const handleUpdateProfile = async (event) => {
         enabled: checked.value.enabled
       });
       return createResponse(200, { user: toProfileData(updateResult.Attributes), message: 'Gig preferences updated' });
+    }
+
+    const profileFields = ['firstName', 'lastName', 'displayName', 'avatarUrl', 'instrument', 'hometown'];
+    if (!profileFields.some((field) => Object.prototype.hasOwnProperty.call(requestBody, field))) {
+      return createResponse(400, { error: 'No supported profile fields provided' });
     }
 
     const { firstName, lastName, displayName, avatarUrl, instrument, hometown } = requestBody;

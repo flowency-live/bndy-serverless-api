@@ -898,9 +898,9 @@ describe('Builders Lambda Handler', () => {
     });
   });
 
-  // ========== CORS TESTS ==========
-  describe('CORS Headers', () => {
-    test('should include CORS headers for allowed origins', async () => {
+  // ========== RESPONSE HEADER TESTS ==========
+  describe('Response Headers', () => {
+    test('should leave CORS headers to API Gateway', async () => {
       mockDynamoDBQuery.mockReturnValue({
         promise: () => Promise.resolve({ Items: [] }),
       });
@@ -915,8 +915,9 @@ describe('Builders Lambda Handler', () => {
 
       const result = await handler(event);
 
-      expect(result.headers['Access-Control-Allow-Origin']).toBeTruthy();
-      expect(result.headers['Access-Control-Allow-Credentials']).toBe('true');
+      expect(result.headers['Content-Type']).toBe('application/json');
+      expect(result.headers['Access-Control-Allow-Origin']).toBeUndefined();
+      expect(result.headers['Access-Control-Allow-Credentials']).toBeUndefined();
     });
 
     test('should handle OPTIONS preflight', async () => {
@@ -929,8 +930,8 @@ describe('Builders Lambda Handler', () => {
       const result = await handler(event);
 
       expect(result.statusCode).toBe(200);
-      expect(result.headers['Access-Control-Allow-Methods']).toContain('GET');
-      expect(result.headers['Access-Control-Allow-Methods']).toContain('POST');
+      expect(result.headers['Content-Type']).toBe('application/json');
+      expect(result.headers['Access-Control-Allow-Methods']).toBeUndefined();
     });
   });
 });
