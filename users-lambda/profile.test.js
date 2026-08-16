@@ -63,6 +63,14 @@ const baseUser = () => ({
   updated_at: '2026-01-02T00:00:00.000Z'
 });
 
+const emptyFilter = () => ({
+  genres: [],
+  actTypes: [],
+  artistTypes: [],
+  includeOpenMic: false,
+  enabled: false
+});
+
 describe('GET /users/profile gigFilter', () => {
   beforeEach(() => jest.clearAllMocks());
 
@@ -76,7 +84,7 @@ describe('GET /users/profile gigFilter', () => {
     expect(body.user).toEqual(expect.objectContaining({
       displayName: 'Test Person',
       hometown: 'Northwich',
-      gigFilter: { genres: [], actTypes: [], includeOpenMic: false, enabled: false }
+      gigFilter: emptyFilter()
     }));
   });
 
@@ -87,6 +95,7 @@ describe('GET /users/profile gigFilter', () => {
         gig_filter: {
           genres: [' Rock ', null, '', 'Indie', 'Rock'],
           actTypes: ['Covers', 'unknown', 42, 'tribute act'],
+          artistTypes: ['Band', 'solo act', 'nonsense', 42, 'band'],
           includeOpenMic: true,
           enabled: true
         }
@@ -98,6 +107,7 @@ describe('GET /users/profile gigFilter', () => {
     expect(JSON.parse(response.body).user.gigFilter).toEqual({
       genres: ['Rock', 'Indie'],
       actTypes: ['covers', 'tribute'],
+      artistTypes: ['band', 'solo'],
       includeOpenMic: true,
       enabled: true
     });
@@ -123,25 +133,56 @@ describe('PUT /users/profile gigFilter', () => {
     });
   });
 
-  test('saves both requested payload examples, normalises labels, and survives GET', async () => {
+  test('saves requested filter examples, normalises labels, and survives GET', async () => {
     const examples = [
       {
         input: {
           genres: ['Rock', 'Indie', 'Britpop'],
           actTypes: ['Covers'],
+          artistTypes: ['Band', 'Solo Act'],
           includeOpenMic: false,
           enabled: true
         },
-        storedActTypes: ['covers']
+        expected: {
+          genres: ['Rock', 'Indie', 'Britpop'],
+          actTypes: ['covers'],
+          artistTypes: ['band', 'solo'],
+          includeOpenMic: false,
+          enabled: true
+        }
       },
       {
         input: {
           genres: ['Folk', 'Country'],
           actTypes: ['Acoustic'],
+          artistTypes: ['duo'],
           includeOpenMic: true,
           enabled: true
         },
-        storedActTypes: ['acoustic']
+        expected: {
+          genres: ['Folk', 'Country'],
+          actTypes: ['acoustic'],
+          artistTypes: ['duo'],
+          includeOpenMic: true,
+          enabled: true
+        }
+      },
+      {
+        // Backwards compatibility for a client deployed before Artist Type was
+        // added to the saved-filter shape.
+        input: {
+          genres: ['Rock'],
+          actTypes: ['Originals'],
+          includeOpenMic: false,
+          enabled: true
+        },
+        expected: {
+          genres: ['Rock'],
+          actTypes: ['originals'],
+          artistTypes: [],
+          includeOpenMic: false,
+          enabled: true
+        }
       }
     ];
 
@@ -154,10 +195,7 @@ describe('PUT /users/profile gigFilter', () => {
       const putBody = JSON.parse(putResponse.body);
 
       expect(putResponse.statusCode).toBe(200);
-      expect(putBody.user.gigFilter).toEqual({
-        ...example.input,
-        actTypes: example.storedActTypes
-      });
+      expect(putBody.user.gigFilter).toEqual(example.expected);
       expect(storedUser).toEqual(expect.objectContaining({
         first_name: before.first_name,
         last_name: before.last_name,
@@ -170,10 +208,7 @@ describe('PUT /users/profile gigFilter', () => {
 
       const getResponse = await handler(makeEvent('GET', '/users/profile'), {});
       expect(getResponse.statusCode).toBe(200);
-      expect(JSON.parse(getResponse.body).user.gigFilter).toEqual({
-        ...example.input,
-        actTypes: example.storedActTypes
-      });
+      expect(JSON.parse(getResponse.body).user.gigFilter).toEqual(example.expected);
     }
 
     for (const params of mockDynamoDB.update.mock.calls.map(([value]) => value)) {
@@ -184,9 +219,10 @@ describe('PUT /users/profile gigFilter', () => {
 
   test.each([
     null,
-    { genres: 'Rock', actTypes: [], includeOpenMic: false, enabled: true },
-    { genres: [], actTypes: ['karaoke'], includeOpenMic: false, enabled: true },
-    { genres: [], actTypes: [], includeOpenMic: 'yes', enabled: true }
+    { genres: 'Rock', actTypes: [], artistTypes: [], includeOpenMic: false, enabled: true },
+    { genres: [], actTypes: ['karaoke'], artistTypes: [], includeOpenMic: false, enabled: true },
+    { genres: [], actTypes: [], artistTypes: ['orchestra'], includeOpenMic: false, enabled: true },
+    { genres: [], actTypes: [], artistTypes: [], includeOpenMic: 'yes', enabled: true }
   ])('rejects malformed or unknown filter values without writing: %p', async (gigFilter) => {
     const response = await handler(makeEvent('PUT', '/users/profile', { gigFilter }), {});
     expect(response.statusCode).toBe(400);
@@ -203,6 +239,7 @@ describe('PUT /users/profile gigFilter', () => {
     storedUser.gig_filter = {
       genres: ['Rock'],
       actTypes: ['covers'],
+      artistTypes: ['Band'],
       includeOpenMic: false,
       enabled: true
     };
@@ -224,7 +261,13 @@ describe('PUT /users/profile gigFilter', () => {
     }), {});
 
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body).user.gigFilter).toEqual(storedUser.gig_filter);
+    expect(JSON.parse(response.body).user.gigFilter).toEqual({
+      genres: ['Rock'],
+      actTypes: ['covers'],
+      artistTypes: ['band'],
+      includeOpenMic: false,
+      enabled: true
+    });
     expect(mockDynamoDB.update.mock.calls[0][0].UpdateExpression).not.toContain('gig_filter');
   });
 });
