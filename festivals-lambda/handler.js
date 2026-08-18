@@ -7,10 +7,12 @@ const {
   handleCreateFestival,
   handleUpdateFestival,
   handleSearchFestivals,
-  handleGetPublicFestivals,
-  handleGetFestivalBySlug,
   handleGetFestivalByExternalId
 } = require('./handlers/crud');
+const {
+  handleGetPublicFestivals,
+  handleGetFestivalBySlug
+} = require('./handlers/public-v1');
 
 const AWS = require('aws-sdk');
 const jwt = require('jsonwebtoken');
