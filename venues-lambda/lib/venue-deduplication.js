@@ -273,7 +273,9 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
       console.log('[Venues] No googlePlaceId provided - attempting geocode via Google Places');
 
       try {
-        const placeData = await findPlaceFromGoogle(venueData.name, venueData.city);
+        // Pass the address. A postcode pins a building, a town does not.
+        // See the note on findPlaceFromGoogle, 2026-08-14.
+        const placeData = await findPlaceFromGoogle(venueData.name, venueData.city, venueData.address);
 
         if (placeData) {
           console.log(`[Venues] Geocoded to place_id: ${placeData.placeId}`);

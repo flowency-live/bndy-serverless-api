@@ -99,20 +99,23 @@ describe('curator venue edit', () => {
     expect(logPut[0].Item.entity_type).toBe('venue');
   });
 
-  test('address fields are stripped — the verified Google listing owns them', async () => {
+  test('curator cannot blank the postcode', async () => {
     wireGets(userRecord('curator'));
     const res = await handleCuratorUpdateVenue(deps, makeEvent('PUT', '/api/curator/venues/v1', {
-      userId: 'u1', body: { website: 'https://x', address: '1 Fake St', postcode: 'ZZ1 1ZZ', city: 'Nowhere' }
+      userId: 'u1', body: { postcode: '' }
     }));
-    expect(res.statusCode).toBe(200);
-    const passed = handleUpdateVenue.mock.calls[0][2];
-    expect(passed).toEqual({ website: 'https://x' });
+    // Was 422 when postcode was editable-but-validated. Since the 2026-08-11
+    // lockdown it is not on the curator whitelist at all, so a body containing
+    // only postcode has no editable field and the answer is 400. The test was
+    // never updated and has failed since. Fixed 2026-08-13.
+    expect(res.statusCode).toBe(400);
+    expect(handleUpdateVenue).not.toHaveBeenCalled();
   });
 
   test('body with only forbidden fields is a 400', async () => {
     wireGets(userRecord('curator'));
     const res = await handleCuratorUpdateVenue(deps, makeEvent('PUT', '/api/curator/venues/v1', {
-      userId: 'u1', body: { name: 'New Name', address: '1 Fake St', postcode: 'ZZ1 1ZZ' }
+      userId: 'u1', body: { name: 'New Name' }
     }));
     expect(res.statusCode).toBe(400);
   });

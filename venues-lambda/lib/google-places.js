@@ -25,14 +25,29 @@ function validateApiKey(event) {
 }
 
 /**
- * Search Google Places API for a venue by name and city
- * Returns place details or null if not found
+ * Search Google Places API for a venue by name, and by the most precise
+ * location string the caller has.
+ *
+ * WHY `address` EXISTS. Until 2026-08-14 this function took name and city only.
+ * A caller could send a full street address and a postcode, and neither reached
+ * Google. The query was "The Kings, Heywood", so Google returned Kings Barber
+ * on a different street. The importer then created a barber shop as a pub.
+ * Four wrong resolutions in one 191 record import came from this.
+ *
+ * A postcode identifies a UK building. A town does not. When the caller knows
+ * the street and the postcode, ask Google that question, not a vaguer one.
+ *
+ * ⚠ `address` is OPTIONAL and the city path is unchanged, so every existing
+ * caller behaves exactly as before.
+ *
  * @param {string} name - Venue name
  * @param {string} city - City name
+ * @param {string} [address] - Full street address including postcode. Preferred over city when present.
  * @returns {Promise<{placeId: string, name: string, address: string, latitude: number, longitude: number, types?: string[], addressComponents?: Object[]}|null>}
  */
-async function findPlaceFromGoogle(name, city) {
-  const query = `${name}, ${city}`;
+async function findPlaceFromGoogle(name, city, address) {
+  const where = (address && String(address).trim()) || city;
+  const query = `${name}, ${where}`;
   console.log(`[Integration] Searching Google Places for: "${query}"`);
 
   try {

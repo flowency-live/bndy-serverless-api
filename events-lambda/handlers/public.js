@@ -18,6 +18,7 @@ const { triggerNotification } = require('../lib/notifications');
 const { jsonResponse } = require('../lib/http-response');
 const { batchGetByIds } = require('../lib/batch-get');
 const { scanAll } = require('../lib/scan-all');
+const { DEFAULT_END_TIME } = require('../lib/event-defaults');
 
 // Table constants
 const ARTISTS_TABLE = 'bndy-artists';
@@ -840,6 +841,10 @@ async function handleCreateCommunityEvent(deps, event) {
       };
     }
 
+    // startTime stays REQUIRED here. Every stored event has a start time.
+    // Callers apply the RUNBOOK 5.6 default BEFORE they call this endpoint.
+    // This check is the safety net: a caller that drops the field fails loudly
+    // instead of storing a quiet default.
     if (!venueId || !date || !startTime) {
       return {
         statusCode: 400,
@@ -960,7 +965,10 @@ async function handleCreateCommunityEvent(deps, event) {
       title: eventTitle,
       date: date,
       startTime: startTime,
-      endTime: endTime || '00:00',
+      // RUNBOOK 5.6: the caller says whether this time came from a source or
+      // from the default. The review queue reads this flag.
+      ...(body.startTimeDefaulted === true && { startTimeDefaulted: true }),
+      endTime: endTime || DEFAULT_END_TIME,
       type: isOpenMic ? 'open-mic' : 'gig',
       isPublic: isPublic !== undefined ? isPublic : true,
       isAllDay: false,
