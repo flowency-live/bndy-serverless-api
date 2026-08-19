@@ -1944,29 +1944,6 @@ Resources:
           Projection:
             ProjectionType: ALL
 
-  # Venue ownership groups (backlog feature 19). Robinsons Brewery owns 235 UK
-  # pubs; Amber Taverns is a pubco, not a brewery.
-  #
-  # WHY ITS OWN TABLE: several venue read paths scan or query bndy-venues, and a
-  # group row carries no coordinates. Inside bndy-venues it would leak into venue
-  # lists and onto the map. Same reasoning as the uniqueness sentinels.
-  #
-  # Slug lookup is a filtered scan on purpose: this table holds tens of rows, not
-  # thousands. Add a GSI when that stops being true.
-  VenueGroupsTable:
-    Type: AWS::DynamoDB::Table
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      TableName: bndy-venue-groups
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-
   # Flags (backlog feature 6): anyone reports a problem on a record.
   # Feature 5's review queue reads this store. Retained on stack delete.
   FlagsTable:
