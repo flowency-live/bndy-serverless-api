@@ -263,8 +263,15 @@ async function handleBatchEventsWithJoins(deps, event) {
   const eventsById = await batchGetByIds(dynamodb, EVENTS_TABLE, eventIds);
   const events = eventIds.map(id => eventsById[id]).filter(Boolean);
 
-  // Collect unique artistIds and venueIds
-  const artistIds = [...new Set(events.map(e => e.artistId).filter(Boolean))];
+  // Collect unique artistIds (primary + collaborating) and venueIds
+  const allArtistIds = new Set();
+  events.forEach(e => {
+    if (e.artistId) allArtistIds.add(e.artistId);
+    if (Array.isArray(e.collaboratingArtistIds)) {
+      e.collaboratingArtistIds.forEach(id => allArtistIds.add(id));
+    }
+  });
+  const artistIds = [...allArtistIds];
   const venueIds = [...new Set(events.map(e => e.venueId).filter(Boolean))];
 
   console.log('BATCH_EVENTS: Fetching joins', { artistIds: artistIds.length, venueIds: venueIds.length });
@@ -275,18 +282,34 @@ async function handleBatchEventsWithJoins(deps, event) {
     batchGetByIds(dynamodb, VENUES_TABLE, venueIds)
   ]);
 
-  // Join events with artist, venue, and resolved ticketing data
+  // Join events with artist, venue, and resolved ticketing data.
+  // Flat fields (artistName, artistIds, artistNames, venueName) match the
+  // GET /api/events/public contract so every consumer maps events identically.
+  // The nested artist/venue objects stay for existing consumers.
   const enrichedEvents = events.map(e => {
-    const venue = e.venueId ? venueMap[e.venueId] : null;
+    const sanitizedEvent = stripPrivateFields(e);
+    const venue = sanitizedEvent.venueId ? venueMap[sanitizedEvent.venueId] : null;
     const ticketing = resolveTicketing(e, venue);
 
+    // Build full artistIds array (primary + collaborating)
+    const eventArtistIds = sanitizedEvent.artistId ? [sanitizedEvent.artistId] : [];
+    if (Array.isArray(sanitizedEvent.collaboratingArtistIds)) {
+      eventArtistIds.push(...sanitizedEvent.collaboratingArtistIds);
+    }
+    // Build artistNames array parallel to artistIds
+    const eventArtistNames = eventArtistIds.map(id => artistMap[id]?.name).filter(Boolean);
+
     return {
-      ...e,
-      artist: e.artistId && artistMap[e.artistId] ? {
-        id: artistMap[e.artistId].id,
-        name: artistMap[e.artistId].name,
-        genres: artistMap[e.artistId].genres,
-        profileImageUrl: artistMap[e.artistId].profileImageUrl
+      ...sanitizedEvent,
+      artistName: sanitizedEvent.artistId ? artistMap[sanitizedEvent.artistId]?.name : undefined,
+      artistIds: eventArtistIds.length > 0 ? eventArtistIds : undefined,
+      artistNames: eventArtistNames.length > 0 ? eventArtistNames : undefined,
+      venueName: venue?.name,
+      artist: sanitizedEvent.artistId && artistMap[sanitizedEvent.artistId] ? {
+        id: artistMap[sanitizedEvent.artistId].id,
+        name: artistMap[sanitizedEvent.artistId].name,
+        genres: artistMap[sanitizedEvent.artistId].genres,
+        profileImageUrl: artistMap[sanitizedEvent.artistId].profileImageUrl
       } : null,
       venue: venue ? {
         id: venue.id,
