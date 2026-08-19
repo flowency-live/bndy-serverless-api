@@ -16,6 +16,7 @@ const {
 
 const AWS = require('aws-sdk');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const ssm = new AWS.SSM({ region: 'eu-west-2' });
@@ -92,6 +93,35 @@ const requireAuth = async (event) => {
   }
 };
 
+/**
+ * MCP service token gate - same pattern as venues-lambda groups.js
+ * Staff by cookie, OR the MCP service token by Bearer header.
+ */
+const MCP_GATE = Object.freeze({
+  user: { userId: 'mcp-service', platformAdmin: true, isService: true },
+  role: 'staff'
+});
+
+function isMcpService(event) {
+  const header = event.headers?.Authorization || event.headers?.authorization || '';
+  if (!header.startsWith('Bearer ')) return false;
+  const token = header.slice(7);
+  const serviceToken = process.env.MCP_SERVICE_TOKEN;
+  if (!token || !serviceToken) return false;
+  if (token.length !== serviceToken.length) return false;
+  const a = Buffer.from(token);
+  const b = Buffer.from(serviceToken);
+  return crypto.timingSafeEqual(a, b);
+}
+
+async function requireStaffOrMcp(event) {
+  if (isMcpService(event)) {
+    console.log('[FESTIVALS] MCP service token accepted');
+    return MCP_GATE;
+  }
+  return requireAuth(event);
+}
+
 // CORS is now handled by API Gateway CorsConfiguration in template.yaml
 function getCorsHeaders(event) {
   return {
@@ -122,8 +152,8 @@ exports.handler = async (event) => {
     // Route matching
     // POST /festivals - Create festival
     if (routeKey.match(/POST \/festivals$/)) {
-      // SEC-04: Require authentication for festival creation
-      const authResult = await requireAuth(event);
+      // SEC-04: Staff cookie OR MCP service token
+      const authResult = await requireStaffOrMcp(event);
       if (authResult.error) {
         return {
           statusCode: 401,
@@ -136,8 +166,8 @@ exports.handler = async (event) => {
 
     // PATCH /festivals/{id} - Update festival
     if (routeKey.match(/PATCH \/festivals\/[^/]+$/)) {
-      // SEC-04: Require authentication for festival updates
-      const authResult = await requireAuth(event);
+      // SEC-04: Staff cookie OR MCP service token
+      const authResult = await requireStaffOrMcp(event);
       if (authResult.error) {
         return {
           statusCode: 401,
