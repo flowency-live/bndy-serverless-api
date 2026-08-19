@@ -714,6 +714,7 @@ Resources:
       Environment:
         Variables:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          MCP_SERVICE_TOKEN: '{{resolve:secretsmanager:bndy/mcp-service:SecretString:token}}'
       Events:
         # Festival CRUD
         CreateFestival:
