@@ -2204,6 +2204,11 @@ async function handleCreateCommunityArtist(event) {
       };
     }
 
+    // Normalize nameVariants to array (defensive: MCP might pass string or malformed)
+    const safeNameVariants = Array.isArray(nameVariants)
+      ? nameVariants.filter(v => typeof v === 'string' && v.trim().length > 0)
+      : [];
+
     // GATE VERIFICATION FIX 2026-07-28: this unauthenticated route was the ONLY
     // create path not running data-quality validation — lineup names ("A + B"),
     // placeholders ("TBC") and listing-copy names could still be created here.
@@ -2332,7 +2337,7 @@ async function handleCreateCommunityArtist(event) {
       external_ids: externalIds || [],
 
       // Name variants for known billing variations (Fix #3a)
-      name_variants: nameVariants || [],
+      name_variants: safeNameVariants,
 
       // Fix #7: Record if name passed via verified-source-name exception (§2A.5)
       // Allows reviewers to see why a listing-copy-looking name was accepted
@@ -2348,7 +2353,7 @@ async function handleCreateCommunityArtist(event) {
     // HARD GATE (2026-07-27): artist UID = normalise(name) + region bucket.
     // Even when a caller's "this is a new artist" logic is wrong, the
     // sentinel transaction bounces the write.
-    const { keys: uniqueKeys, resolvable } = buildArtistUniqueKeys(name, location, facebookUrl, nameVariants);
+    const { keys: uniqueKeys, resolvable } = buildArtistUniqueKeys(name, location, facebookUrl, safeNameVariants);
 
     if (!resolvable && gateMode() === 'enforce') {
       // A location that can't be bucketed can't participate in identity —
