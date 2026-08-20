@@ -15,9 +15,35 @@
  */
 
 const { requireRole, logActivity, pickFields, hideEntity, restoreEntity } = require('../lib/curator-core');
+const { requireMcpAuth } = require('../lib/auth');
 const { handleUpdateEventMcp } = require('./mcp');
 
 const EVENTS_TABLE = 'bndy-events';
+
+/**
+ * WP-05A (2026-08-20): the event lifecycle routes (cancel, uncancel, hide,
+ * restore) accept the MCP service token as staff, so bndy-enrichment can
+ * project cancellations and withdrawals without a cookie session.
+ *
+ * Rule: a presented Bearer token MUST be the valid MCP_SERVICE_TOKEN. A bad
+ * bearer is 401. It never falls through to the cookie path. No bearer means
+ * the cookie role gate runs unchanged. Same pattern as venues groups.js.
+ */
+const MCP_GATE = Object.freeze({
+  user: Object.freeze({ userId: 'mcp-service', platformAdmin: true, isService: true }),
+  dbUser: Object.freeze({ display_name: 'MCP' }),
+  role: 'staff'
+});
+
+async function requireRoleOrMcp(deps, event, roles) {
+  const bearer = event.headers?.Authorization || event.headers?.authorization || '';
+  if (bearer.startsWith('Bearer ')) {
+    const mcp = requireMcpAuth(deps, event);
+    if (mcp.statusCode) return { error: JSON.parse(mcp.body).error, statusCode: mcp.statusCode };
+    return MCP_GATE;
+  }
+  return requireRole(deps, event, roles);
+}
 
 const CURATOR_EVENT_FIELDS = [
   'title', 'date', 'startTime', 'endTime', 'description',
@@ -79,7 +105,7 @@ async function handleCuratorUpdateEvent(deps, event) {
 }
 
 async function handleCuratorHideEvent(deps, event) {
-  const gate = await requireRole(deps, event, ['curator', 'staff']);
+  const gate = await requireRoleOrMcp(deps, event, ['curator', 'staff']);
   if (gate.error) return respond(deps, event, gate.statusCode, { error: gate.error });
 
   const id = event.pathParameters?.id;
@@ -117,7 +143,7 @@ async function handleCuratorHideEvent(deps, event) {
 }
 
 async function handleCuratorRestoreEvent(deps, event) {
-  const gate = await requireRole(deps, event, ['staff']);
+  const gate = await requireRoleOrMcp(deps, event, ['staff']);
   if (gate.error) return respond(deps, event, gate.statusCode, { error: gate.error });
 
   const id = event.pathParameters?.id;
@@ -154,7 +180,7 @@ async function handleCuratorRestoreEvent(deps, event) {
  */
 
 async function handleCuratorCancelEvent(deps, event) {
-  const gate = await requireRole(deps, event, ['curator', 'staff']);
+  const gate = await requireRoleOrMcp(deps, event, ['curator', 'staff']);
   if (gate.error) return respond(deps, event, gate.statusCode, { error: gate.error });
 
   const id = event.pathParameters?.id;
@@ -200,7 +226,7 @@ async function handleCuratorCancelEvent(deps, event) {
 }
 
 async function handleCuratorUncancelEvent(deps, event) {
-  const gate = await requireRole(deps, event, ['curator', 'staff']);
+  const gate = await requireRoleOrMcp(deps, event, ['curator', 'staff']);
   if (gate.error) return respond(deps, event, gate.statusCode, { error: gate.error });
 
   const id = event.pathParameters?.id;
