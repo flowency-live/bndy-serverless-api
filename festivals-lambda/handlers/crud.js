@@ -92,8 +92,10 @@ function validateFestival(data, isCreate = true) {
     }
   }
 
-  // isPublic requires venue
-  if (data.isPublic === true && !data.primaryVenueId && (!data.venueIds || data.venueIds.length === 0)) {
+  // isPublic requires venue. On UPDATE this check runs against the MERGED
+  // state in handleUpdateFestival (2026-08-20 fix: a lone isPublic patch on a
+  // festival with stored venues was wrongly rejected here).
+  if (isCreate && data.isPublic === true && !data.primaryVenueId && (!data.venueIds || data.venueIds.length === 0)) {
     return { valid: false, error: 'At least one venue is required for public festivals' };
   }
 
@@ -242,6 +244,9 @@ async function handleCreateFestival(deps, event) {
     theme: body.theme,
     isPublic: body.isPublic || false,
     source: body.source || 'bndy.core',
+    // Curator builder audit fields; undefined for MCP/agent creates and stripped below.
+    createdBy: body.createdBy,
+    createdByName: body.createdByName,
     externalIds: body.externalIds || [],
     createdAt: now,
     updatedAt: now
@@ -314,6 +319,16 @@ async function handleUpdateFestival(deps, event) {
 
   if (!existing.Item) {
     return respond(404, { error: 'Festival not found' });
+  }
+
+  // Publish gate against the MERGED state: the payload's venues if sent,
+  // otherwise the stored ones. (2026-08-20 fix - was payload-only.)
+  if (body.isPublic === true) {
+    const mergedPrimary = body.primaryVenueId !== undefined ? body.primaryVenueId : existing.Item.primaryVenueId;
+    const mergedVenueIds = body.venueIds !== undefined ? body.venueIds : (existing.Item.venueIds || []);
+    if (!mergedPrimary && mergedVenueIds.length === 0) {
+      return respond(400, { error: 'At least one venue is required for public festivals' });
+    }
   }
 
   const now = new Date().toISOString();
@@ -592,6 +607,9 @@ async function handleGetPublicFestivals(deps, event) {
     venueIds: allVenueIds(f),
     posterImageUrl: f.posterImageUrl,
     price: f.price,
+    ticketed: f.ticketed,
+    ticketUrl: f.ticketUrl,
+    lineupUrl: f.lineupUrl,
     actCount: (f.lineup || []).length
   }));
 

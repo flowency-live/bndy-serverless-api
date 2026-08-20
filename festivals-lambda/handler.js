@@ -13,6 +13,11 @@ const {
   handleGetPublicFestivals,
   handleGetFestivalBySlug
 } = require('./handlers/public-v1');
+const {
+  handleCuratorCreateFestival,
+  handleCuratorGetFestival,
+  handleCuratorUpdateFestival
+} = require('./handlers/curator');
 
 const AWS = require('aws-sdk');
 const jwt = require('jsonwebtoken');
@@ -136,7 +141,8 @@ exports.handler = async (event) => {
     method: event.requestContext?.http?.method
   });
 
-  const deps = { dynamodb, getCorsHeaders };
+  // ssm is required by the curator routes' requireRole (curator-core).
+  const deps = { dynamodb, getCorsHeaders, ssm };
   const routeKey = event.routeKey || `${event.httpMethod} ${event.path}`;
 
   // Handle OPTIONS (CORS preflight)
@@ -149,6 +155,17 @@ exports.handler = async (event) => {
   }
 
   try {
+    // Curator routes (festival curator builder; role gated inside the handlers)
+    if (routeKey.match(/^POST \/api\/curator\/festivals$/)) {
+      return await handleCuratorCreateFestival(deps, event);
+    }
+    if (routeKey.match(/^GET \/api\/curator\/festivals\/[^/]+$/)) {
+      return await handleCuratorGetFestival(deps, event);
+    }
+    if (routeKey.match(/^PATCH \/api\/curator\/festivals\/[^/]+$/)) {
+      return await handleCuratorUpdateFestival(deps, event);
+    }
+
     // Route matching
     // POST /festivals - Create festival
     if (routeKey.match(/POST \/festivals$/)) {

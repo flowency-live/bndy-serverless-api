@@ -234,4 +234,104 @@ async function handleCuratorUncancelEvent(deps, event) {
   return respond(deps, event, 200, { success: true, id, cancelled: false });
 }
 
-module.exports = { handleCuratorUpdateEvent, handleCuratorHideEvent, handleCuratorRestoreEvent, handleCuratorCancelEvent, handleCuratorUncancelEvent };
+/* ---------- festival tagging (festival curator builder, 2026-08-20) ----------
+ * POST /api/curator/events/festival-tag
+ * { festivalId, festivalName, add: [eventIds], remove: [eventIds] }
+ *
+ * add:    SET festivalId + festivalName. An event already tagged to a DIFFERENT
+ *         festival is SKIPPED and reported - one festival per event, and a
+ *         curator never silently steals another festival's gig.
+ * remove: REMOVE festivalId + festivalName only when the event is tagged to
+ *         THIS festival.
+ * Cap 100 ids per call. Response { tagged, untagged, skipped }.
+ */
+
+const MAX_TAG_IDS = 100;
+
+async function handleCuratorFestivalTag(deps, event) {
+  const gate = await requireRole(deps, event, ['curator', 'staff']);
+  if (gate.error) return respond(deps, event, gate.statusCode, { error: gate.error });
+
+  let body;
+  try {
+    body = JSON.parse(event.body || '{}');
+  } catch {
+    return respond(deps, event, 400, { error: 'Invalid JSON body' });
+  }
+
+  const { festivalId, festivalName } = body;
+  const add = Array.isArray(body.add) ? body.add : [];
+  const remove = Array.isArray(body.remove) ? body.remove : [];
+
+  if (!festivalId || typeof festivalId !== 'string') {
+    return respond(deps, event, 400, { error: 'festivalId is required' });
+  }
+  if (add.length === 0 && remove.length === 0) {
+    return respond(deps, event, 400, { error: 'add or remove must contain at least one event id' });
+  }
+  if (add.length + remove.length > MAX_TAG_IDS) {
+    return respond(deps, event, 400, { error: `Maximum ${MAX_TAG_IDS} event ids per call` });
+  }
+
+  const tagged = [];
+  const untagged = [];
+  const skipped = [];
+
+  for (const id of add) {
+    try {
+      await deps.dynamodb.update({
+        TableName: EVENTS_TABLE,
+        Key: { id },
+        // Free to tag only when untagged or already ours (idempotent re-tag).
+        ConditionExpression: 'attribute_exists(id) AND (attribute_not_exists(festivalId) OR festivalId = :fid)',
+        UpdateExpression: 'SET festivalId = :fid, festivalName = :fname, updatedAt = :now',
+        ExpressionAttributeValues: {
+          ':fid': festivalId,
+          ':fname': festivalName || null,
+          ':now': new Date().toISOString()
+        }
+      }).promise();
+      tagged.push(id);
+    } catch (e) {
+      if (e.code === 'ConditionalCheckFailedException') {
+        skipped.push({ id, reason: 'not found or already in another festival' });
+      } else {
+        skipped.push({ id, reason: e.message });
+      }
+    }
+  }
+
+  for (const id of remove) {
+    try {
+      await deps.dynamodb.update({
+        TableName: EVENTS_TABLE,
+        Key: { id },
+        // Only detach OUR tag - never strip another festival's linkage.
+        ConditionExpression: 'attribute_exists(id) AND festivalId = :fid',
+        UpdateExpression: 'REMOVE festivalId, festivalName SET updatedAt = :now',
+        ExpressionAttributeValues: { ':fid': festivalId, ':now': new Date().toISOString() }
+      }).promise();
+      untagged.push(id);
+    } catch (e) {
+      if (e.code === 'ConditionalCheckFailedException') {
+        skipped.push({ id, reason: 'not found or not tagged to this festival' });
+      } else {
+        skipped.push({ id, reason: e.message });
+      }
+    }
+  }
+
+  await logActivity(deps.dynamodb, {
+    actorCognitoId: gate.user.userId,
+    actorName: gate.dbUser.display_name,
+    action: 'festival-tag',
+    entityType: 'festival',
+    entityId: festivalId,
+    entityName: festivalName || null,
+    detail: `tagged ${tagged.length}, untagged ${untagged.length}, skipped ${skipped.length}`
+  });
+
+  return respond(deps, event, 200, { tagged, untagged, skipped });
+}
+
+module.exports = { handleCuratorUpdateEvent, handleCuratorHideEvent, handleCuratorRestoreEvent, handleCuratorCancelEvent, handleCuratorUncancelEvent, handleCuratorFestivalTag };

@@ -54,7 +54,7 @@ const { handleCreateArtistEvent, handleCreateUserUnavailability, handleGetEvent,
 const { handleGetCalendar, handleGetAllArtistEvents, handleCreateCalendarSubscription, handleGetCalendarSubscriptions, handleRevokeCalendarSubscription, handleGetIcalFeed, handleGetEventIcal } = require('./handlers/calendar');
 
 // Curator handlers (backlog feature 4) — role gate lives inside the handlers
-const { handleCuratorUpdateEvent, handleCuratorHideEvent, handleCuratorRestoreEvent, handleCuratorCancelEvent, handleCuratorUncancelEvent } = require('./handlers/curator');
+const { handleCuratorUpdateEvent, handleCuratorHideEvent, handleCuratorRestoreEvent, handleCuratorCancelEvent, handleCuratorUncancelEvent, handleCuratorFestivalTag } = require('./handlers/curator');
 
 // Dependency injection object for handlers
 const deps = { dynamodb, ssm, lambda, getCorsHeaders };
@@ -125,6 +125,10 @@ exports.handler = async (event, context) => {
     }
 
     // Curator routes (backlog feature 4)
+    // festival-tag is a literal segment - matched before the {id} patterns.
+    if (routeKey.match(/^POST \/api\/curator\/events\/festival-tag$/)) {
+      return await handleCuratorFestivalTag(deps, event);
+    }
     if (routeKey.match(/^PUT \/api\/curator\/events\/[^/]+$/)) {
       return await handleCuratorUpdateEvent(deps, event);
     }
