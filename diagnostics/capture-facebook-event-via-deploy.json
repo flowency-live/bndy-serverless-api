@@ -1,0 +1,32 @@
+{
+  "result": "CAPTURE_ACCEPTANCE_VIA_DEPLOY",
+  "inspectedAt": "2026-08-21T20:06:12Z",
+  "captureId": "48c4ae2b-05be-4693-abea-b2dd126a1042",
+  "steps": {
+    "verify": "success",
+    "bundle": "success",
+    "auth": "success",
+    "hotdeploy": "success",
+    "replay": "success"
+  },
+  "before": {
+    "status": "failed",
+    "sharedUrl": "https://www.facebook.com/share/1YHQ83pwfB/",
+    "note": "AWS processor: REVIEW_REQUIRED. Capture classified as event. The shared link is a Facebook event page for a live music gig by female-fronted rock/pop cover band The Torrists at the Hare & Hounds in New Mills on August 22, 2026.\n\nAWS processor: failed after 3 attempts. Unexpected artist find-or-create response: {\"action\":\"create_failed\",\"error\":\"Duplicate artist\",\"code\":\"DUPLICATE\",\"entityType\":\"artist\",\"existingId\":\"13944bfd-89ab-402e-95dc-a371fd78fd2f\",\"conflictKey\":\"artist#torrists#north-west\",\"message\":\"An artist with this name already exists in this region (or shares this Facebook page). Use the existing record.\",\"existingArtistId\":\"13944bfd-89ab-402e-95dc-a371fd78fd2f\"}",
+    "processingAttempt": 4
+  },
+  "final": {
+    "status": "processed",
+    "sharedUrl": "https://www.facebook.com/share/1YHQ83pwfB/",
+    "note": "AWS processor: REVIEW_REQUIRED. Capture classified as event. The shared link is a Facebook event page for a live music gig by female-fronted rock/pop cover band The Torrists at the Hare & Hounds in New Mills on August 22, 2026.\n\nAWS processor: failed after 3 attempts. Unexpected artist find-or-create response: {\"action\":\"create_failed\",\"error\":\"Duplicate artist\",\"code\":\"DUPLICATE\",\"entityType\":\"artist\",\"existingId\":\"13944bfd-89ab-402e-95dc-a371fd78fd2f\",\"conflictKey\":\"artist#torrists#north-west\",\"message\":\"An artist with this name already exists in this region (or shares this Facebook page). Use the existing record.\",\"existingArtistId\":\"13944bfd-89ab-402e-95dc-a371fd78fd2f\"}\n\nAWS processor: completed.\nCapture classification: event\nArtist: The Torrists | duplicate | 13944bfd-89ab-402e-95dc-a371fd78fd2f\nFacebook: https://www.facebook.com/thetorrists\nLocation: High Peak (regional)\nArtist type: Band; act type: Covers\nCanonical capture URL: https://www.facebook.com/events/1555240929628880/\nBio: Female-fronted rock, pop and indie cover band based in the High Peak.\nEvents: 0 created, 1 existing duplicates, 0 held.\nEvent detail:\n- 2026-08-22 21:00 | Hare & Hounds, New Mills | existing duplicate 6ba7c7fc-4003-4548-bd49-2ea198853a36 | venue matched\nNo new venues.",
+    "processingAttempt": 5
+  },
+  "processor": {
+    "LastModified": "2026-08-21T20:05:27.000+0000",
+    "CodeSha256": "DfUSUTfEN7nH96b3McdYzLb1a3aykkHr3BABnf4ZdYM=",
+    "Runtime": "nodejs22.x",
+    "State": "Active",
+    "LastUpdateStatus": "Successful"
+  },
+  "processorLogs": []
+}
