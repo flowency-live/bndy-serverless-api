@@ -82,6 +82,14 @@
   "explicitRoutes": [
     {
       "method": "POST",
+      "path": "/api/community/source/inspect",
+      "zone": "community",
+      "reason": "Public read-only Facebook source inspection. No entity writes; outbound fetch is Facebook-host allowlisted and bounded. API/WAF rate limits still apply.",
+      "addedBy": "FACEBOOK-ENTITY-CREATION",
+      "addedDate": "2026-08-21"
+    },
+    {
+      "method": "POST",
       "path": "/api/community/artists/find-or-create",
       "zone": "community",
       "reason": "SEC-COMMUNITY: Public wizard artist resolution - rate-limited, honeypot protected",
@@ -132,6 +140,7 @@
   "notes": [
     "SEC-00 records the target policy but does not enforce it or change production behaviour.",
     "Run npm run security:inventory to generate the complete current route inventory from template.yaml.",
-    "SEC-01 will replace broad GET classification with an explicit public route allowlist and fail on unknown routes."
+    "SEC-01 will replace broad GET classification with an explicit public route allowlist and fail on unknown routes.",
+    "The source inspector uses POST for pasted request content but is read-only at the entity layer."
   ]
 }
