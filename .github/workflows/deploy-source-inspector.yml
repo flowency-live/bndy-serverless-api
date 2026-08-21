@@ -1,0 +1,132 @@
+name: Deploy Source Inspector
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'artists-lambda/source-inspector.js'
+      - 'artists-lambda/source-inspector.test.js'
+      - 'artists-lambda/lib/identity.js'
+      - 'artists-lambda/lib/data-quality.js'
+      - 'artists-lambda/package.json'
+      - 'artists-lambda/package-lock.json'
+      - 'source-inspector-template.yaml'
+      - '.github/workflows/deploy-source-inspector.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+env:
+  AWS_REGION: eu-west-2
+  NODE_VERSION: '20'
+  SAM_CLI_TELEMETRY: '0'
+
+jobs:
+  deploy:
+    name: Deploy source inspector companion stack
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install source inspector dependencies
+        working-directory: artists-lambda
+        run: npm install --production --legacy-peer-deps --ignore-scripts
+
+      - name: Resolve existing BNDY HTTP API
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_ID=$(aws cloudformation describe-stacks \
+            --stack-name bndy-serverless-api \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='BndyHttpApiId'].OutputValue | [0]" \
+            --output text)
+          test -n "$API_ID" && test "$API_ID" != "None"
+          echo "BNDY_HTTP_API_ID=$API_ID" >> "$GITHUB_ENV"
+
+      - name: SAM Build
+        run: |
+          sam build \
+            --template-file source-inspector-template.yaml \
+            --build-dir .aws-sam-source-inspector
+
+      - name: SAM Deploy
+        run: |
+          sam deploy \
+            --template-file .aws-sam-source-inspector/template.yaml \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --stack-name bndy-source-inspector \
+            --region "$AWS_REGION" \
+            --capabilities CAPABILITY_IAM \
+            --s3-bucket bndy-deployment-artifacts-1758805276 \
+            --s3-prefix bndy-source-inspector \
+            --parameter-overrides BndyHttpApiId="$BNDY_HTTP_API_ID"
+
+      - name: Wait for API Gateway propagation
+        run: sleep 5
+
+      - name: Smoke test source inspector route
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          status=$(curl -sS -o /tmp/source-inspector-empty.json -w '%{http_code}' \
+            -X POST 'https://api.bndy.co.uk/api/community/source/inspect' \
+            -H 'content-type: application/json' \
+            --data '{"input":""}')
+          test "$status" = "400"
+          grep -q 'INPUT_REQUIRED' /tmp/source-inspector-empty.json
+
+          status=$(curl -sS -o /tmp/source-inspector-host.json -w '%{http_code}' \
+            -X POST 'https://api.bndy.co.uk/api/community/source/inspect' \
+            -H 'content-type: application/json' \
+            --data '{"input":"https://evil.example/facebook.com/not-a-page"}')
+          test "$status" = "422"
+          grep -q 'NOT_FACEBOOK_URL' /tmp/source-inspector-host.json
+
+      - name: Mark source inspector deployment successful
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -d '{"state":"success","context":"source-inspector/deploy","description":"Companion stack deployed and smoke-tested"}'
+
+      - name: Mark source inspector deployment failed
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -d '{"state":"failure","context":"source-inspector/deploy","description":"Companion stack deployment or smoke test failed"}'
