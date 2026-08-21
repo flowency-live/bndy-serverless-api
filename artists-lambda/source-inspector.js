@@ -82,17 +82,15 @@ function extractFacebookUrl(input) {
   const text = input.trim();
   if (!text || text.length > MAX_INPUT_LENGTH) return null;
 
-  // Domain is explicit rather than a generic URL regex: this endpoint must never
-  // become an arbitrary server-side fetch primitive.
-  const re = /(?:https?:\/\/)?(?:(?:www|m|mbasic|web)\.)?(?:facebook\.com|fb\.com|fb\.me)\/[^\s<>"']+/ig;
-  const candidates = text.match(re) || [];
-  for (const candidate of candidates) {
-    const normalised = normaliseCandidate(candidate);
+  // Tokenise URL-ish strings, then validate the parsed hostname. Do not search
+  // for a Facebook-looking substring inside another URL: e.g.
+  // https://evil.example/facebook.com/foo must stay rejected.
+  const tokens = text.match(/(?:https?:\/\/)?[^\s<>"']+/ig) || [];
+  for (const token of tokens) {
+    const normalised = normaliseCandidate(token);
     if (normalised) return normalised;
   }
 
-  // Allow direct bare input so the caller gets a Facebook-specific validation
-  // error rather than a generic parse failure.
   return normaliseCandidate(text);
 }
 
