@@ -1,4 +1,5 @@
 name: capture-acceptance-hotdeploy
+# Triggered after initial workflow registration on master.
 
 on:
   push:
