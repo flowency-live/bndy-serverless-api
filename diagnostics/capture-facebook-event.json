@@ -1,171 +1,43 @@
 {
-  "result": "NO_MATCHING_CAPTURE",
-  "inspectedAt": "2026-08-21T17:48:01Z",
-  "recentCaptures": [
-    {
-      "id": "48c4ae2b-05be-4693-abea-b2dd126a1042",
-      "capturedAt": "2026-08-21T17:29:57.945375Z",
-      "receivedAt": "2026-08-21T17:30:30.003885Z",
-      "status": "failed",
-      "sharedUrl": "https://www.facebook.com/share/1YHQ83pwfB/",
-      "sharedText": "https://www.facebook.com/share/1YHQ83pwfB/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: REVIEW_REQUIRED. Capture classified as event. The shared link is a Facebook event page for a live music gig by female-fronted rock/pop cover band The Torrists at the Hare & Hounds in New Mills on August 22, 2026."
-    },
-    {
-      "id": "321973a8-b53d-4881-a7a7-742850c7c6b2",
-      "capturedAt": "2026-08-19T21:25:26.899380Z",
-      "receivedAt": "2026-08-20T14:03:57.157895Z",
-      "status": "processed",
-      "sharedUrl": "https://www.facebook.com/share/1E6RU4pxBo/",
-      "sharedText": "https://www.facebook.com/share/1E6RU4pxBo/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: completed.\nArtist: Blindsided | matched | 83f7c3dc-b644-4c26-8599-f1dbe3bcd963\nFacebook: https://www.facebook.com/people/Blindsided-Stoke/61572322954353/\nLocation: Stoke-on-Trent (city)\nArtist type: Band; act type: Covers\nBio: Stoke-on-Trent based band specialising in Hard Rock & Metal covers.\nEvents: 0 created, 0 existing duplicates, 4 held.\nEvent detail:\n- 2026-08-22 Burslem Cricket Club: held (admission unknown)\n- 2026-09-12 The Potters Bar: held (admission unknown)\n- 2026-10-10 The Witton Chimes: held (admission unknown)\n- 2026-11-15 The Green Star: held (admission unknown)\nNo new venues."
-    },
-    {
-      "id": "6239098f-cfda-472f-ab8b-530786dfc4bf",
-      "capturedAt": "2026-08-20T13:09:53.556825Z",
-      "receivedAt": "2026-08-20T14:03:57.091523Z",
-      "status": "processed",
-      "sharedUrl": "https://www.facebook.com/share/1MSMKhpR7o/",
-      "sharedText": "https://www.facebook.com/share/1MSMKhpR7o/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: completed.\nArtist: Bongo Monkey's Mid-Life Crisis | created | 02cd2683-c02c-425a-b676-0c60690af994\nFacebook: https://www.facebook.com/BongoMonkeyMLC\nLocation: Worcester (city)\nArtist type: Band; act type: Covers, Originals\nBio: A troop of 5 doing well known covers, straight or monkified and original music. Mixed in a melting pot full of rock, funk, blues, soul, pop and disco with lots of cheese.\nEvents: 1 created, 0 existing duplicates, 0 held.\nEvent detail:\n- 2026-08-29 19:30 | Tewkesbury Cricket Club, Tewkesbury | created 79154ede-6b89-4eea-9cde-ddcc29d450f5 | venue newly created\nNew venues:\n- Tewkesbury Cricket Club, Tewkesbury (new)"
-    },
-    {
-      "id": "5764c4d1-4fb5-4294-a71d-5a1609cf29d0",
-      "capturedAt": "2026-08-20T13:18:30.289221Z",
-      "receivedAt": "2026-08-20T14:03:56.967553Z",
-      "status": "failed",
-      "sharedUrl": "https://www.facebook.com/share/1BiR3XFgwE/",
-      "sharedText": "https://www.facebook.com/share/1BiR3XFgwE/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: REVIEW_REQUIRED. Artist resolver returned ambiguous candidates for The Humboosters: [{\"id\":\"1eb1707a-a37a-4857-ad79-5f84102bb29f\",\"name\":\"The Dambusters\",\"location\":\"Newcastle upon Tyne\",\"confidence\":0.64,\"sharedToken\":false},{\"id\":\"45ed2d7d-7b86-4c52-b5ec-e878e8833f46\",\"name\":\"The Roosters\",\"location\":\"Essex\",\"confidence\":0.64,\"sharedToken\":false}]"
-    },
-    {
-      "id": "f96cdb9e-d8da-4ba0-9557-be77dc26e4ca",
-      "capturedAt": "2026-08-20T13:19:21.130630Z",
-      "receivedAt": "2026-08-20T14:03:56.771704Z",
-      "status": "processed",
-      "sharedUrl": "https://www.facebook.com/share/1d1XxHDkpK/",
-      "sharedText": "https://www.facebook.com/share/1d1XxHDkpK/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: completed.\nArtist: The Re-covered | created | 30b63776-e126-4c6f-ac72-5ef3ce7d8927\nFacebook: https://www.facebook.com/people/The-Re-covered/100024269505463/\nLocation: Birmingham (city)\nArtist type: Band; act type: Covers\nBio: The Re-covered are a Birmingham-based four-piece covers band performing a lively mix of well-loved hits spanning from the 1960s to present day.\nEvents: 0 created, 0 existing duplicates, 0 held.\nNo publishable upcoming events found.\nNo new venues."
-    },
-    {
-      "id": "1948727a-17b8-4b47-8da9-8d2278461cc6",
-      "capturedAt": "2026-08-20T13:19:37.249456Z",
-      "receivedAt": "2026-08-20T14:03:56.700509Z",
-      "status": "processed",
-      "sharedUrl": "https://www.facebook.com/share/1Ga1YUUpz5/",
-      "sharedText": "https://www.facebook.com/share/1Ga1YUUpz5/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: REVIEW_REQUIRED. Capture classified as artist. The captured Facebook link belongs to Jack n Doris, a husband-and-wife acoustic duo from Stourport-on-Severn performing cover music.\n\nAWS processor: completed.\nArtist: Jack n Doris | created | 94431e14-0d89-46d3-a6b7-9cf7358e5eaf\nFacebook: https://www.facebook.com/people/Jack-n-Doris/61550805598824/\nLocation: Stourport-on-Severn (city)\nArtist type: Duo; act type: Covers\nBio: High-energy husband & wife duo from Stourport performing covers ranging from Bowie and The Cult to Tears for Fears, Pretenders, and Duran Duran.\nEvents: 1 created, 0 existing duplicates, 0 held.\nEvent detail:\n- 2026-08-25 19:00 | The Stagborough Arms, Stourport | created 0fc24454-a16b-4e40-b551-a08938c0a731 | venue newly created\nNew venues:\n- The Stagborough Arms, Stourport (new)"
-    },
-    {
-      "id": "97cc4be0-91f2-4562-aa3c-0fbf41d72880",
-      "capturedAt": "2026-08-20T13:19:50.855734Z",
-      "receivedAt": "2026-08-20T14:03:56.647509Z",
-      "status": "processed",
-      "sharedUrl": "https://www.facebook.com/share/18BdC7JKXE/",
-      "sharedText": "https://www.facebook.com/share/18BdC7JKXE/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: completed.\nArtist: Zool | created | 0f25a542-5cf4-4247-a476-acf43e7a6269\nFacebook: https://www.facebook.com/www.zool.fm\nLocation: Cotswolds (regional)\nArtist type: Band; act type: Covers\nBio: Female-fronted 5-piece covers band delivering atmospheric pop & rock floorfillers across the Cotswolds since 2005.\nEvents: 0 created, 0 existing duplicates, 1 held.\nEvent detail:\n- 2026-08-30 The Star Inn: held (admission unknown)\nNo new venues."
-    },
-    {
-      "id": "4190c6b3-4bf4-4ca0-98a0-87a0192fb8fb",
-      "capturedAt": "2026-08-20T13:20:12.194110Z",
-      "receivedAt": "2026-08-20T14:03:56.597737Z",
-      "status": "processed",
-      "sharedUrl": "https://www.facebook.com/share/1MXo4Z2ya9/",
-      "sharedText": "https://www.facebook.com/share/1MXo4Z2ya9/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: completed.\nArtist: Accolade | created | ce7d8263-8b90-4649-900a-d91a389ca4e0\nFacebook: https://www.facebook.com/accoladebandworcester\nLocation: Worcester, UK (city)\nArtist type: Band; act type: Covers\nBio: Accolade is a high-energy UK covers band performing Classic Rock, Pop and Indie hits from the 1950s to today.\nEvents: 1 created, 0 existing duplicates, 0 held.\nEvent detail:\n- 2026-08-21 21:00 | Barnards Green Cricket Club, Malvern | created 3a646b23-4bba-4f74-9555-a2b5f0790906 | venue newly created\nNew venues:\n- Barnards Green Cricket Club, Malvern (new)"
-    },
-    {
-      "id": "ed3bd07d-efda-46b2-8f8d-31ea92b53002",
-      "capturedAt": "2026-08-20T13:20:31.663578Z",
-      "receivedAt": "2026-08-20T14:03:56.530419Z",
-      "status": "processed",
-      "sharedUrl": "https://www.facebook.com/share/1BnRZNFx9u/",
-      "sharedText": "https://www.facebook.com/share/1BnRZNFx9u/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: REVIEW_REQUIRED. Capture classified as artist. The shared URL resolves to the official Facebook page for Hollywood Brown, an 80s-inspired original glam metal band based in Birmingham, UK.\n\nAWS processor: completed.\nArtist: Hollywood Brown | created | c38bbb3f-8dc3-4302-a27c-35b98f055931\nFacebook: https://www.facebook.com/hollywoodbrownmusic\nLocation: Birmingham (city)\nArtist type: Band; act type: Originals\nBio: Hollywood Brown is an 80s-inspired original glam metal band from Birmingham, UK.\nEvents: 0 created, 0 existing duplicates, 0 held.\nNo publishable upcoming events found.\nNo new venues."
-    },
-    {
-      "id": "c41dbb04-23b1-4768-9b72-19082917da7c",
-      "capturedAt": "2026-08-20T13:21:26.662729Z",
-      "receivedAt": "2026-08-20T14:03:56.473208Z",
-      "status": "processed",
-      "sharedUrl": "https://www.facebook.com/share/1HoqmXrjhJ/",
-      "sharedText": "https://www.facebook.com/share/1HoqmXrjhJ/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: completed.\nArtist: The Revivals | created | d3f1057b-626f-450b-8663-abf1bbbbc18e\nFacebook: https://www.facebook.com/therevivalsuk\nLocation: Wolverhampton (city)\nArtist type: Band; act type: Covers\nBio: The Revivals are a 5-piece Indie Rock covers band based in Wolverhampton, performing tracks by Oasis, Blur, Foo Fighters, Stereophonics, Green Day, Arctic Monkeys and more.\nEvents: 0 created, 0 existing duplicates, 2 held.\nEvent detail:\n- 2026-09-12 PACK: held (admission unknown)\n- 2026-09-26 Shepwell's: held (admission unknown)\nNo new venues."
-    },
-    {
-      "id": "7a6561de-b8b3-4534-a4a9-519741b96670",
-      "capturedAt": "2026-08-20T13:21:40.338027Z",
-      "receivedAt": "2026-08-20T14:03:56.401756Z",
-      "status": "processed",
-      "sharedUrl": "https://www.facebook.com/share/19NtLdoWXm/",
-      "sharedText": "https://www.facebook.com/share/19NtLdoWXm/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: completed.\nArtist: Jibbafish | created | 901aaf05-82ca-4157-a1ab-15ba65cb09e8\nFacebook: https://www.facebook.com/people/Jibbafish/100063220629045/\nLocation: Tewkesbury (city)\nArtist type: Band; act type: Covers\nBio: JiBBaFiSH have been playing the local covers band circuit for over 20 years, performing high-energy classic rock, pop, and blues bangers across Gloucestershire and Worcestershire.\nEvents: 0 created, 0 existing duplicates, 0 held.\nEvent detail:\n- 2026-08-27 | Broad Street: skipped - Venue resolution needs review for Broad Street: Place type \"route\" indicates a geographic area, not a building. Venues must have a fixed premises. Types: [route]\nNo new venues."
-    },
-    {
-      "id": "5fd4beab-301e-4fa5-b139-405423c2cf14",
-      "capturedAt": "2026-08-20T13:21:52.887833Z",
-      "receivedAt": "2026-08-20T14:03:56.350792Z",
-      "status": "processed",
-      "sharedUrl": "https://www.facebook.com/share/1aj787Ueny/",
-      "sharedText": "https://www.facebook.com/share/1aj787Ueny/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: completed.\nArtist: Off The Rails Music | created | a9266928-9c90-4dca-b944-0da759cdedcd\nFacebook: https://www.facebook.com/offtherailsmusic\nLocation: Stourbridge (city)\nArtist type: Band; act type: Covers\nBio: Off The Rails Music is a duo, trio or 4-piece live act based in Stourbridge, performing upbeat multi-genre covers across the decades with a twist for pubs, parties, weddings, and wakes.\nEvents: 0 created, 0 existing duplicates, 0 held.\nNo publishable upcoming events found.\nNo new venues."
-    },
-    {
-      "id": "24e99180-d4cf-4092-9f4a-ecfdf534934d",
-      "capturedAt": "2026-08-20T13:22:05.937810Z",
-      "receivedAt": "2026-08-20T14:03:56.290021Z",
-      "status": "processed",
-      "sharedUrl": "https://www.facebook.com/share/1Diu5bADdF/",
-      "sharedText": "https://www.facebook.com/share/1Diu5bADdF/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: completed.\nArtist: The Nice Blokes | created | 777d6bcf-078d-4dd0-a6f3-3d28e0aae003\nFacebook: https://www.facebook.com/people/The-Nice-Blokes/61577766687826/\nLocation: Wolverhampton (city)\nArtist type: Band; act type: Covers\nBio: Four eclectic troubadours playing upbeat, dancy sets of popular tunes across the decades, from The Beatles and The Jam to Bob Marley and traditional folk.\nEvents: 0 created, 0 existing duplicates, 1 held.\nEvent detail:\n- 2026-09-25 The Lions Den: held (admission unknown)\nNo new venues."
-    },
-    {
-      "id": "cc6c5aa3-94a0-473d-9cb7-ee3d1f6d9d61",
-      "capturedAt": "2026-08-20T13:22:25.495279Z",
-      "receivedAt": "2026-08-20T14:03:56.229446Z",
-      "status": "ignored",
-      "sharedUrl": "https://www.facebook.com/share/1J1V82QuuZ/",
-      "sharedText": "https://www.facebook.com/share/1J1V82QuuZ/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: ignored non-music capture. The shared link is a personal Facebook user profile ('Tj Lothian') rather than a dedicated music artist, venue, or live event page."
-    },
-    {
-      "id": "f7389536-1c63-4628-944f-5c06b10d700d",
-      "capturedAt": "2026-08-20T13:22:37.064796Z",
-      "receivedAt": "2026-08-20T14:03:56.169051Z",
-      "status": "processed",
-      "sharedUrl": "https://www.facebook.com/share/1BumAfn2aQ/",
-      "sharedText": "https://www.facebook.com/share/1BumAfn2aQ/",
-      "mimeType": "text/plain",
-      "sourceApp": null,
-      "note": "AWS processor: completed.\nArtist: Mice in a Matchbox | created | ba9560a5-4422-482f-a287-91a26af88f08\nFacebook: https://www.facebook.com/miceinamatchbox\nLocation: Bromyard (city)\nArtist type: Duo; act type: Originals, Covers\nBio: Mice in a Matchbox are an electro-acoustic folk duo based in Bromyard, Herefordshire, featuring Sally Stamford and Jim Rolt.\nEvents: 3 created, 0 existing duplicates, 8 held.\nEvent detail:\n- 2026-08-21 Moira Furnace: held (admission unknown)\n- 2026-08-28 The Secret Garden: held (admission unknown)\n- 2026-08-29 Pershore Plum Festival: held (admission unknown)\n- 2026-08-30 The Live & Let Live: held (admission unknown)\n- 2026-09-04 Spilsbury & Jones Brewery: held (admission unknown)\n- 2026-09-05 18:30 | Le Clos Wine Bar, Wallingford | created 154e69b8-4d5a-4d81-8325-9eb98dfe5715 | venue newly created\n- 2026-09-06 14:00 | The Keep Bar, Wallingford | created 28b2867f-b0b0-4730-b53b-3a8b650b8980 | venue newly created\n- 2026-09-11 The Secret Garden: held (admission unknown)\n- 2026-09-13 Red Lion: held (admission unknown)\n- 2026-10-18 Nottingham Arms: held (admission unknown)\n- 2026-10-30 13:00 | Huntingdon Hall, Worcester | created 54dbfb5f-5cf2-4f3e-9174-66e15f229971 | venue newly created\nNew venues:\n- Le Clos Wine Bar, Wallingford (new)\n- The Keep Bar, Wallingford (new)\n- Huntingdon Hall, Worcester (new)"
-    }
-  ]
+  "result": "CAPTURE_ACCEPTANCE",
+  "inspectedAt": "2026-08-21T17:52:07Z",
+  "captureId": "48c4ae2b-05be-4693-abea-b2dd126a1042",
+  "deployOutcome": "failure",
+  "rerunOutcome": "skipped",
+  "before": {
+    "id": "48c4ae2b-05be-4693-abea-b2dd126a1042",
+    "capturedAt": "2026-08-21T17:29:57.945375Z",
+    "receivedAt": "2026-08-21T17:30:30.003885Z",
+    "updatedAt": "2026-08-21T17:31:25.380315Z",
+    "status": "failed",
+    "sharedUrl": "https://www.facebook.com/share/1YHQ83pwfB/",
+    "sharedText": "https://www.facebook.com/share/1YHQ83pwfB/",
+    "mimeType": "text/plain",
+    "sourceApp": null,
+    "suggestedEntityType": "unknown",
+    "note": "AWS processor: REVIEW_REQUIRED. Capture classified as event. The shared link is a Facebook event page for a live music gig by female-fronted rock/pop cover band The Torrists at the Hare & Hounds in New Mills on August 22, 2026.",
+    "processingAttempt": 1
+  },
+  "final": {
+    "id": "48c4ae2b-05be-4693-abea-b2dd126a1042",
+    "capturedAt": "2026-08-21T17:29:57.945375Z",
+    "receivedAt": "2026-08-21T17:30:30.003885Z",
+    "updatedAt": "2026-08-21T17:31:25.380315Z",
+    "status": "failed",
+    "sharedUrl": "https://www.facebook.com/share/1YHQ83pwfB/",
+    "sharedText": "https://www.facebook.com/share/1YHQ83pwfB/",
+    "mimeType": "text/plain",
+    "sourceApp": null,
+    "suggestedEntityType": "unknown",
+    "note": "AWS processor: REVIEW_REQUIRED. Capture classified as event. The shared link is a Facebook event page for a live music gig by female-fronted rock/pop cover band The Torrists at the Hare & Hounds in New Mills on August 22, 2026.",
+    "processingAttempt": 1
+  },
+  "processor": {
+    "LastModified": "2026-08-20T22:16:00.000+0000",
+    "CodeSha256": "ZPk7ndgMxbk00DFxw7nLX+79RVbTNSnUAHAC/1VwVPw=",
+    "Runtime": "nodejs22.x",
+    "State": "Active",
+    "LastUpdateStatus": "Successful"
+  },
+  "processorLogs": []
 }
