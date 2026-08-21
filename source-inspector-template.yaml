@@ -1,0 +1,57 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: BNDY public Facebook source inspector - isolated companion stack
+
+Parameters:
+  BndyHttpApiId:
+    Type: String
+    Description: Existing BNDY HTTP API Gateway v2 API ID (output BndyHttpApiId from bndy-serverless-api stack)
+
+Resources:
+  SourceInspectorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: BNDY public source inspector - read-only Facebook metadata and artist identity lookup
+      CodeUri: ./artists-lambda/
+      Handler: source-inspector.handler
+      Runtime: nodejs20.x
+      MemorySize: 256
+      Timeout: 8
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Environment:
+        Variables:
+          NODE_ENV: production
+          UNIQUE_KEYS_TABLE: bndy-unique-keys
+          ARTISTS_TABLE: bndy-artists
+
+  SourceInspectorIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref BndyHttpApiId
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt SourceInspectorFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 8000
+
+  SourceInspectorRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref BndyHttpApiId
+      RouteKey: POST /api/community/source/inspect
+      Target: !Sub integrations/${SourceInspectorIntegration}
+
+  SourceInspectorPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SourceInspectorFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${BndyHttpApiId}/*/POST/api/community/source/inspect
+
+Outputs:
+  SourceInspectorFunctionArn:
+    Description: Source inspector Lambda ARN
+    Value: !GetAtt SourceInspectorFunction.Arn
+  Route:
+    Description: Route attached to the existing BNDY HTTP API
+    Value: POST /api/community/source/inspect
