@@ -11,7 +11,8 @@
     "test:artist-taxonomy": "node --test shared/artist-domain/taxonomy.test.js",
     "test:identity-sync": "node shared/identity/check-sync.test.js",
     "test:ingest-artist-domain": "node --test events-agent-lambda/artist-domain.test.js",
-    "predeploy": "npm run validate && npm run verify-routes && npm run security:test && npm run test:artist-taxonomy && npm run test:identity-sync && npm run test:ingest-artist-domain",
+    "test:source-inspector": "node --test artists-lambda/source-inspector.test.js",
+    "predeploy": "npm run validate && npm run verify-routes && npm run security:test && npm run test:artist-taxonomy && npm run test:identity-sync && npm run test:ingest-artist-domain && npm run test:source-inspector",
     "deploy": "sam build && sam deploy --no-confirm-changeset",
     "deploy:guided": "sam build && sam deploy --guided",
     "smoke-test": "bash scripts/smoke-test.sh"
