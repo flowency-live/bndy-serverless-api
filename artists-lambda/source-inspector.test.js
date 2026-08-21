@@ -1,7 +1,10 @@
 'use strict';
 
-const test = require('node:test');
+const nodeTest = require('node:test');
 const assert = require('node:assert/strict');
+// The artists Lambda suite runs Jest, while the root predeploy script runs this
+// file with `node --test`. Register with whichever runner owns the process.
+const test = typeof globalThis.test === 'function' ? globalThis.test : nodeTest.test;
 const {
   extractFacebookUrl,
   canonicalFacebookUrl,
