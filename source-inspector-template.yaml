@@ -18,6 +18,8 @@ Resources:
       MemorySize: 256
       Timeout: 8
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
       Environment:
         Variables:
           NODE_ENV: production
