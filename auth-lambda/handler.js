@@ -25,6 +25,8 @@ const ALLOWED_ORIGINS = [
   'https://gigmap.bndy.co.uk',    // GigMap
   'https://map.bndy.co.uk',       // Map (canonical)
   'https://gigs.bndy.co.uk',      // Gigs
+  'https://bndy.live',             // New public maps domain
+  'https://stage.bndy.live',       // New backstage domain
   'http://localhost:3000'          // Local development
 ];
 
@@ -44,12 +46,38 @@ const validateReturnTo = (returnTo) => {
 const API_URL = 'https://api.bndy.co.uk';
 const REDIRECT_URI = `${API_URL}/auth/callback`;
 
+const getOAuthCallbackUri = (origin) => {
+  if (origin === 'https://bndy.live') {
+    return 'https://bndy.live/auth/callback';
+  }
+  if (origin === 'https://stage.bndy.live') {
+    return 'https://stage.bndy.live/auth/callback';
+  }
+  return REDIRECT_URI;
+};
+
+const buildSessionCookie = (sessionToken, origin, maxAge = 7776000) => {
+  const validatedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const domainAttribute = validatedOrigin === 'https://bndy.live' ||
+    validatedOrigin === 'https://stage.bndy.live'
+    ? ''
+    : '; Domain=.bndy.co.uk';
+
+  return `bndy_session=${sessionToken}; HttpOnly; Secure; SameSite=Lax; ` +
+    `Max-Age=${maxAge}; Path=/${domainAttribute}`;
+};
+
 // Module-level variable to store current request event for CORS
 let currentEvent = null;
 
 // Get appropriate origin for CORS based on request origin
 const getAllowedOrigin = () => {
   const requestOrigin = currentEvent?.headers?.origin || currentEvent?.headers?.Origin;
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+};
+
+const getValidatedRequestOrigin = (event) => {
+  const requestOrigin = event?.headers?.origin || event?.headers?.Origin;
   return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
 };
 
@@ -89,7 +117,7 @@ const OAUTH_STATE_TABLE = 'bndy-oauth-states';
 const generateState = () => crypto.randomBytes(32).toString('hex');
 
 // OAuth state management with DynamoDB
-const storeOAuthState = async (state, origin, returnTo = null) => {
+const storeOAuthState = async (state, origin, returnTo = null, callbackUri = REDIRECT_URI) => {
   const ttl = Math.floor(Date.now() / 1000) + 300; // 5 minutes from now
 
   await dynamodb.put({
@@ -98,6 +126,7 @@ const storeOAuthState = async (state, origin, returnTo = null) => {
       state,
       origin,
       return_to: returnTo,
+      callback_uri: callbackUri,
       created_at: new Date().toISOString(),
       ttl
     }
@@ -210,21 +239,23 @@ const handleGoogleAuth = async (event) => {
   const state = generateState();
   const origin = getFrontendUrl();
   const returnTo = validateReturnTo(event.queryStringParameters?.returnTo);
+  const loginOrigin = returnTo ? new URL(returnTo).origin : origin;
+  const callbackUri = getOAuthCallbackUri(loginOrigin);
 
   // Store state in DynamoDB
-  await storeOAuthState(state, origin, returnTo);
+  await storeOAuthState(state, loginOrigin, returnTo, callbackUri);
 
   const authUrl = `${COGNITO_DOMAIN}/oauth2/authorize?` +
     `response_type=code&` +
     `client_id=${CLIENT_ID}&` +
-    `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
+    `redirect_uri=${encodeURIComponent(callbackUri)}&` +
     `scope=email+openid+profile+phone&` +
     `state=${state}&` +
     `identity_provider=Google`;
 
   console.log('AUTH: Initiating Google OAuth flow', {
     state: state.substring(0, 8) + '...',
-    redirectUri: REDIRECT_URI
+    redirectUri: callbackUri
   });
 
   return {
@@ -280,12 +311,17 @@ const handleOAuthCallback = async (event) => {
     // Exchange code for tokens
     console.log('AUTH CALLBACK: Exchanging code for tokens');
 
+    // Use the same callback URI selected when this OAuth flow was initiated.
+    // REDIRECT_URI preserves compatibility with OAuth states created before
+    // callback_uri was persisted.
+    const callbackUri = stateValid.callback_uri || REDIRECT_URI;
+
     const tokenParams = new URLSearchParams({
       grant_type: 'authorization_code',
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       code: code,
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: callbackUri,
     });
 
     const tokenResponse = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
@@ -339,10 +375,7 @@ const handleOAuthCallback = async (event) => {
     });
 
     // Create secure cookie
-    const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
-      'HttpOnly; Secure; SameSite=Lax; ' +
-      'Max-Age=7776000; Path=/; ' +
-      'Domain=.bndy.co.uk';
+    const cookieOptions = buildSessionCookie(sessionToken, stateValid.origin);
 
     console.log('AUTH CALLBACK: Session created, redirecting');
 
@@ -380,9 +413,9 @@ const handleOAuthCallback = async (event) => {
     return {
       statusCode: 200,
       headers: {
-        'Content-Type': 'text/html',
-        'Set-Cookie': cookieOptions
+        'Content-Type': 'text/html'
       },
+      cookies: [cookieOptions],
       body: redirectHtml
     };
 
@@ -457,15 +490,15 @@ const handleGetMe = async (event) => {
 const handleLogout = (event) => {
   console.log('AUTH: User logging out');
 
-  const clearCookie = 'bndy_session=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/; Domain=.bndy.co.uk';
+  const clearCookie = buildSessionCookie('', getValidatedRequestOrigin(event), 0);
 
   return {
     statusCode: 200,
     headers: {
       'Content-Type': 'application/json',
-      'Set-Cookie': clearCookie,
       ...getCorsHeaders()
     },
+    cookies: [clearCookie],
     body: JSON.stringify({ success: true })
   };
 };
@@ -630,10 +663,7 @@ const handlePhoneVerifyOTP = async (event) => {
 
       const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '90d' });
 
-      const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
-        'HttpOnly; Secure; SameSite=Lax; ' +
-        'Max-Age=7776000; Path=/; ' +
-        'Domain=.bndy.co.uk';
+      const cookieOptions = buildSessionCookie(sessionToken, getValidatedRequestOrigin(event));
 
       console.log('[PHONE_AUTH] Existing user logged in');
 
@@ -641,9 +671,9 @@ const handlePhoneVerifyOTP = async (event) => {
         statusCode: 200,
         headers: {
           'Content-Type': 'application/json',
-          'Set-Cookie': cookieOptions,
           ...getCorsHeaders()
         },
+        cookies: [cookieOptions],
         body: JSON.stringify({
           success: true,
           user: {
@@ -694,10 +724,7 @@ const handlePhoneVerifyOTP = async (event) => {
 
     const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '90d' });
 
-    const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
-      'HttpOnly; Secure; SameSite=Lax; ' +
-      'Max-Age=7776000; Path=/; ' +
-      'Domain=.bndy.co.uk';
+    const cookieOptions = buildSessionCookie(sessionToken, getValidatedRequestOrigin(event));
 
     console.log('[PHONE_AUTH] New user created and logged in');
 
@@ -705,9 +732,9 @@ const handlePhoneVerifyOTP = async (event) => {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Set-Cookie': cookieOptions,
         ...getCorsHeaders()
       },
+      cookies: [cookieOptions],
       body: JSON.stringify({
         success: true,
         user: {
@@ -837,18 +864,15 @@ const handlePhoneVerifyAndOnboard = async (event) => {
 
     const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '90d' });
 
-    const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
-      'HttpOnly; Secure; SameSite=Lax; ' +
-      'Max-Age=7776000; Path=/; ' +
-      'Domain=.bndy.co.uk';
+    const cookieOptions = buildSessionCookie(sessionToken, getValidatedRequestOrigin(event));
 
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Set-Cookie': cookieOptions,
         ...getCorsHeaders()
       },
+      cookies: [cookieOptions],
       body: JSON.stringify({
         success: true,
         user: {
@@ -1074,6 +1098,10 @@ const handleMagicLinkAuth = async (event) => {
     if (usersResult.Items && usersResult.Items.length > 0) {
       // Existing user - log them in
       const existingUser = usersResult.Items[0];
+      const storedReturnTo = validateReturnTo(tokenRecord.return_to);
+      const cookieOrigin = storedReturnTo
+        ? new URL(storedReturnTo).origin
+        : ALLOWED_ORIGINS[0];
 
       const sessionData = {
         userId: existingUser.cognito_id,
@@ -1084,14 +1112,10 @@ const handleMagicLinkAuth = async (event) => {
 
       const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '90d' });
 
-      const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
-        'HttpOnly; Secure; SameSite=Lax; ' +
-        'Max-Age=7776000; Path=/; ' +
-        'Domain=.bndy.co.uk';
+      const cookieOptions = buildSessionCookie(sessionToken, cookieOrigin);
 
       console.log('[EMAIL_AUTH] Existing user logged in');
 
-      const storedReturnTo = validateReturnTo(tokenRecord.return_to);
       const successTarget = storedReturnTo || `${getFrontendUrl()}/dashboard`;
       const inviteOrigin = storedReturnTo ? new URL(storedReturnTo).origin : getFrontendUrl();
 
@@ -1119,9 +1143,9 @@ const handleMagicLinkAuth = async (event) => {
       return {
         statusCode: 200,
         headers: {
-          'Content-Type': 'text/html',
-          'Set-Cookie': cookieOptions
+          'Content-Type': 'text/html'
         },
+        cookies: [cookieOptions],
         body: redirectHtml
       };
     }
@@ -1165,14 +1189,15 @@ const handleMagicLinkAuth = async (event) => {
 
     const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: '90d' });
 
-    const cookieOptions = 'bndy_session=' + sessionToken + '; ' +
-      'HttpOnly; Secure; SameSite=Lax; ' +
-      'Max-Age=7776000; Path=/; ' +
-      'Domain=.bndy.co.uk';
+    const storedReturnTo = validateReturnTo(tokenRecord.return_to);
+    const cookieOrigin = storedReturnTo
+      ? new URL(storedReturnTo).origin
+      : ALLOWED_ORIGINS[0];
+    const cookieOptions = buildSessionCookie(sessionToken, cookieOrigin);
 
     console.log('[EMAIL_AUTH] New user created and logged in');
 
-    const newUserTarget = validateReturnTo(tokenRecord.return_to) || `${getFrontendUrl()}/dashboard`;
+    const newUserTarget = storedReturnTo || `${getFrontendUrl()}/dashboard`;
 
     const redirectHtml = `
 <!DOCTYPE html>
@@ -1191,9 +1216,9 @@ const handleMagicLinkAuth = async (event) => {
     return {
       statusCode: 200,
       headers: {
-        'Content-Type': 'text/html',
-        'Set-Cookie': cookieOptions
+        'Content-Type': 'text/html'
       },
+      cookies: [cookieOptions],
       body: redirectHtml
     };
 
