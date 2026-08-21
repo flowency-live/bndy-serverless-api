@@ -16,41 +16,31 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: capture-acceptance-diagnostic
-
-      - name: Checkout current enrichment main
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: flowency-live/bndy-enrichment
           ref: main
           path: enrichment
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
 
-      - name: Capture token and pre-deploy state
+      - name: Load capture state
         shell: bash
         run: |
           set -euo pipefail
-          CAPTURE_FN=$(aws cloudformation describe-stacks --stack-name bndy-capture --region eu-west-2 \
-            --query "Stacks[0].Outputs[?OutputKey=='CaptureFunctionName'].OutputValue | [0]" --output text)
-          CAPTURE_TOKEN=$(aws lambda get-function-configuration --region eu-west-2 --function-name "$CAPTURE_FN" \
-            --query 'Environment.Variables.CAPTURE_TOKEN' --output text)
-          test -n "$CAPTURE_TOKEN" && test "$CAPTURE_TOKEN" != "None"
+          CAPTURE_FN=$(aws cloudformation describe-stacks --stack-name bndy-capture --region eu-west-2 --query "Stacks[0].Outputs[?OutputKey=='CaptureFunctionName'].OutputValue | [0]" --output text)
+          CAPTURE_TOKEN=$(aws lambda get-function-configuration --region eu-west-2 --function-name "$CAPTURE_FN" --query 'Environment.Variables.CAPTURE_TOKEN' --output text)
           echo "::add-mask::$CAPTURE_TOKEN"
           echo "CAPTURE_TOKEN=$CAPTURE_TOKEN" >> "$GITHUB_ENV"
-          curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" \
-            'https://capture.bndy.co.uk/v1/captures/48c4ae2b-05be-4693-abea-b2dd126a1042' \
-            > /tmp/capture-before.json
+          curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" 'https://capture.bndy.co.uk/v1/captures/48c4ae2b-05be-4693-abea-b2dd126a1042' > /tmp/capture-before.json
 
-      - name: Deploy current bndy-enrichment main
+      - name: Deploy current enrichment
         id: deploy
         continue-on-error: true
         working-directory: enrichment
@@ -59,12 +49,19 @@ jobs:
           AWS_DEFAULT_REGION: eu-west-2
         shell: bash
         run: |
-          set -euo pipefail
-          npm install
-          npx cdk bootstrap
-          npx cdk deploy --all --require-approval never --outputs-file cdk-outputs.json
+          set -o pipefail
+          {
+            echo '== identity =='
+            aws sts get-caller-identity
+            echo '== npm install =='
+            npm install
+            echo '== cdk bootstrap =='
+            npx cdk bootstrap
+            echo '== cdk deploy =='
+            npx cdk deploy --all --require-approval never --outputs-file cdk-outputs.json
+          } 2>&1 | tee /tmp/deploy.log
 
-      - name: Rerun exact Facebook Event capture
+      - name: Retry capture after successful deploy
         id: rerun
         if: steps.deploy.outcome == 'success'
         continue-on-error: true
@@ -72,37 +69,20 @@ jobs:
         run: |
           set -euo pipefail
           CAPTURE_ID='48c4ae2b-05be-4693-abea-b2dd126a1042'
-
-          # Ensure the deployed processor still has a configured Gemini secret before retrying.
-          GEMINI_SECRET_ARN=$(aws lambda get-function-configuration --region eu-west-2 \
-            --function-name bndy-capture-processor \
-            --query 'Environment.Variables.GEMINI_SECRET_ARN' --output text)
-          test -n "$GEMINI_SECRET_ARN" && test "$GEMINI_SECRET_ARN" != "None"
-          SECRET_STRING=$(aws secretsmanager get-secret-value --region eu-west-2 --secret-id "$GEMINI_SECRET_ARN" \
-            --query SecretString --output text)
+          GEMINI_SECRET_ARN=$(aws lambda get-function-configuration --region eu-west-2 --function-name bndy-capture-processor --query 'Environment.Variables.GEMINI_SECRET_ARN' --output text)
+          SECRET_STRING=$(aws secretsmanager get-secret-value --region eu-west-2 --secret-id "$GEMINI_SECRET_ARN" --query SecretString --output text)
           node -e 'const s=JSON.parse(process.argv[1]); if(!(s.apiKey||s.GEMINI_API_KEY)) process.exit(1)' "$SECRET_STRING"
           unset SECRET_STRING
-
-          curl -fsS -X PATCH \
-            -H 'Content-Type: application/json' \
-            -H "Authorization: Bearer $CAPTURE_TOKEN" \
-            -d '{"status":"unprocessed"}' \
-            "https://capture.bndy.co.uk/v1/captures/$CAPTURE_ID/status" > /tmp/reset.json
-
-          aws lambda invoke --region eu-west-2 --function-name bndy-capture-scan \
-            --cli-binary-format raw-in-base64-out --payload '{}' /tmp/scanner.json >/tmp/scanner-meta.json
-
+          curl -fsS -X PATCH -H 'Content-Type: application/json' -H "Authorization: Bearer $CAPTURE_TOKEN" -d '{"status":"unprocessed"}' "https://capture.bndy.co.uk/v1/captures/$CAPTURE_ID/status" >/tmp/reset.json
+          aws lambda invoke --region eu-west-2 --function-name bndy-capture-scan --cli-binary-format raw-in-base64-out --payload '{}' /tmp/scanner.json >/dev/null
           for i in $(seq 1 36); do
-            curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" \
-              "https://capture.bndy.co.uk/v1/captures/$CAPTURE_ID" > /tmp/capture-after.json
+            curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" "https://capture.bndy.co.uk/v1/captures/$CAPTURE_ID" > /tmp/capture-after.json
             STATUS=$(jq -r '.capture.status // .status // empty' /tmp/capture-after.json)
-            if [ -n "$STATUS" ] && [ "$STATUS" != "unprocessed" ] && [ "$STATUS" != "processing" ]; then
-              break
-            fi
+            if [ -n "$STATUS" ] && [ "$STATUS" != "unprocessed" ] && [ "$STATUS" != "processing" ]; then break; fi
             sleep 10
           done
 
-      - name: Record acceptance result
+      - name: Record result
         if: always()
         env:
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
@@ -112,40 +92,22 @@ jobs:
           set -u
           mkdir -p diagnostics
           CAPTURE_ID='48c4ae2b-05be-4693-abea-b2dd126a1042'
-
-          if [ -n "${CAPTURE_TOKEN:-}" ]; then
-            curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" \
-              "https://capture.bndy.co.uk/v1/captures/$CAPTURE_ID" > /tmp/capture-final.json || true
-          fi
-          [ -s /tmp/capture-final.json ] || cp /tmp/capture-before.json /tmp/capture-final.json 2>/dev/null || echo '{}' > /tmp/capture-final.json
-          [ -s /tmp/capture-before.json ] || echo '{}' > /tmp/capture-before.json
-
-          PROCESSOR_CONFIG=$(aws lambda get-function-configuration --region eu-west-2 \
-            --function-name bndy-capture-processor \
-            --query '{LastModified:LastModified,CodeSha256:CodeSha256,Runtime:Runtime,State:State,LastUpdateStatus:LastUpdateStatus}' \
-            --output json 2>/dev/null || echo '{}')
-
-          aws logs filter-log-events --region eu-west-2 \
-            --log-group-name '/aws/lambda/bndy-capture-processor' \
-            --start-time "$(( ($(date +%s) - 3600) * 1000 ))" \
-            --filter-pattern "$CAPTURE_ID" \
-            --query 'events[].message' --output json \
-            > /tmp/processor-logs.json 2>/dev/null || echo '[]' > /tmp/processor-logs.json
-
+          curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" "https://capture.bndy.co.uk/v1/captures/$CAPTURE_ID" > /tmp/capture-final.json || cp /tmp/capture-before.json /tmp/capture-final.json
+          PROCESSOR_CONFIG=$(aws lambda get-function-configuration --region eu-west-2 --function-name bndy-capture-processor --query '{LastModified:LastModified,CodeSha256:CodeSha256,Runtime:Runtime,State:State,LastUpdateStatus:LastUpdateStatus}' --output json 2>/dev/null || echo '{}')
+          [ -s /tmp/deploy.log ] || echo 'deploy step did not produce a log' > /tmp/deploy.log
+          tail -n 120 /tmp/deploy.log > /tmp/deploy-tail.log
           jq -n \
             --arg inspectedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg captureId "$CAPTURE_ID" \
             --arg deployOutcome "$DEPLOY_OUTCOME" \
             --arg rerunOutcome "$RERUN_OUTCOME" \
+            --arg deployLog "$(cat /tmp/deploy-tail.log)" \
             --argjson before "$(jq '.capture // .' /tmp/capture-before.json)" \
             --argjson final "$(jq '.capture // .' /tmp/capture-final.json)" \
             --argjson processor "$PROCESSOR_CONFIG" \
-            --argjson processorLogs "$(cat /tmp/processor-logs.json)" \
-            '{result:"CAPTURE_ACCEPTANCE",inspectedAt:$inspectedAt,captureId:$captureId,deployOutcome:$deployOutcome,rerunOutcome:$rerunOutcome,before:{id:$before.id,capturedAt:$before.capturedAt,receivedAt:$before.receivedAt,updatedAt:$before.updatedAt,status:$before.status,sharedUrl:$before.sharedUrl,sharedText:$before.sharedText,mimeType:$before.mimeType,sourceApp:$before.sourceApp,suggestedEntityType:$before.suggestedEntityType,note:$before.note,processingAttempt:$before.processingAttempt},final:{id:$final.id,capturedAt:$final.capturedAt,receivedAt:$final.receivedAt,updatedAt:$final.updatedAt,status:$final.status,sharedUrl:$final.sharedUrl,sharedText:$final.sharedText,mimeType:$final.mimeType,sourceApp:$final.sourceApp,suggestedEntityType:$final.suggestedEntityType,note:$final.note,processingAttempt:$final.processingAttempt},processor:$processor,processorLogs:$processorLogs}' \
-            > diagnostics/capture-facebook-event.json
-
+            '{result:"CAPTURE_ACCEPTANCE",inspectedAt:$inspectedAt,captureId:$captureId,deployOutcome:$deployOutcome,rerunOutcome:$rerunOutcome,deployLog:$deployLog,before:{status:$before.status,note:$before.note,processingAttempt:$before.processingAttempt,sharedUrl:$before.sharedUrl},final:{status:$final.status,note:$final.note,processingAttempt:$final.processingAttempt,sharedUrl:$final.sharedUrl},processor:$processor}' > diagnostics/capture-facebook-event.json
           git config user.name 'bndy-bot'
           git config user.email 'actions@users.noreply.github.com'
           git add diagnostics/capture-facebook-event.json
-          git commit -m 'Record Facebook Event Capture acceptance rerun' || exit 0
+          git commit -m 'Record Capture deployment diagnostic' || exit 0
           git push origin HEAD:capture-acceptance-diagnostic
