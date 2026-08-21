@@ -52,6 +52,8 @@ Resources:
           - https://live.bndy.co.uk
           - https://gigmap.bndy.co.uk
           - https://gigs.bndy.co.uk
+          - https://bndy.live
+          - https://stage.bndy.live
           - http://localhost:3000
           - http://localhost:3001
         AllowHeaders:
@@ -779,6 +781,20 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/curator/festivals/{id}
             Method: PATCH
+        # Festival child events (MCP search_event festivalId support)
+        GetFestivalEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/festivals/{id}/events
+            Method: GET
+        # Get festival by UUID (MCP get_by_id support)
+        GetFestival:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/festivals/{id}
+            Method: GET
 
   # Auth Lambda
   AuthFunction:
@@ -1993,6 +2009,57 @@ Resources:
         - IndexName: ByStatus
           KeySchema:
             - AttributeName: gsi_status
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # Claims (backlog item 8, CLAIM-PAGE-PLAN v2.0): one row per page-claim request.
+  # target_key = "artist#<id>" or "venue#<id>". One ACTIVE approved owner per
+  # target (D5) is enforced in code via ByTarget before approval.
+  # ByStatus feeds the godmode pending/dispute list. Retained: claims are evidence.
+  ClaimsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: bndy-claims
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: claim_id
+          AttributeType: S
+        - AttributeName: gsi_status
+          AttributeType: S
+        - AttributeName: target_key
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: created_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: claim_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ByStatus
+          KeySchema:
+            - AttributeName: gsi_status
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: ByTarget
+          KeySchema:
+            - AttributeName: target_key
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: ByUser
+          KeySchema:
+            - AttributeName: user_id
               KeyType: HASH
             - AttributeName: created_at
               KeyType: RANGE
