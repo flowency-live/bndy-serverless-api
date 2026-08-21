@@ -5,10 +5,10 @@
  *
  * This endpoint deliberately does NOT create or update artists/venues. It:
  *  - extracts a Facebook URL from pasted URL/share text
- *  - canonicalises identity using the existing artist identity implementation
+ *  - canonicalises stable page identity using the existing identity library
  *  - returns an existing artist immediately when the FB identity is known
- *  - otherwise performs a tightly constrained, best-effort Facebook HTML fetch
- *    and returns only metadata actually observed in that response
+ *  - follows Facebook-only redirects for transient /share and short links
+ *  - returns only metadata actually observed in Facebook's response
  *
  * It is intentionally NOT a generic URL fetcher. User input can only resolve to
  * approved Facebook hostnames, redirects are revalidated, and bodies are capped.
@@ -43,13 +43,9 @@ const INPUT_HOSTS = new Set([
   'www.fb.me',
 ]);
 
-const FETCH_HOSTS = new Set([
-  'facebook.com',
-  'www.facebook.com',
-  'm.facebook.com',
-  'mbasic.facebook.com',
-  'web.facebook.com',
-]);
+// Short-link hosts are safe to fetch because every redirect is revalidated
+// against this same exact-host allowlist before it is followed.
+const FETCH_HOSTS = new Set(INPUT_HOSTS);
 
 function response(statusCode, body) {
   return {
@@ -86,27 +82,41 @@ function extractFacebookUrl(input) {
   const text = input.trim();
   if (!text || text.length > MAX_INPUT_LENGTH) return null;
 
-  // Domain is explicit rather than a generic URL regex: this endpoint must never
-  // become an arbitrary server-side fetch primitive.
-  const re = /(?:https?:\/\/)?(?:(?:www|m|mbasic|web)\.)?(?:facebook\.com|fb\.com|fb\.me)\/[^^\s<>"']+/ig;
-  const candidates = text.match(re) || [];
-  for (const candidate of candidates) {
-    const normalised = normaliseCandidate(candidate);
+  // Tokenise URL-ish strings, then validate the parsed hostname. Do not search
+  // for a Facebook-looking substring inside another URL: e.g.
+  // https://evil.example/facebook.com/foo must stay rejected.
+  const tokens = text.match(/(?:https?:\/\/)?[^\s<>"']+/ig) || [];
+  for (const token of tokens) {
+    const normalised = normaliseCandidate(token);
     if (normalised) return normalised;
   }
 
-  // Also allow a bare canonical host with no path only so validation can return
-  // a useful Facebook-specific error rather than treating it as arbitrary text.
-  const direct = normaliseCandidate(text);
-  return direct;
+  return normaliseCandidate(text);
+}
+
+function isTransientFacebookKey(key) {
+  if (!key || typeof key !== 'string') return true;
+  const path = key.replace(/^facebook\.com\//, '').toLowerCase();
+  if (!path || path === key) return true;
+
+  // These identify a piece of content or a redirect token, not an artist/page.
+  // Never store them as the strong artist Facebook uniqueness key.
+  return /^(?:share(?:\/|$)|shares(?:\/|$)|sharer(?:\.php|\/|$)|share\.php(?:\/|$)|story\.php(?:\/|$)|permalink\.php(?:\/|$)|posts?\/|reel\/|watch\/|events?\/|groups?\/|photo(?:\.php|\/|$)|photos\/|videos?\/)/i.test(path);
+}
+
+function stableFacebookIdentity(rawUrl) {
+  const key = facebookKey(rawUrl);
+  if (!key || isTransientFacebookKey(key)) return null;
+  const path = key.replace(/^facebook\.com\//, '');
+  if (!path) return null;
+  return {
+    key,
+    url: `https://www.facebook.com/${path}`,
+  };
 }
 
 function canonicalFacebookUrl(rawUrl) {
-  const key = facebookKey(rawUrl);
-  if (!key) return null;
-  const path = key.replace(/^facebook\.com\//, '');
-  if (!path) return null;
-  return `https://www.facebook.com/${path}`;
+  return stableFacebookIdentity(rawUrl)?.url || null;
 }
 
 function isSafeFetchUrl(urlString) {
@@ -122,6 +132,20 @@ function isSafeFetchUrl(urlString) {
   }
 }
 
+function toSafeFetchUrl(rawUrl) {
+  const candidate = normaliseCandidate(rawUrl);
+  if (!candidate) return null;
+  try {
+    const parsed = new URL(candidate);
+    parsed.protocol = 'https:';
+    parsed.port = '';
+    const value = parsed.toString();
+    return isSafeFetchUrl(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 function fetchFacebookHtml(urlString, options = {}) {
   const timeoutMs = options.timeoutMs || FETCH_TIMEOUT_MS;
   const maxBytes = options.maxBytes || MAX_HTML_BYTES;
@@ -134,10 +158,17 @@ function fetchFacebookHtml(urlString, options = {}) {
   }
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
+
     const request = https.get(urlString, {
       agent: keepAliveAgent,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; bndy-source-inspector/1.0; +https://bndy.co.uk)',
+        'User-Agent': 'Mozilla/5.0 (compatible; bndy-source-inspector/1.1; +https://bndy.co.uk)',
         'Accept': 'text/html,application/xhtml+xml',
         'Accept-Language': 'en-GB,en;q=0.9',
       },
@@ -150,7 +181,7 @@ function fetchFacebookHtml(urlString, options = {}) {
         if (redirectsLeft <= 0) {
           const err = new Error('Too many Facebook redirects');
           err.code = 'TOO_MANY_REDIRECTS';
-          reject(err);
+          done(reject, err);
           return;
         }
 
@@ -160,19 +191,19 @@ function fetchFacebookHtml(urlString, options = {}) {
         } catch {
           const err = new Error('Invalid Facebook redirect');
           err.code = 'UNSAFE_REDIRECT';
-          reject(err);
+          done(reject, err);
           return;
         }
 
         if (!isSafeFetchUrl(nextUrl)) {
           const err = new Error('Facebook redirected outside the allowed host set');
           err.code = 'UNSAFE_REDIRECT';
-          reject(err);
+          done(reject, err);
           return;
         }
 
         fetchFacebookHtml(nextUrl, { timeoutMs, maxBytes, redirectsLeft: redirectsLeft - 1 })
-          .then(resolve, reject);
+          .then((value) => done(resolve, value), (error) => done(reject, error));
         return;
       }
 
@@ -181,32 +212,34 @@ function fetchFacebookHtml(urlString, options = {}) {
         res.resume();
         const err = new Error(`Unexpected Facebook content type: ${contentType || 'unknown'}`);
         err.code = 'UNEXPECTED_CONTENT_TYPE';
-        reject(err);
+        done(reject, err);
         return;
       }
 
       const chunks = [];
       let total = 0;
       res.on('data', (chunk) => {
+        if (settled) return;
         total += chunk.length;
         if (total > maxBytes) {
-          res.destroy();
           const err = new Error('Facebook response exceeded size limit');
           err.code = 'RESPONSE_TOO_LARGE';
-          reject(err);
+          done(reject, err);
+          res.destroy();
           return;
         }
         chunks.push(chunk);
       });
       res.on('end', () => {
-        resolve({
+        if (settled) return;
+        done(resolve, {
           statusCode: status,
           finalUrl: urlString,
           contentType,
           html: Buffer.concat(chunks).toString('utf8'),
         });
       });
-      res.on('error', reject);
+      res.on('error', (error) => done(reject, error));
     });
 
     request.setTimeout(timeoutMs, () => {
@@ -214,7 +247,7 @@ function fetchFacebookHtml(urlString, options = {}) {
       err.code = 'FETCH_TIMEOUT';
       request.destroy(err);
     });
-    request.on('error', reject);
+    request.on('error', (error) => done(reject, error));
   });
 }
 
@@ -260,7 +293,7 @@ function readCanonicalLink(html) {
 
 function cleanFacebookTitle(title) {
   if (!title) return null;
-  let value = decodeHtml(title)
+  const value = decodeHtml(title)
     .replace(/\s*[|–—-]\s*Facebook\s*$/i, '')
     .trim();
 
@@ -347,6 +380,42 @@ async function findExistingArtistByFacebookKey(key, client = dynamodb) {
   return artist;
 }
 
+function existingArtistResult({ input, sourceUrl, identity, existing, inspected, observed = {}, evidence = {}, warnings = [] }) {
+  return {
+    source: 'facebook',
+    input,
+    sourceUrl,
+    facebookUrl: identity.url,
+    facebookKey: identity.key,
+    identityResolved: true,
+    valid: true,
+    inspected,
+    existing: {
+      entityType: 'artist',
+      id: existing.id,
+      name: existing.name,
+    },
+    observed: {
+      name: existing.name || observed.name || null,
+      imageUrl: existing.profileImageUrl || observed.imageUrl || null,
+      description: observed.description || null,
+      canonicalUrl: identity.url,
+      location: existing.location || observed.location || null,
+      address: null,
+      websiteUrl: existing.websiteUrl || observed.websiteUrl || null,
+    },
+    evidence: {
+      ...evidence,
+      name: 'bndy_existing_artist',
+      canonicalUrl: 'bndy_existing_artist',
+      ...(existing.profileImageUrl ? { imageUrl: 'bndy_existing_artist' } : {}),
+      ...(existing.location ? { location: 'bndy_existing_artist' } : {}),
+      ...(existing.websiteUrl ? { websiteUrl: 'bndy_existing_artist' } : {}),
+    },
+    warnings,
+  };
+}
+
 async function inspectFacebookSource({ input, expectedType = null, client = dynamodb, fetchHtml = fetchFacebookHtml }) {
   if (typeof input !== 'string' || !input.trim()) {
     const err = new Error('Paste a Facebook page URL');
@@ -368,50 +437,27 @@ async function inspectFacebookSource({ input, expectedType = null, client = dyna
   }
 
   const extractedUrl = extractFacebookUrl(input);
-  const key = extractedUrl ? facebookKey(extractedUrl) : '';
-  const canonicalUrl = extractedUrl ? canonicalFacebookUrl(extractedUrl) : null;
-
-  if (!extractedUrl || !key || !canonicalUrl) {
+  const sourceUrl = extractedUrl ? toSafeFetchUrl(extractedUrl) : null;
+  if (!extractedUrl || !sourceUrl) {
     const err = new Error('That does not look like a Facebook profile or page URL');
     err.statusCode = 422;
     err.code = 'NOT_FACEBOOK_URL';
     throw err;
   }
 
-  // Artist Facebook identity is already a hard uniqueness key. Resolve it first
-  // and avoid hitting Facebook at all when bndy already knows this page.
-  if (expectedType !== 'venue') {
-    const existing = await findExistingArtistByFacebookKey(key, client);
+  // A direct page/profile URL can be checked before any network work. Transient
+  // /share links deliberately skip this: their token is not entity identity.
+  const initialIdentity = stableFacebookIdentity(extractedUrl);
+  if (expectedType !== 'venue' && initialIdentity) {
+    const existing = await findExistingArtistByFacebookKey(initialIdentity.key, client);
     if (existing) {
-      return {
-        source: 'facebook',
+      return existingArtistResult({
         input,
-        facebookUrl: canonicalUrl,
-        facebookKey: key,
-        valid: true,
+        sourceUrl,
+        identity: initialIdentity,
+        existing,
         inspected: false,
-        existing: {
-          entityType: 'artist',
-          id: existing.id,
-          name: existing.name,
-        },
-        observed: {
-          name: existing.name || null,
-          imageUrl: existing.profileImageUrl || null,
-          description: null,
-          canonicalUrl: canonicalUrl,
-          location: existing.location || null,
-          address: null,
-          websiteUrl: existing.websiteUrl || null,
-        },
-        evidence: {
-          name: 'bndy_existing_artist',
-          ...(existing.profileImageUrl ? { imageUrl: 'bndy_existing_artist' } : {}),
-          ...(existing.location ? { location: 'bndy_existing_artist' } : {}),
-          ...(existing.websiteUrl ? { websiteUrl: 'bndy_existing_artist' } : {}),
-        },
-        warnings: [],
-      };
+      });
     }
   }
 
@@ -421,39 +467,72 @@ async function inspectFacebookSource({ input, expectedType = null, client = dyna
       name: null,
       imageUrl: null,
       description: null,
-      canonicalUrl,
+      canonicalUrl: initialIdentity?.url || sourceUrl,
       location: null,
       address: null,
       websiteUrl: null,
     },
-    evidence: { canonicalUrl: 'facebook_identity' },
+    evidence: initialIdentity ? { canonicalUrl: 'facebook_identity' } : {},
   };
+  let fetchedFinalUrl = null;
 
   try {
-    const fetched = await fetchHtml(canonicalUrl);
+    const fetched = await fetchHtml(sourceUrl);
+    fetchedFinalUrl = fetched.finalUrl || sourceUrl;
     if (fetched.statusCode >= 200 && fetched.statusCode < 300) {
-      parsed = parseFacebookMetadata(fetched.html, fetched.finalUrl || canonicalUrl);
-      if (!parsed.observed.canonicalUrl) parsed.observed.canonicalUrl = canonicalUrl;
+      parsed = parseFacebookMetadata(fetched.html, fetchedFinalUrl);
     } else {
       warnings.push(`facebook_http_${fetched.statusCode || 'unknown'}`);
     }
   } catch (error) {
     // Facebook frequently changes anonymous-page behaviour. Inspection is an
-    // accelerator, not a blocker: retain the canonical URL and let the user
-    // continue with the normal bndy form.
+    // accelerator, not a blocker. Direct page identities remain usable; a
+    // transient share link must resolve before it can become a bndy identity.
     warnings.push(error.code || 'facebook_fetch_failed');
   }
+
+  const resolvedIdentity = stableFacebookIdentity(parsed.observed.canonicalUrl)
+    || stableFacebookIdentity(fetchedFinalUrl);
+  const identity = resolvedIdentity || initialIdentity;
+
+  // A /share token may resolve to an artist that bndy already knows. Do the
+  // strong-identity lookup again after redirect/canonical resolution.
+  if (expectedType !== 'venue' && identity && (!initialIdentity || identity.key !== initialIdentity.key)) {
+    const existing = await findExistingArtistByFacebookKey(identity.key, client);
+    if (existing) {
+      return existingArtistResult({
+        input,
+        sourceUrl,
+        identity,
+        existing,
+        inspected: true,
+        observed: parsed.observed,
+        evidence: parsed.evidence,
+        warnings,
+      });
+    }
+  }
+
+  if (!identity) warnings.push('facebook_identity_unresolved');
 
   return {
     source: 'facebook',
     input,
-    facebookUrl: canonicalUrl,
-    facebookKey: key,
+    sourceUrl,
+    facebookUrl: identity?.url || null,
+    facebookKey: identity?.key || null,
+    identityResolved: !!identity,
     valid: true,
     inspected: true,
     existing: null,
-    observed: parsed.observed,
-    evidence: parsed.evidence,
+    observed: {
+      ...parsed.observed,
+      canonicalUrl: identity?.url || parsed.observed.canonicalUrl || sourceUrl,
+    },
+    evidence: {
+      ...parsed.evidence,
+      ...(identity ? { canonicalUrl: resolvedIdentity ? 'facebook_resolved_identity' : 'facebook_identity' } : {}),
+    },
     warnings,
   };
 }
@@ -485,7 +564,10 @@ module.exports = {
   handler,
   extractFacebookUrl,
   canonicalFacebookUrl,
+  isTransientFacebookKey,
+  stableFacebookIdentity,
   isSafeFetchUrl,
+  toSafeFetchUrl,
   fetchFacebookHtml,
   parseFacebookMetadata,
   cleanFacebookTitle,

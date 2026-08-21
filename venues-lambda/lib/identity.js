@@ -312,21 +312,57 @@ function artistUniqueKey(name, location) {
 }
 
 /**
- * All uniqueness keys for an artist (name+region + facebookUrl).
+ * All uniqueness keys for an artist (name+region + nameVariants + facebookUrl).
  * Used for sentinel backfill and update re-keying.
+ *
+ * Each name variant also produces a uniqueness key — an incoming "Pv Rocks"
+ * normalises to the same key as the stored variant "Pv Rocks" on the
+ * "Poole Vigilantes" record, so find-or-create returns action:matched.
+ *
+ * CONSTRAINT: Primary name key wins over variant keys. If the same normalised
+ * key appears as both a primary name somewhere and a variant here, the primary
+ * takes precedence at resolution time (but the variant key is still registered
+ * to prevent duplicates).
  *
  * @param {string} name
  * @param {string} location
  * @param {string} [facebookUrl]
- * @returns {{keys: string[], resolvable: boolean}} Array of sentinel keys + whether name key is resolvable
+ * @param {string[]} [nameVariants] - alternative names / billing strings
+ * @returns {{keys: string[], variantKeys: string[], resolvable: boolean}}
+ *   keys: all sentinel keys (primary + variants + fb)
+ *   variantKeys: just the variant-derived keys (for collision reporting)
+ *   resolvable: whether primary name key is resolvable
  */
-function buildArtistUniqueKeys(name, location, facebookUrl) {
+function buildArtistUniqueKeys(name, location, facebookUrl, nameVariants) {
   const keys = [];
+  const variantKeys = [];
 
-  // Name + location key
+  // Primary name + location key
   const { key: nameKey, resolvable } = artistIdentityKey(name, location);
   if (resolvable) {
     keys.push(`artist#${nameKey}`);
+  }
+
+  // Variant name keys (same region as primary)
+  if (Array.isArray(nameVariants) && nameVariants.length > 0) {
+    const region = regionBucket(location);
+    const seenVariantKeys = new Set();
+    // Don't duplicate the primary name key
+    if (resolvable) seenVariantKeys.add(nameKey);
+
+    for (const variant of nameVariants) {
+      if (!variant || typeof variant !== 'string') continue;
+      const variantNameKey = normaliseKey(variant);
+      if (!variantNameKey || seenVariantKeys.has(variantNameKey)) continue;
+      seenVariantKeys.add(variantNameKey);
+
+      // Only create variant key if region is resolvable
+      if (region !== UNKNOWN_REGION) {
+        const fullVariantKey = `artist#${variantNameKey}#${region}`;
+        keys.push(fullVariantKey);
+        variantKeys.push(fullVariantKey);
+      }
+    }
   }
 
   // Facebook key
@@ -337,7 +373,7 @@ function buildArtistUniqueKeys(name, location, facebookUrl) {
     }
   }
 
-  return { keys, resolvable };
+  return { keys, variantKeys, resolvable };
 }
 
 /** Event uniqueness key strings for the unique-keys table. */
