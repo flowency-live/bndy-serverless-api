@@ -6,6 +6,8 @@ on:
     paths:
       - 'artists-lambda/source-inspector.js'
       - 'artists-lambda/source-inspector.test.js'
+      - 'artists-lambda/source-inspector-v2.js'
+      - 'artists-lambda/source-inspector-v2.test.js'
       - 'artists-lambda/lib/identity.js'
       - 'artists-lambda/lib/data-quality.js'
       - 'artists-lambda/package.json'
@@ -47,7 +49,7 @@ jobs:
 
       - name: Test source inspector
         working-directory: artists-lambda
-        run: node --test source-inspector.test.js
+        run: node --test source-inspector.test.js source-inspector-v2.test.js
 
       - name: Verify shared identity copies
         run: node shared/identity/check-sync.test.js
