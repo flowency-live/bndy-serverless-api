@@ -1,0 +1,68 @@
+name: Inspect chat hosting stack state
+
+on:
+  push:
+    branches:
+      - dropzone-poster-diagnostic
+    paths:
+      - '.github/workflows/inspect-chatzone-hosting-stack.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dropzone-poster-diagnostic
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Inspect
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, subprocess, datetime, pathlib
+          def run(args):
+              p=subprocess.run(['aws',*args,'--output','json'],capture_output=True,text=True)
+              if p.returncode:
+                  return {'error':p.stderr.strip()[-1000:]}
+              try:return json.loads(p.stdout)
+              except:return {'raw':p.stdout.strip()}
+          stacks=run(['cloudformation','describe-stacks','--region','us-east-1','--stack-name','bndy-chatzone-hosting'])
+          stack=(stacks.get('Stacks') or [{}])[0] if not stacks.get('error') else {}
+          outputs={o.get('OutputKey'):o.get('OutputValue') for o in stack.get('Outputs',[])}
+          zone=run(['route53','list-hosted-zones-by-name','--dns-name','bndy.live','--max-items','5'])
+          zid=None
+          for z in zone.get('HostedZones',[]):
+              if z.get('Name')=='bndy.live.': zid=z.get('Id','').split('/')[-1]
+          records=[]
+          if zid:
+              rr=run(['route53','list-resource-record-sets','--hosted-zone-id',zid,'--start-record-name','chat.bndy.live','--max-items','5'])
+              for r in rr.get('ResourceRecordSets',[]):
+                  if r.get('Name','').rstrip('.')=='chat.bndy.live':
+                      records.append({'type':r.get('Type'),'alias':(r.get('AliasTarget') or {}).get('DNSName'),'values':[x.get('Value') for x in r.get('ResourceRecords',[])]})
+          payload={
+              'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              'stackStatus':stack.get('StackStatus'),
+              'stackStatusReason':stack.get('StackStatusReason'),
+              'outputs':outputs,
+              'stackError':stacks.get('error'),
+              'records':records,
+          }
+          pathlib.Path('diagnostics/chatzone-hosting-stack.json').write_text(json.dumps(payload,indent=2))
+          print(json.dumps(payload,indent=2))
+          PY
+      - name: Record
+        if: always()
+        run: |
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/chatzone-hosting-stack.json
+          git commit -m 'Record chat hosting stack state' || true
+          git push origin HEAD:dropzone-poster-diagnostic
