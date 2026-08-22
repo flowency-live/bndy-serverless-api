@@ -1,24 +1,16 @@
 'use strict';
 
 /**
- * Users domain boundary for saved gig filters.
+ * Users domain boundary for saved gig filters plus small Godmode extensions.
  *
  * The historical Users Lambda is preserved in handler-legacy.js. This wrapper
- * extends its saved-filter contract with canonical Artist Type while keeping
- * the legacy route/auth/profile behaviour intact.
- *
- * Important distinction:
- * - WRITES are strict: malformed or unknown values are rejected.
- * - READS are tolerant: malformed historical members are dropped and valid
- *   members are canonicalised, so one bad old token never blanks the filter.
- *
- * `acoustic` remains a saved filter token for storage compatibility only. It is
- * matched against Artist.acoustic in bndy-app and is never an Artist actType.
+ * extends its contract while keeping legacy route/auth/profile behaviour intact.
  */
 
 const AWS = require('aws-sdk');
 const jwt = require('jsonwebtoken');
 const legacy = require('./handler-legacy');
+const godmodeAccess = require('./lib/godmode-access');
 const {
   GENRES,
   ARTIST_TYPES,
@@ -314,8 +306,6 @@ async function handleGigFilterUpdate(event, context, body) {
   const checked = validateGigFilter(body.gigFilter);
   if (checked.error) return response(400, checked.error);
 
-  // Preserve normal profile updates if a future client sends them alongside
-  // gigFilter. Current bndy-app sends only the filter.
   const rest = { ...body };
   delete rest.gigFilter;
   if (Object.keys(rest).length > 0) {
@@ -338,23 +328,52 @@ async function handleGigFilterUpdate(event, context, body) {
 }
 
 exports.handler = async (event, context) => {
-  const method = methodOf(event);
+  const method = methodOf(event).toUpperCase();
   const path = pathOf(event);
+
+  // These use existing API Gateway parameterised routes, so no SAM route
+  // changes are needed: /users/analytics matches GET /users/{userId}, and the
+  // access editor uses the existing PUT /users/{userId} route.
+  if (path === '/users/analytics' && method === 'GET') {
+    return godmodeAccess.handleAnalytics(event);
+  }
+
+  if (method === 'PUT' && /^\/users\/[^/]+$/.test(path) && event.body) {
+    const parsed = parseBody(event);
+    if (parsed.error) return parsed.error;
+    if (Object.prototype.hasOwnProperty.call(parsed.body, 'curatorAccess')) {
+      return godmodeAccess.handleSetCuratorAccess(event);
+    }
+  }
 
   if (path === '/users/profile' && method === 'PUT' && event.body) {
     const parsed = parseBody(event);
     if (parsed.error) return parsed.error;
+
+    // A logged-in curator records provenance immediately after a successful
+    // public-wizard create. This is idempotent and never overwrites another
+    // creator.
+    if (Object.prototype.hasOwnProperty.call(parsed.body, 'curatorCreated')) {
+      return godmodeAccess.handleRecordCuratorCreation(event);
+    }
+
     if (Object.prototype.hasOwnProperty.call(parsed.body, 'gigFilter')) {
-      return handleGigFilterUpdate(event, context, parsed.body);
+      const updated = await handleGigFilterUpdate(event, context, parsed.body);
+      return godmodeAccess.patchProfile(event, updated);
     }
   }
 
-  const result = await legacy.handler(event, context || {});
+  let result = await legacy.handler(event, context || {});
 
-  // The legacy profile formatter predates artistTypes and drops that dimension.
-  // Overlay the complete canonical raw filter on GET and ordinary profile PUTs.
+  if (path === '/users' && method === 'GET' && result?.statusCode === 200) {
+    result = await godmodeAccess.patchUserList(result);
+  }
+
+  // The legacy profile formatter predates artistTypes and curator access.
+  // Overlay both canonical values on reads and ordinary profile updates.
   if (path === '/users/profile' && ['GET', 'PUT'].includes(method) && result?.statusCode === 200) {
-    return patchProfileResponseWithRawFilter(event, result);
+    result = await patchProfileResponseWithRawFilter(event, result);
+    result = await godmodeAccess.patchProfile(event, result);
   }
 
   return result;
