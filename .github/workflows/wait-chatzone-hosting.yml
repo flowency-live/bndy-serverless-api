@@ -1,0 +1,70 @@
+name: Wait for chat hosting stack
+
+on:
+  push:
+    branches:
+      - dropzone-poster-diagnostic
+    paths:
+      - '.github/workflows/wait-chatzone-hosting.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  wait:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dropzone-poster-diagnostic
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Wait for terminal state
+        shell: bash
+        run: |
+          set -u
+          STATUS='UNKNOWN'
+          for i in $(seq 1 75); do
+            STATUS=$(aws cloudformation describe-stacks --region us-east-1 --stack-name bndy-chatzone-hosting --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo MISSING)
+            echo "poll=$i status=$STATUS"
+            case "$STATUS" in
+              *_IN_PROGRESS) sleep 20 ;;
+              *) break ;;
+            esac
+          done
+          EVENTS=$(aws cloudformation describe-stack-events --region us-east-1 --stack-name bndy-chatzone-hosting --max-items 20 --output json 2>/dev/null || echo '{}')
+          STACK=$(aws cloudformation describe-stacks --region us-east-1 --stack-name bndy-chatzone-hosting --output json 2>/dev/null || echo '{}')
+          python - "$STATUS" "$EVENTS" "$STACK" <<'PY'
+          import json,sys,pathlib,datetime
+          status=sys.argv[1]
+          try: events=json.loads(sys.argv[2])
+          except: events={}
+          try: stack=json.loads(sys.argv[3])
+          except: stack={}
+          st=(stack.get('Stacks') or [{}])[0]
+          failures=[]
+          for e in events.get('StackEvents',[]):
+              rs=str(e.get('ResourceStatus') or '')
+              if 'FAILED' in rs:
+                  failures.append({'logicalId':e.get('LogicalResourceId'),'type':e.get('ResourceType'),'status':rs,'reason':e.get('ResourceStatusReason')})
+          payload={
+            'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'status':status,
+            'outputs':{x.get('OutputKey'):x.get('OutputValue') for x in st.get('Outputs',[])},
+            'failures':failures[:10],
+          }
+          pathlib.Path('diagnostics/chatzone-hosting-terminal.json').write_text(json.dumps(payload,indent=2))
+          print(json.dumps(payload,indent=2))
+          PY
+      - name: Record
+        if: always()
+        run: |
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/chatzone-hosting-terminal.json
+          git commit -m 'Record chat hosting terminal state' || true
+          git push origin HEAD:dropzone-poster-diagnostic
