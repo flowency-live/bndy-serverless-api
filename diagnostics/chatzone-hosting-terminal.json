@@ -1,0 +1,13 @@
+{
+  "recordedAt": "2026-08-22T16:27:49.270325+00:00",
+  "status": "ROLLBACK_COMPLETE",
+  "outputs": {},
+  "failures": [
+    {
+      "logicalId": "Distribution",
+      "type": "AWS::CloudFront::Distribution",
+      "status": "CREATE_FAILED",
+      "reason": "Resource handler returned message: \"Invalid request provided: AWS::CloudFront::Distribution: One or more of the CNAMEs you provided are already associated with a different resource. (Service: CloudFront, Status Code: 409, Request ID: 236516c5-0327-486e-9e68-90a27b917201) (SDK Attempt Count: 1)\" (RequestToken: dbc074d5-adcc-a81c-5688-3af789e73669, HandlerErrorCode: InvalidRequest)"
+    }
+  ]
+}
