@@ -60,7 +60,7 @@ const buildSessionCookie = (sessionToken, origin, maxAge = 7776000) => {
   const validatedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   const domainAttribute = validatedOrigin === 'https://bndy.live' ||
     validatedOrigin === 'https://stage.bndy.live'
-    ? ''
+    ? '; Domain=.bndy.live'
     : '; Domain=.bndy.co.uk';
 
   return `bndy_session=${sessionToken}; HttpOnly; Secure; SameSite=Lax; ` +
