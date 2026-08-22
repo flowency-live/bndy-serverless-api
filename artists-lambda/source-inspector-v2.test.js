@@ -11,6 +11,16 @@ const {
   enrichInspectionResult,
 } = require('./source-inspector-v2');
 
+function fakeClient(sequence) {
+  let index = 0;
+  return {
+    get() {
+      const value = sequence[index++];
+      return { promise: async () => value || {} };
+    },
+  };
+}
+
 test('handleFromFacebookKey accepts stable handles and ids only', () => {
   assert.equal(handleFromFacebookKey('facebook.com/soulskunks'), 'soulskunks');
   assert.equal(handleFromFacebookKey('facebook.com/123456789'), '123456789');
@@ -50,6 +60,36 @@ test('existing artist lookup aliases DynamoDB reserved projection fields', async
   assert.equal(artistGetParams.ExpressionAttributeNames['#deleted'], 'deleted');
   assert.doesNotMatch(artistGetParams.ProjectionExpression, /(?:^|,\s*)hidden(?:\s*,|$)/);
   assert.doesNotMatch(artistGetParams.ProjectionExpression, /(?:^|,\s*)deleted(?:\s*,|$)/);
+});
+
+test('group-member wrapper resolves embedded numeric profile and inspects canonical profile URL', async () => {
+  const input = 'https://www.facebook.com/groups/257127181399411/user/100095600102594';
+  assert.deepEqual(base.groupMemberProfileIdentity(input), {
+    key: 'facebook.com/100095600102594',
+    url: 'https://www.facebook.com/100095600102594',
+  });
+  assert.equal(base.canonicalFacebookUrl(input), 'https://www.facebook.com/100095600102594');
+
+  let fetchedUrl = null;
+  const result = await base.inspectFacebookSource({
+    input,
+    expectedType: 'artist',
+    client: fakeClient([{}]),
+    fetchHtml: async (url) => {
+      fetchedUrl = url;
+      return {
+        statusCode: 200,
+        finalUrl: url,
+        html: '<meta property="og:title" content="Example Artist | Facebook">',
+      };
+    },
+  });
+
+  assert.equal(fetchedUrl, 'https://www.facebook.com/100095600102594');
+  assert.equal(result.facebookKey, 'facebook.com/100095600102594');
+  assert.equal(result.facebookUrl, 'https://www.facebook.com/100095600102594');
+  assert.equal(result.observed.name, 'Example Artist');
+  assert.ok(result.sourceUrl.includes('/groups/257127181399411/user/100095600102594'));
 });
 
 test('enrichInspectionResult uses mbasic title and Graph picture when primary metadata is barren', async () => {
