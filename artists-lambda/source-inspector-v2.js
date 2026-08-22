@@ -48,9 +48,53 @@ function nameHintFromHandle(handle) {
   return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 }
 
+function unwrapGroupMemberProfileInput(input) {
+  if (typeof input !== 'string') return null;
+  const match = input.match(/(?:https?:\/\/)?(?:(?:www|m|mbasic)\.)?facebook\.com\/groups\/[^\s/]+\/user\/(\d{6,})(?:[/?#][^\s]*)?/i);
+  if (!match) return null;
+  return `https://www.facebook.com/${match[1]}`;
+}
+
+function isGenericFacebookName(value) {
+  const name = String(value || '').trim().toLowerCase();
+  if (!name) return true;
+  return name === 'error'
+    || name === 'facebook error'
+    || name === 'content not available'
+    || name === 'this content isn\'t available'
+    || name === 'this content is not available';
+}
+
+function isGenericFacebookDescription(value) {
+  const description = String(value || '').trim().toLowerCase();
+  if (!description) return false;
+  return description === 'see posts, photos and more on facebook.'
+    || description === 'see posts, photos and more on facebook'
+    || description === 'log into facebook to start sharing and connecting with your friends, family, and people you know.'
+    || description === 'log into facebook to start sharing and connecting with your friends, family, and people you know';
+}
+
+function sanitiseFacebookBoilerplate(result) {
+  if (!result?.observed) return result;
+  const observed = { ...result.observed };
+  const evidence = { ...(result.evidence || {}) };
+
+  if (isGenericFacebookName(observed.name)) {
+    observed.name = null;
+    delete evidence.name;
+  }
+  if (isGenericFacebookDescription(observed.description)) {
+    observed.description = null;
+    delete evidence.description;
+  }
+
+  return { ...result, observed, evidence };
+}
+
 function readHtmlTitle(html) {
   const match = String(html || '').match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
-  return match ? base.cleanFacebookTitle(match[1]) : null;
+  const title = match ? base.cleanFacebookTitle(match[1]) : null;
+  return isGenericFacebookName(title) ? null : title;
 }
 
 async function fetchBasicFacebookMetadata(handle, fetchHtml = base.fetchFacebookHtml) {
@@ -62,7 +106,7 @@ async function fetchBasicFacebookMetadata(handle, fetchHtml = base.fetchFacebook
   });
 
   if (fetched.statusCode < 200 || fetched.statusCode >= 300) return null;
-  const parsed = base.parseFacebookMetadata(fetched.html, fetched.finalUrl || url);
+  let parsed = sanitiseFacebookBoilerplate(base.parseFacebookMetadata(fetched.html, fetched.finalUrl || url));
   if (!parsed.observed.name) {
     const title = readHtmlTitle(fetched.html);
     if (title) {
@@ -148,6 +192,7 @@ function fetchGraphProfilePicture(handle, redirectsLeft = MAX_IMAGE_REDIRECTS) {
 }
 
 async function enrichInspectionResult(result, { expectedType = null, fetchHtml = base.fetchFacebookHtml, fetchPicture = fetchGraphProfilePicture } = {}) {
+  result = sanitiseFacebookBoilerplate(result);
   if (!result?.valid || result.existing || !result.identityResolved || !result.facebookKey) return result;
 
   const handle = handleFromFacebookKey(result.facebookKey);
@@ -202,8 +247,20 @@ async function enrichInspectionResult(result, { expectedType = null, fetchHtml =
 }
 
 async function inspectFacebookSourceV2({ input, expectedType = null, client, fetchHtml, fetchPicture } = {}) {
-  const result = await base.inspectFacebookSource({ input, expectedType, client, fetchHtml });
-  return enrichInspectionResult(result, { expectedType, fetchHtml, fetchPicture });
+  const wrappedProfile = expectedType === 'venue' ? null : unwrapGroupMemberProfileInput(input);
+  const inspectionInput = wrappedProfile || input;
+  const result = await base.inspectFacebookSource({ input: inspectionInput, expectedType, client, fetchHtml });
+  const enriched = await enrichInspectionResult(result, { expectedType, fetchHtml, fetchPicture });
+  if (!wrappedProfile) return enriched;
+
+  return {
+    ...enriched,
+    input,
+    evidence: {
+      ...(enriched.evidence || {}),
+      canonicalUrl: 'facebook_group_member_profile',
+    },
+  };
 }
 
 async function handler(event) {
@@ -233,6 +290,10 @@ module.exports = {
   handler,
   handleFromFacebookKey,
   nameHintFromHandle,
+  unwrapGroupMemberProfileInput,
+  isGenericFacebookName,
+  isGenericFacebookDescription,
+  sanitiseFacebookBoilerplate,
   readHtmlTitle,
   fetchBasicFacebookMetadata,
   fetchGraphProfilePicture,
