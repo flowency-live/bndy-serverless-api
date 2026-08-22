@@ -13,7 +13,7 @@ Resources:
     Properties:
       Description: BNDY public source inspector - read-only Facebook metadata and artist identity lookup
       CodeUri: ./artists-lambda/
-      Handler: source-inspector.handler
+      Handler: source-inspector-v2.handler
       Runtime: nodejs20.x
       MemorySize: 256
       Timeout: 8
