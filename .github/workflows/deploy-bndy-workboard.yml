@@ -54,31 +54,18 @@ jobs:
           zip -qr /tmp/bndy-website.zip .
           test -s /tmp/bndy-website.zip
 
-      - name: Resolve Amplify app owning www.bndy.co.uk
+      - name: Resolve website Amplify app
         shell: bash
         run: |
           set -euo pipefail
           REGION=eu-west-2
-          aws amplify list-apps --region "$REGION" --max-results 100 >/tmp/apps.json
-          : >/tmp/domain-scan.jsonl
-          APP_ID=''
-          APP_NAME=''
-          while read -r id name; do
-            [ -n "$id" ] || continue
-            aws amplify list-domain-associations --region "$REGION" --app-id "$id" --max-results 100 >/tmp/domains.json 2>/dev/null || continue
-            jq -c --arg id "$id" --arg name "$name" '.domainAssociations[]? | {appId:$id,appName:$name,domainName,status,subDomains}' /tmp/domains.json >>/tmp/domain-scan.jsonl
-            if jq -e '.domainAssociations[]? | select(.domainName == "bndy.co.uk" or .domainName == "www.bndy.co.uk") | select((.subDomains // []) | any(.subDomainSetting.prefix == "www") or .domainName == "www.bndy.co.uk")' /tmp/domains.json >/dev/null; then
-              APP_ID="$id"
-              APP_NAME="$name"
-              break
-            fi
-          done < <(jq -r '.apps[] | [.appId,.name] | @tsv' /tmp/apps.json)
-          if [ -z "$APP_ID" ]; then
-            # Fallback to a clearly named website app if the domain association API shape differs.
-            APP_ID=$(jq -r '.apps[] | select((.name|ascii_downcase) == "bndy-website" or (.name|ascii_downcase) == "bndy website") | .appId' /tmp/apps.json | head -1)
-            APP_NAME=$(jq -r --arg id "$APP_ID" '.apps[] | select(.appId==$id) | .name' /tmp/apps.json | head -1)
+          APP_ID=d3hbhqxqqchzbb
+          aws sts get-caller-identity >/tmp/caller.json
+          if ! aws amplify get-app --region "$REGION" --app-id "$APP_ID" >/tmp/app.json 2>/tmp/amplify-error.txt; then
+            cat /tmp/amplify-error.txt >&2
+            exit 1
           fi
-          test -n "$APP_ID" && test "$APP_ID" != null
+          APP_NAME=$(jq -r '.app.name // empty' /tmp/app.json)
           aws amplify list-branches --region "$REGION" --app-id "$APP_ID" --max-results 100 >/tmp/branches.json
           BRANCH=$(jq -r '[.branches[] | select(.branchName=="main")][0].branchName // [.branches[] | select(.stage=="PRODUCTION")][0].branchName // .branches[0].branchName // empty' /tmp/branches.json)
           test -n "$BRANCH"
@@ -146,30 +133,30 @@ jobs:
               if not p.exists(): return {}
               try:return json.loads(p.read_text())
               except:return {}
+          def read_text(path):
+              p=pathlib.Path(path)
+              return p.read_text(errors='replace').strip() if p.exists() else None
           def sha():
               try:return subprocess.check_output(['git','-C','../website','rev-parse','HEAD'],text=True).strip()
               except:return None
           job=read_json('/tmp/job.json').get('job',{}).get('summary',{})
           html=pathlib.Path('/tmp/workboard.html').read_text(errors='replace') if pathlib.Path('/tmp/workboard.html').exists() else ''
           board=read_json('/tmp/workboard.json')
-          scan=[]
-          p=pathlib.Path('/tmp/domain-scan.jsonl')
-          if p.exists():
-              for line in p.read_text().splitlines():
-                  try: scan.append(json.loads(line))
-                  except: pass
+          caller=read_json('/tmp/caller.json')
+          app=read_json('/tmp/app.json').get('app',{})
           payload={
             'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'websiteCommit':sha(),
-            'appId':os.getenv('APP_ID'),
-            'appName':os.getenv('APP_NAME'),
+            'awsAccount':caller.get('Account'),
+            'appId':os.getenv('APP_ID') or app.get('appId'),
+            'appName':os.getenv('APP_NAME') or app.get('name'),
             'branch':os.getenv('AMPLIFY_BRANCH'),
             'jobId':os.getenv('JOB_ID'),
             'jobStatus':job.get('status'),
-            'liveWorkboard': 'KANBAN / SWIMLANES' in html,
+            'liveWorkboard':'KANBAN / SWIMLANES' in html,
             'liveJsonVersion':board.get('version'),
             'liveLaneCount':len(board.get('lanes',[])) if isinstance(board.get('lanes'),list) else None,
-            'domainsSeen':[{'appId':x.get('appId'),'appName':x.get('appName'),'domainName':x.get('domainName'),'status':x.get('status')} for x in scan]
+            'error':read_text('/tmp/amplify-error.txt')
           }
           pathlib.Path('diagnostics/workboard-deploy.json').write_text(json.dumps(payload,indent=2))
           PY
