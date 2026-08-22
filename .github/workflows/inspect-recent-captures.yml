@@ -1,5 +1,5 @@
 name: inspect-recent-captures
-# Trigger: inspect the two fresh Android Facebook Event shares.
+# Trigger: inspect fresh Android Facebook Event shares using status-index queries.
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
 
-      - name: Inspect recent Capture submissions
+      - name: Inspect recent Capture submissions by status
         shell: bash
         run: |
           set -euo pipefail
@@ -39,25 +39,42 @@ jobs:
           test -n "$CAPTURE_TOKEN" && test "$CAPTURE_TOKEN" != "None"
           echo "::add-mask::$CAPTURE_TOKEN"
 
-          # Snapshot before, kick the scanner, then snapshot again after the queue has had time to move.
-          curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" \
-            'https://capture.bndy.co.uk/v1/captures?limit=30' > /tmp/before.json
+          fetch_statuses() {
+            local prefix="$1"
+            for status in unprocessed processing processed failed rejected ignored; do
+              curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" \
+                "https://capture.bndy.co.uk/v1/captures?status=${status}&limit=20" \
+                > "/tmp/${prefix}-${status}.json"
+            done
+          }
+
+          combine_recent() {
+            local prefix="$1"
+            jq -s '
+              [ .[] | (.items // .captures // [])[] ]
+              | unique_by(.id)
+              | map(select((.receivedAt // .capturedAt // "") >= "2026-08-22T10:45:00Z"))
+              | sort_by(.receivedAt // .capturedAt // "")
+              | reverse
+              | map({id,capturedAt,receivedAt,updatedAt,status,sharedUrl,sharedText,mimeType,sourceApp,suggestedEntityType,note,processingAttempt,processingWorkerId,leaseUntil})
+            ' /tmp/${prefix}-*.json
+          }
+
+          fetch_statuses before
           aws lambda invoke --region eu-west-2 \
             --function-name bndy-capture-scan \
             --cli-binary-format raw-in-base64-out --payload '{}' \
             /tmp/scanner.json >/tmp/scanner-meta.json || true
-          sleep 30
-          curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" \
-            'https://capture.bndy.co.uk/v1/captures?limit=30' > /tmp/after.json
+          sleep 45
+          fetch_statuses after
 
-          # Keep only non-sensitive operational fields and only the most recent captures.
           mkdir -p diagnostics
           jq -n \
             --arg inspectedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --argjson scanner "$(cat /tmp/scanner.json 2>/dev/null || echo '{}')" \
-            --argjson before "$(jq '(.captures // .items // . // []) | sort_by(.receivedAt // .capturedAt // "") | reverse | .[0:12] | map({id,capturedAt,receivedAt,updatedAt,status,sharedUrl,sharedText,mimeType,sourceApp,suggestedEntityType,note,processingAttempt,processingWorkerId,leaseUntil})' /tmp/before.json)" \
-            --argjson after "$(jq '(.captures // .items // . // []) | sort_by(.receivedAt // .capturedAt // "") | reverse | .[0:12] | map({id,capturedAt,receivedAt,updatedAt,status,sharedUrl,sharedText,mimeType,sourceApp,suggestedEntityType,note,processingAttempt,processingWorkerId,leaseUntil})' /tmp/after.json)" \
-            '{result:"RECENT_CAPTURE_DIAGNOSTIC",inspectedAt:$inspectedAt,scanner:$scanner,before:$before,after:$after}' \
+            --argjson before "$(combine_recent before)" \
+            --argjson after "$(combine_recent after)" \
+            '{result:"RECENT_CAPTURE_STATUS_DIAGNOSTIC",inspectedAt:$inspectedAt,cutoff:"2026-08-22T10:45:00Z",scanner:$scanner,before:$before,after:$after}' \
             > diagnostics/recent-captures.json
 
       - name: Publish sanitized diagnostic
@@ -67,5 +84,5 @@ jobs:
           git config user.name 'bndy-bot'
           git config user.email 'actions@users.noreply.github.com'
           git add diagnostics/recent-captures.json
-          git commit -m 'Record recent Capture diagnostic' || exit 0
+          git commit -m 'Record recent Capture status diagnostic' || exit 0
           git push --force origin HEAD:capture-recent-results
