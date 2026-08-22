@@ -1,0 +1,12 @@
+{
+  "recordedAt": "2026-08-22T16:09:22.095724+00:00",
+  "id": "e106ed9f-ecde-4ad5-a4ee-07ed315732e4",
+  "status": "failed",
+  "attempt": null,
+  "sourceApp": "chatzone",
+  "suggestedEntityType": "event",
+  "mimeType": "image/jpeg",
+  "noteLines": [
+    "AWS processor: failed because this image capture has no uploaded image object. Update the Android Capture app and resend."
+  ]
+}
