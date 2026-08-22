@@ -1,4 +1,4 @@
-name: Hot-deploy current Capture processor
+name: Hot-deploy current Capture scanner and processor
 
 on:
   push:
@@ -42,19 +42,23 @@ jobs:
           set -euo pipefail
           npm install
           npm run check
-          rm -rf /tmp/capture-lambda /tmp/capture-processor.zip
-          mkdir -p /tmp/capture-lambda
-          npx esbuild src/handlers/capture-processor.ts --bundle --platform=node --target=node22 --format=cjs --outfile=/tmp/capture-lambda/index.js
-          cd /tmp/capture-lambda
-          zip -q /tmp/capture-processor.zip index.js
+          rm -rf /tmp/capture-processor /tmp/capture-scanner /tmp/capture-processor.zip /tmp/capture-scanner.zip
+          mkdir -p /tmp/capture-processor /tmp/capture-scanner
+          npx esbuild src/handlers/capture-processor.ts --bundle --platform=node --target=node22 --format=cjs --outfile=/tmp/capture-processor/index.js
+          npx esbuild src/handlers/capture-scan.ts --bundle --platform=node --target=node22 --format=cjs --outfile=/tmp/capture-scanner/index.js
+          (cd /tmp/capture-processor && zip -q /tmp/capture-processor.zip index.js)
+          (cd /tmp/capture-scanner && zip -q /tmp/capture-scanner.zip index.js)
 
-      - name: Deploy processor code
+      - name: Deploy scanner and processor code
         shell: bash
         run: |
           set -euo pipefail
-          aws lambda update-function-code --function-name bndy-capture-processor --zip-file fileb:///tmp/capture-processor.zip >/tmp/update.json
+          aws lambda update-function-code --function-name bndy-capture-processor --zip-file fileb:///tmp/capture-processor.zip >/tmp/update-processor.json
           aws lambda wait function-updated --function-name bndy-capture-processor
-          aws lambda get-function-configuration --function-name bndy-capture-processor --query '{LastModified:LastModified,CodeSha256:CodeSha256,Runtime:Runtime,State:State,LastUpdateStatus:LastUpdateStatus}' --output json >/tmp/config.json
+          aws lambda update-function-code --function-name bndy-capture-scan --zip-file fileb:///tmp/capture-scanner.zip >/tmp/update-scanner.json
+          aws lambda wait function-updated --function-name bndy-capture-scan
+          aws lambda get-function-configuration --function-name bndy-capture-processor --query '{LastModified:LastModified,CodeSha256:CodeSha256,Runtime:Runtime,State:State,LastUpdateStatus:LastUpdateStatus}' --output json >/tmp/processor-config.json
+          aws lambda get-function-configuration --function-name bndy-capture-scan --query '{LastModified:LastModified,CodeSha256:CodeSha256,Runtime:Runtime,State:State,LastUpdateStatus:LastUpdateStatus}' --output json >/tmp/scanner-config.json
 
       - name: Resolve Capture token
         shell: bash
@@ -73,7 +77,7 @@ jobs:
           ID=e106ed9f-ecde-4ad5-a4ee-07ed315732e4
           curl -fsS -X PATCH -H 'Content-Type: application/json' -H "Authorization: Bearer $CAPTURE_TOKEN" -d '{"status":"unprocessed"}' "https://capture.bndy.co.uk/v1/captures/$ID/status" >/tmp/reset.json
           aws lambda invoke --function-name bndy-capture-scan --payload '{}' --cli-binary-format raw-in-base64-out /tmp/scan.json >/dev/null
-          for i in $(seq 1 60); do
+          for i in $(seq 1 72); do
             curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" "https://capture.bndy.co.uk/v1/captures/$ID" >/tmp/capture.json
             STATUS=$(jq -r '.status // .capture.status // empty' /tmp/capture.json)
             echo "poll=$i status=$STATUS"
@@ -92,7 +96,9 @@ jobs:
           c=json.loads(pathlib.Path('/tmp/capture.json').read_text()) if pathlib.Path('/tmp/capture.json').exists() else {}
           c=c.get('capture',c)
           note=str(c.get('note') or '')
-          cfg=json.loads(pathlib.Path('/tmp/config.json').read_text()) if pathlib.Path('/tmp/config.json').exists() else {}
+          def load(p):
+              q=pathlib.Path(p)
+              return json.loads(q.read_text()) if q.exists() else {}
           try:
               commit=subprocess.check_output(['git','-C','enrichment','rev-parse','HEAD'],text=True).strip()
           except Exception:
@@ -100,7 +106,8 @@ jobs:
           safe={
             'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'enrichmentCommit':commit,
-            'processor':cfg,
+            'processor':load('/tmp/processor-config.json'),
+            'scanner':load('/tmp/scanner-config.json'),
             'capture':{
               'id':c.get('id'),'status':c.get('status'),'sourceApp':c.get('sourceApp'),'processingAttempt':c.get('processingAttempt'),
               'media':{'type':(c.get('media') or {}).get('type'),'mimeType':(c.get('media') or {}).get('mimeType'),'hasBucket':bool((c.get('media') or {}).get('bucket')),'hasKey':bool((c.get('media') or {}).get('key'))},
@@ -112,5 +119,5 @@ jobs:
           git -C ops config user.name bndy-bot
           git -C ops config user.email actions@users.noreply.github.com
           git -C ops add diagnostics/dropzone-poster-main-replay.json
-          git -C ops commit -m 'Record current processor poster replay' || true
+          git -C ops commit -m 'Record current scanner/processor poster replay' || true
           git -C ops push origin HEAD:dropzone-poster-diagnostic
