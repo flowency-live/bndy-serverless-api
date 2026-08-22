@@ -1,0 +1,73 @@
+name: Inspect chat.bndy.live origin
+
+on:
+  push:
+    branches:
+      - dropzone-poster-diagnostic
+    paths:
+      - '.github/workflows/inspect-chatzone-origin.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dropzone-poster-diagnostic
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Inspect Amplify, CloudTrail and CloudFormation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, subprocess, datetime, pathlib
+          def run(args):
+              p=subprocess.run(['aws',*args,'--output','json'],capture_output=True,text=True)
+              if p.returncode:
+                  return {'error':p.stderr.strip()[-1000:]}
+              try:return json.loads(p.stdout)
+              except:return {'raw':p.stdout.strip()}
+          out={}
+          out['caller']=run(['sts','get-caller-identity'])
+          apps=run(['amplify','list-apps','--region','eu-west-2'])
+          amp=[]
+          for a in apps.get('apps',[]):
+              aid=a.get('appId')
+              domains=run(['amplify','list-domain-associations','--region','eu-west-2','--app-id',aid])
+              amp.append({'appId':aid,'name':a.get('name'),'repository':a.get('repository'),'defaultDomain':a.get('defaultDomain'),'domains':[{'domainName':d.get('domainName'),'domainStatus':d.get('domainStatus'),'subDomains':d.get('subDomains')} for d in domains.get('domainAssociations',[])]})
+          out['amplify']=amp
+          # CloudTrail event history is 90 days. Pull relevant service activity and retain only non-sensitive metadata.
+          events=[]
+          for source in ['amplify.amazonaws.com','cloudfront.amazonaws.com','route53.amazonaws.com','cloudformation.amazonaws.com','s3.amazonaws.com']:
+              data=run(['cloudtrail','lookup-events','--region','eu-west-2','--lookup-attributes',f'AttributeKey=EventSource,AttributeValue={source}','--max-results','50'])
+              for e in data.get('Events',[]):
+                  ct={}
+                  try: ct=json.loads(e.get('CloudTrailEvent') or '{}')
+                  except: pass
+                  req=ct.get('requestParameters') or {}
+                  blob=json.dumps(req).lower()
+                  name=str(e.get('EventName') or '')
+                  # recent chat/domain/deployment-related records, plus distribution/domain association creation
+                  if ('chat.bndy.live' in blob or 'chatzone' in blob or 'bndy-chatzone' in blob or name in {'CreateDomainAssociation','UpdateDomainAssociation','DeleteDomainAssociation','CreateDistribution','CreateDistributionWithTags','UpdateDistribution','CreateStack','UpdateStack'}):
+                      events.append({'eventTime':e.get('EventTime'),'eventName':name,'eventSource':e.get('EventSource'),'username':e.get('Username'),'resources':e.get('Resources'),'awsRegion':ct.get('awsRegion'),'userIdentityType':(ct.get('userIdentity') or {}).get('type'),'userIdentityArn':(ct.get('userIdentity') or {}).get('arn'),'requestKeys':sorted(req.keys()),'domainName':req.get('domainName'),'stackName':req.get('stackName'),'distributionId':req.get('id') or req.get('distributionId')})
+          out['cloudTrailRelevant']=sorted(events,key=lambda x:str(x.get('eventTime')),reverse=True)
+          stacks=run(['cloudformation','list-stacks','--region','eu-west-2','--stack-status-filter','CREATE_COMPLETE','UPDATE_COMPLETE','UPDATE_ROLLBACK_COMPLETE','ROLLBACK_COMPLETE','DELETE_COMPLETE'])
+          out['possibleStacks']=[{'stackName':s.get('StackName'),'status':s.get('StackStatus'),'creationTime':s.get('CreationTime'),'deletionTime':s.get('DeletionTime')} for s in stacks.get('StackSummaries',[]) if any(k in (s.get('StackName') or '').lower() for k in ['chat','signal','zone','drop'])]
+          pathlib.Path('diagnostics/chatzone-origin.json').write_text(json.dumps(out,indent=2,default=str))
+          print(json.dumps(out,indent=2,default=str))
+          PY
+      - name: Record
+        if: always()
+        run: |
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/chatzone-origin.json
+          git commit -m 'Record chat.bndy.live origin inspection' || true
+          git push origin HEAD:dropzone-poster-diagnostic
