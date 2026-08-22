@@ -84,6 +84,7 @@ const MUTATION_ROUTE_BASELINE = {
   'POST /api/curator/events/{id}/restore': 'handler-auth',
   'POST /api/curator/events/{id}/cancel': 'handler-auth',
   'POST /api/curator/events/{id}/uncancel': 'handler-auth',
+  'POST /api/curator/events/festival-tag': 'handler-auth',
 
   // === Calendar ===
   'POST /api/artists/{artistId}/calendar/subscribe': 'handler-auth',
@@ -115,6 +116,10 @@ const MUTATION_ROUTE_BASELINE = {
   // === Festivals ===
   'POST /festivals': 'handler-auth',
   'PATCH /festivals/{id}': 'handler-auth',
+
+  // === Curator: Festivals ===
+  'POST /api/curator/festivals': 'handler-auth',
+  'PATCH /api/curator/festivals/{id}': 'handler-auth',
 
   // === Auth (handles own authentication) ===
   'POST /auth/login': 'auth-flow',
