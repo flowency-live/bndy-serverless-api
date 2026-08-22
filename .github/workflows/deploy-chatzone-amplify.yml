@@ -1,0 +1,131 @@
+name: Deploy consolidated Chatzone via Amplify
+
+on:
+  push:
+    branches:
+      - dropzone-poster-diagnostic
+    paths:
+      - '.github/workflows/deploy-chatzone-amplify.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dropzone-poster-diagnostic
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+
+      - name: Resolve Amplify app region and branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_ID=d26nztin494lzx
+          REGION=''
+          for r in eu-west-2 eu-west-1 us-east-1; do
+            if aws amplify get-app --region "$r" --app-id "$APP_ID" >/tmp/app.json 2>/tmp/app.err; then
+              REGION="$r"
+              break
+            fi
+          done
+          test -n "$REGION"
+          aws amplify get-branch --region "$REGION" --app-id "$APP_ID" --branch-name main >/tmp/branch-before.json
+          echo "AMPLIFY_REGION=$REGION" >> "$GITHUB_ENV"
+          echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
+
+      - name: Start Amplify release
+        shell: bash
+        run: |
+          set -euo pipefail
+          JOB_ID=$(aws amplify start-job --region "$AMPLIFY_REGION" --app-id "$APP_ID" --branch-name main --job-type RELEASE --query 'jobSummary.jobId' --output text)
+          test -n "$JOB_ID" && test "$JOB_ID" != "None"
+          echo "JOB_ID=$JOB_ID" >> "$GITHUB_ENV"
+
+      - name: Wait for deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          FINAL=''
+          for i in $(seq 1 120); do
+            aws amplify get-job --region "$AMPLIFY_REGION" --app-id "$APP_ID" --branch-name main --job-id "$JOB_ID" >/tmp/job.json
+            FINAL=$(jq -r '.job.summary.status' /tmp/job.json)
+            echo "poll=$i status=$FINAL"
+            case "$FINAL" in
+              SUCCEED|FAILED|CANCELLED) break ;;
+            esac
+            sleep 10
+          done
+          test "$FINAL" = 'SUCCEED'
+
+      - name: Smoke test live chat.bndy.live
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f /tmp/index.html /tmp/bundle.txt
+          for i in $(seq 1 30); do
+            if curl -fsS --retry 2 'https://chat.bndy.live/' -o /tmp/index.html; then
+              python - <<'PY' && exit 0 || true
+          import re, urllib.request, pathlib
+          html=pathlib.Path('/tmp/index.html').read_text(errors='replace')
+          srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)["\']',html,re.I)
+          if not srcs: raise SystemExit(2)
+          body=''
+          for src in srcs:
+              target=src if src.startswith('http') else 'https://chat.bndy.live' + ('/' if not src.startswith('/') else '') + src
+              with urllib.request.urlopen(target,timeout=30) as r:
+                  body += r.read().decode('utf-8','replace')
+          pathlib.Path('/tmp/bundle.txt').write_text(body)
+          if 'capture.bndy.co.uk' not in body: raise SystemExit(3)
+          if '/v1/public/captures' not in body: raise SystemExit(4)
+          if '/signals' in body: raise SystemExit(5)
+          PY
+            fi
+            sleep 10
+          done
+          echo 'Live domain did not serve consolidated Capture build' >&2
+          exit 1
+
+      - name: Record result
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          mkdir -p diagnostics
+          python - <<'PY'
+          import json, pathlib, datetime, os
+          def read_json(path):
+              p=pathlib.Path(path)
+              if not p.exists(): return {}
+              try:return json.loads(p.read_text())
+              except:return {}
+          job=read_json('/tmp/job.json').get('job',{})
+          summary=job.get('summary',{})
+          bundle=pathlib.Path('/tmp/bundle.txt').read_text(errors='replace') if pathlib.Path('/tmp/bundle.txt').exists() else ''
+          payload={
+            'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'appId':os.getenv('APP_ID'),
+            'region':os.getenv('AMPLIFY_REGION'),
+            'jobId':os.getenv('JOB_ID'),
+            'jobStatus':summary.get('status'),
+            'sourceUrl':summary.get('sourceUrl'),
+            'commitId':summary.get('commitId'),
+            'liveUrl':'https://chat.bndy.live',
+            'liveHasCaptureApi':'capture.bndy.co.uk' in bundle and '/v1/public/captures' in bundle,
+            'liveHasSignalsApi':'/signals' in bundle,
+          }
+          pathlib.Path('diagnostics/chatzone-amplify-deploy.json').write_text(json.dumps(payload,indent=2))
+          PY
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/chatzone-amplify-deploy.json
+          git commit -m 'Record Amplify Chatzone deployment' || true
+          git push origin HEAD:dropzone-poster-diagnostic
