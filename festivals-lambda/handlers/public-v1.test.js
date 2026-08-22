@@ -2,6 +2,7 @@ const {
   handleGetPublicFestivals,
   handleGetFestivalBySlug,
   scanFestivalSummaries,
+  loadVenuePoints,
   findFestivalBySlug,
   findChildEvents,
   isMissingIndex
@@ -61,6 +62,25 @@ describe('public-v1 festival reads', () => {
     expect(dynamodb.scan.mock.calls[1][0].IndexName).toBeUndefined();
   });
 
+  it('hydrates only live visible venues with usable coordinates', async () => {
+    const dynamodb = {
+      batchGet: jest.fn(() => promiseResult({ Responses: { 'bndy-venues': [
+        { id: 'v1', city: 'Congleton', latitude: 53.16, longitude: -2.21 },
+        { id: 'v2', city: 'Hidden', latitude: 53.17, longitude: -2.22, hidden: true },
+        { id: 'v3', city: 'Brass', latitude: 53.18, longitude: -2.23, publicationScopes: ['brass'] },
+        { id: 'v4', city: 'Broken', latitude: 0, longitude: -2.24 }
+      ] } }))
+    };
+    const result = await loadVenuePoints(dynamodb, [
+      { primaryVenueId: 'v1', venueIds: ['v1', 'v2', 'v3', 'v4'] }
+    ]);
+    expect([...result.values()]).toEqual([{ id: 'v1', city: 'Congleton', lat: 53.16, lng: -2.21 }]);
+    expect(dynamodb.batchGet).toHaveBeenCalledTimes(1);
+    expect(dynamodb.batchGet.mock.calls[0][0].RequestItems['bndy-venues'].Keys).toEqual([
+      { id: 'v1' }, { id: 'v2' }, { id: 'v3' }, { id: 'v4' }
+    ]);
+  });
+
   it('falls back to scan when bySlug is unavailable', async () => {
     const festival = { id: 'f1', entityType: 'festival', slug: 'jazz-weekend', isPublic: true };
     const dynamodb = {
@@ -82,17 +102,29 @@ describe('public-v1 festival reads', () => {
     expect(result).toEqual([event]);
   });
 
-  it('normalises location and venue count in public summaries', async () => {
+  it('normalises location, venue count and embedded venue points in public summaries', async () => {
     const dynamodb = {
       scan: jest.fn(() => promiseResult({ Items: [{
         id: 'f1', entityType: 'festival', isPublic: true, slug: 'jazz', name: 'Jazz',
         startDate: '2026-09-11', endDate: '2026-09-13', town: 'Congleton',
         primaryVenueId: 'v1', venueIds: ['v1', 'v2'], lineup: [{ id: 's1' }]
-      }] }))
+      }] })),
+      batchGet: jest.fn(() => promiseResult({ Responses: { 'bndy-venues': [
+        { id: 'v1', city: 'Congleton', latitude: 53.16, longitude: -2.21 },
+        { id: 'v2', city: 'Congleton', latitude: 53.17, longitude: -2.22 }
+      ] } }))
     };
     const response = await handleGetPublicFestivals({ dynamodb, getCorsHeaders }, { queryStringParameters: {} });
     const body = JSON.parse(response.body);
-    expect(body.festivals[0]).toMatchObject({ location: 'Congleton', venueCount: 2, actCount: 1 });
+    expect(body.festivals[0]).toMatchObject({
+      location: 'Congleton',
+      venueCount: 2,
+      actCount: 1,
+      venuePoints: [
+        { id: 'v1', city: 'Congleton', lat: 53.16, lng: -2.21 },
+        { id: 'v2', city: 'Congleton', lat: 53.17, lng: -2.22 }
+      ]
+    });
     expect(dynamodb.scan.mock.calls[0][0].IndexName).toBe('bySlug');
   });
 
