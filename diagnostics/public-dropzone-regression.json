@@ -1,28 +1,14 @@
 {
-  "recordedAt": "2026-08-22T15:58:39.882147+00:00",
-  "regression": {
-    "captureId": "e106ed9f-ecde-4ad5-a4ee-07ed315732e4",
-    "publicState": "could_not_resolve",
-    "status": "failed",
-    "sourceApp": "chatzone",
-    "mediaMimeType": "image/jpeg",
-    "containsMarvelInResult": false,
-    "containsPistachioNuts": false,
-    "containsBritonFerry": false,
-    "containsExpectedDate": false,
-    "containsExpectedTime": false,
-    "artistLine": null,
-    "eventDetail": null
-  },
-  "hosting": {
-    "route53": [
-      {
-        "Type": "A",
-        "AliasDNSName": "d31tiyfnjihe81.cloudfront.net.",
-        "Values": []
-      }
-    ],
-    "amplify": [],
-    "cloudfront": []
-  }
+  "captureId": "f99115dd-a4fd-4025-9072-dac8353d1b67",
+  "publicState": "already_exists",
+  "status": "processed",
+  "sourceApp": "chatzone",
+  "processingAttempt": 1,
+  "containsMarvelInResult": false,
+  "containsPistachioNuts": true,
+  "containsBritonFerry": true,
+  "containsExpectedDate": true,
+  "containsExpectedTime": true,
+  "artistLine": "Artist: The Pistachio Nuts | matched | 446cb007-749a-421d-a105-c77d25ec2a08",
+  "eventDetail": "- 2026-08-23 18:30 | Briton Ferry Workingmen's Club, Briton Ferry | existing duplicate 1daed617-969e-4b2c-904a-25d50b24dce1 | venue matched"
 }
