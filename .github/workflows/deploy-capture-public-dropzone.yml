@@ -142,3 +142,5 @@ jobs:
       - name: Fail unsuccessful deployment
         if: always() && (steps.params.outcome != 'success' || steps.build.outcome != 'success' || steps.deploy.outcome != 'success' || steps.smoke.outcome != 'success')
         run: exit 1
+
+# deploy trigger: resolved gig details
