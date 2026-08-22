@@ -1,0 +1,14 @@
+{
+  "recordedAt": "2026-08-22T16:24:54.437021+00:00",
+  "stackStatus": "CREATE_IN_PROGRESS",
+  "stackStatusReason": null,
+  "outputs": {},
+  "stackError": null,
+  "records": [
+    {
+      "type": "A",
+      "alias": "d31tiyfnjihe81.cloudfront.net.",
+      "values": []
+    }
+  ]
+}
