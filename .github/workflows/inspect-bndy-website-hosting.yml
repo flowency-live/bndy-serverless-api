@@ -1,0 +1,82 @@
+name: Inspect BNDY website hosting
+
+on:
+  push:
+    branches:
+      - deploy-bndy-workboard
+    paths:
+      - '.github/workflows/inspect-bndy-website-hosting.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: deploy-bndy-workboard
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Inspect Amplify apps and domains
+        shell: bash
+        run: |
+          set +e
+          aws sts get-caller-identity >/tmp/caller.json 2>/tmp/caller.err
+          aws amplify list-apps --region eu-west-2 --max-results 100 >/tmp/apps.json 2>/tmp/apps.err
+          APPS_RC=$?
+          echo "$APPS_RC" >/tmp/apps.rc
+          : >/tmp/domains.jsonl
+          if [ "$APPS_RC" -eq 0 ]; then
+            while read -r id name defaultDomain; do
+              aws amplify list-domain-associations --region eu-west-2 --app-id "$id" --max-results 100 >/tmp/domains-one.json 2>/tmp/domains-one.err
+              RC=$?
+              if [ "$RC" -eq 0 ]; then
+                jq -c --arg id "$id" --arg name "$name" --arg defaultDomain "$defaultDomain" '.domainAssociations[]? | {appId:$id,appName:$name,defaultDomain:$defaultDomain,domainName,status,subDomains}' /tmp/domains-one.json >>/tmp/domains.jsonl
+              else
+                jq -nc --arg id "$id" --arg name "$name" --arg defaultDomain "$defaultDomain" --arg error "$(cat /tmp/domains-one.err)" '{appId:$id,appName:$name,defaultDomain:$defaultDomain,error:$error}' >>/tmp/domains.jsonl
+              fi
+            done < <(jq -r '.apps[] | [.appId,.name,.defaultDomain] | @tsv' /tmp/apps.json)
+          fi
+          exit 0
+      - name: Record
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p diagnostics
+          python - <<'PY'
+          import json, pathlib, datetime
+          def j(path):
+              p=pathlib.Path(path)
+              if not p.exists(): return {}
+              try:return json.loads(p.read_text())
+              except:return {}
+          def t(path):
+              p=pathlib.Path(path)
+              return p.read_text(errors='replace').strip() if p.exists() else None
+          apps=j('/tmp/apps.json').get('apps',[])
+          domains=[]
+          p=pathlib.Path('/tmp/domains.jsonl')
+          if p.exists():
+              for line in p.read_text().splitlines():
+                  try: domains.append(json.loads(line))
+                  except: pass
+          payload={
+            'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'account':j('/tmp/caller.json').get('Account'),
+            'listAppsRc':t('/tmp/apps.rc'),
+            'listAppsError':t('/tmp/apps.err'),
+            'apps':[{'appId':a.get('appId'),'name':a.get('name'),'defaultDomain':a.get('defaultDomain'),'repository':a.get('repository'),'productionBranch':a.get('productionBranch')} for a in apps],
+            'domains':domains
+          }
+          pathlib.Path('diagnostics/website-hosting-inspection.json').write_text(json.dumps(payload,indent=2))
+          PY
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/website-hosting-inspection.json
+          git commit -m 'Record BNDY website hosting inspection' || true
+          git push origin HEAD:deploy-bndy-workboard
