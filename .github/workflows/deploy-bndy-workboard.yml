@@ -1,0 +1,180 @@
+name: Deploy BNDY workboard
+
+on:
+  push:
+    branches:
+      - deploy-bndy-workboard
+    paths:
+      - '.github/workflows/deploy-bndy-workboard.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout ops
+        uses: actions/checkout@v4
+        with:
+          ref: deploy-bndy-workboard
+          path: ops
+
+      - name: Checkout website main
+        uses: actions/checkout@v4
+        with:
+          repository: flowency-live/bndy-website
+          ref: main
+          path: website
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+
+      - name: Build website
+        working-directory: website
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          test -f dist/workboard.html
+          test -f dist/workboard.json
+          grep -q 'KANBAN / SWIMLANES' dist/workboard.html
+          cd dist
+          zip -qr /tmp/bndy-website.zip .
+          test -s /tmp/bndy-website.zip
+
+      - name: Resolve Amplify app owning www.bndy.co.uk
+        shell: bash
+        run: |
+          set -euo pipefail
+          REGION=eu-west-2
+          aws amplify list-apps --region "$REGION" --max-results 100 >/tmp/apps.json
+          : >/tmp/domain-scan.jsonl
+          APP_ID=''
+          APP_NAME=''
+          while read -r id name; do
+            [ -n "$id" ] || continue
+            aws amplify list-domain-associations --region "$REGION" --app-id "$id" --max-results 100 >/tmp/domains.json 2>/dev/null || continue
+            jq -c --arg id "$id" --arg name "$name" '.domainAssociations[]? | {appId:$id,appName:$name,domainName,status,subDomains}' /tmp/domains.json >>/tmp/domain-scan.jsonl
+            if jq -e '.domainAssociations[]? | select(.domainName == "bndy.co.uk" or .domainName == "www.bndy.co.uk") | select((.subDomains // []) | any(.subDomainSetting.prefix == "www") or .domainName == "www.bndy.co.uk")' /tmp/domains.json >/dev/null; then
+              APP_ID="$id"
+              APP_NAME="$name"
+              break
+            fi
+          done < <(jq -r '.apps[] | [.appId,.name] | @tsv' /tmp/apps.json)
+          if [ -z "$APP_ID" ]; then
+            # Fallback to a clearly named website app if the domain association API shape differs.
+            APP_ID=$(jq -r '.apps[] | select((.name|ascii_downcase) == "bndy-website" or (.name|ascii_downcase) == "bndy website") | .appId' /tmp/apps.json | head -1)
+            APP_NAME=$(jq -r --arg id "$APP_ID" '.apps[] | select(.appId==$id) | .name' /tmp/apps.json | head -1)
+          fi
+          test -n "$APP_ID" && test "$APP_ID" != null
+          aws amplify list-branches --region "$REGION" --app-id "$APP_ID" --max-results 100 >/tmp/branches.json
+          BRANCH=$(jq -r '[.branches[] | select(.branchName=="main")][0].branchName // [.branches[] | select(.stage=="PRODUCTION")][0].branchName // .branches[0].branchName // empty' /tmp/branches.json)
+          test -n "$BRANCH"
+          echo "AMPLIFY_REGION=$REGION" >> "$GITHUB_ENV"
+          echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
+          echo "APP_NAME=$APP_NAME" >> "$GITHUB_ENV"
+          echo "AMPLIFY_BRANCH=$BRANCH" >> "$GITHUB_ENV"
+
+      - name: Upload manual Amplify deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws amplify create-deployment --region "$AMPLIFY_REGION" --app-id "$APP_ID" --branch-name "$AMPLIFY_BRANCH" >/tmp/create.json
+          JOB_ID=$(jq -r '.jobId // empty' /tmp/create.json)
+          UPLOAD_URL=$(jq -r '.zipUploadUrl // empty' /tmp/create.json)
+          test -n "$JOB_ID" && test -n "$UPLOAD_URL"
+          echo "JOB_ID=$JOB_ID" >> "$GITHUB_ENV"
+          curl -fsS -X PUT -H 'Content-Type: application/zip' --upload-file /tmp/bndy-website.zip "$UPLOAD_URL"
+          aws amplify start-deployment --region "$AMPLIFY_REGION" --app-id "$APP_ID" --branch-name "$AMPLIFY_BRANCH" --job-id "$JOB_ID" >/tmp/start.json
+
+      - name: Wait for deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          FINAL=''
+          for i in $(seq 1 120); do
+            aws amplify get-job --region "$AMPLIFY_REGION" --app-id "$APP_ID" --branch-name "$AMPLIFY_BRANCH" --job-id "$JOB_ID" >/tmp/job.json
+            FINAL=$(jq -r '.job.summary.status' /tmp/job.json)
+            echo "poll=$i status=$FINAL"
+            case "$FINAL" in SUCCEED|FAILED|CANCELLED) break;; esac
+            sleep 10
+          done
+          test "$FINAL" = SUCCEED
+
+      - name: Smoke test live workboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          PASS=0
+          : >/tmp/workboard.html
+          : >/tmp/workboard.json
+          for i in $(seq 1 36); do
+            HTML_CODE=$(curl -L -sS -o /tmp/workboard.html -w '%{http_code}' 'https://www.bndy.co.uk/workboard' || true)
+            JSON_CODE=$(curl -L -sS -o /tmp/workboard.json -w '%{http_code}' 'https://www.bndy.co.uk/workboard.json' || true)
+            if [ "$HTML_CODE" = 200 ] && [ "$JSON_CODE" = 200 ] && grep -q 'KANBAN / SWIMLANES' /tmp/workboard.html && jq -e '.version == 1 and (.lanes|length) >= 10' /tmp/workboard.json >/dev/null 2>&1; then
+              PASS=1
+              break
+            fi
+            echo "poll=$i html=$HTML_CODE json=$JSON_CODE"
+            sleep 10
+          done
+          test "$PASS" = 1
+
+      - name: Record result
+        if: always()
+        working-directory: ops
+        shell: bash
+        run: |
+          set -u
+          mkdir -p diagnostics
+          python - <<'PY'
+          import json, pathlib, os, datetime, subprocess
+          def read_json(path):
+              p=pathlib.Path(path)
+              if not p.exists(): return {}
+              try:return json.loads(p.read_text())
+              except:return {}
+          def sha():
+              try:return subprocess.check_output(['git','-C','../website','rev-parse','HEAD'],text=True).strip()
+              except:return None
+          job=read_json('/tmp/job.json').get('job',{}).get('summary',{})
+          html=pathlib.Path('/tmp/workboard.html').read_text(errors='replace') if pathlib.Path('/tmp/workboard.html').exists() else ''
+          board=read_json('/tmp/workboard.json')
+          scan=[]
+          p=pathlib.Path('/tmp/domain-scan.jsonl')
+          if p.exists():
+              for line in p.read_text().splitlines():
+                  try: scan.append(json.loads(line))
+                  except: pass
+          payload={
+            'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'websiteCommit':sha(),
+            'appId':os.getenv('APP_ID'),
+            'appName':os.getenv('APP_NAME'),
+            'branch':os.getenv('AMPLIFY_BRANCH'),
+            'jobId':os.getenv('JOB_ID'),
+            'jobStatus':job.get('status'),
+            'liveWorkboard': 'KANBAN / SWIMLANES' in html,
+            'liveJsonVersion':board.get('version'),
+            'liveLaneCount':len(board.get('lanes',[])) if isinstance(board.get('lanes'),list) else None,
+            'domainsSeen':[{'appId':x.get('appId'),'appName':x.get('appName'),'domainName':x.get('domainName'),'status':x.get('status')} for x in scan]
+          }
+          pathlib.Path('diagnostics/workboard-deploy.json').write_text(json.dumps(payload,indent=2))
+          PY
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/workboard-deploy.json
+          git commit -m 'Record BNDY workboard deployment' || true
+          git push origin HEAD:deploy-bndy-workboard
