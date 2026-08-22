@@ -1,0 +1,10 @@
+{
+  "name": "bndy-brass-read-lambda",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.864.0",
+    "@aws-sdk/lib-dynamodb": "^3.864.0"
+  }
+}
