@@ -133,6 +133,7 @@ jobs:
           INTEGRATION_ID=$(aws apigatewayv2 create-integration \
             --api-id "$BNDY_HTTP_API_ID" \
             --integration-type AWS_PROXY \
+            --integration-method POST \
             --integration-uri "$FUNCTION_ARN" \
             --payload-format-version '2.0' \
             --timeout-in-millis 8000 \
