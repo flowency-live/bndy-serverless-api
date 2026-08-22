@@ -119,6 +119,7 @@ jobs:
           if 'capture.bndy.co.uk' not in body: raise SystemExit(3)
           if '/v1/public/captures' not in body: raise SystemExit(4)
           if '/signals' in body: raise SystemExit(5)
+          if 'View gig on bndy.live' not in body: raise SystemExit(6)
           PY
               then OK=1; break; fi
             fi
@@ -165,6 +166,7 @@ jobs:
             'liveUrl':'https://chat.bndy.live',
             'liveHasCaptureApi':'capture.bndy.co.uk' in bundle and '/v1/public/captures' in bundle,
             'liveHasSignalsApi':'/signals' in bundle,
+            'liveHasGigLink':'View gig on bndy.live' in bundle,
           }
           pathlib.Path('diagnostics/chatzone-amplify-deploy.json').write_text(json.dumps(payload,indent=2))
           PY
@@ -173,3 +175,5 @@ jobs:
           git add diagnostics/chatzone-amplify-deploy.json
           git commit -m 'Record Amplify Chatzone deployment' || true
           git push origin HEAD:dropzone-poster-diagnostic
+
+# deploy trigger: result details and gig link
