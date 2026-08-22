@@ -1,18 +1,27 @@
 {
-  "recordedAt": "2026-08-22T16:12:39.372041+00:00",
+  "recordedAt": "2026-08-22T16:14:15.613072+00:00",
   "enrichmentCommit": "7c232eb94a0f30c1682c09bd9f664348669e2f74",
-  "processor": {},
+  "processor": {
+    "LastModified": "2026-08-22T16:14:04.000+0000",
+    "CodeSha256": "PZ9MGtpHdFprIhO83aiyKyTaNsHOaxR+6EhTPkL07Yg=",
+    "Runtime": "nodejs22.x",
+    "State": "Active",
+    "LastUpdateStatus": "Successful"
+  },
   "capture": {
-    "id": null,
-    "status": null,
-    "sourceApp": null,
+    "id": "e106ed9f-ecde-4ad5-a4ee-07ed315732e4",
+    "status": "failed",
+    "sourceApp": "chatzone",
     "processingAttempt": null,
     "media": {
-      "type": null,
-      "mimeType": null,
-      "hasBucket": false,
-      "hasKey": false
+      "type": "image",
+      "mimeType": "image/jpeg",
+      "hasBucket": true,
+      "hasKey": true
     },
-    "noteLines": []
+    "noteLines": [
+      "AWS processor: failed because this image capture has no uploaded image object. Update the Android Capture app and resend.",
+      "AWS processor: failed because this image capture has no uploaded image object. Update the Android Capture app and resend."
+    ]
   }
 }
