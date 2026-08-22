@@ -1,0 +1,80 @@
+{
+  "result": "RECENT_CAPTURE_STATUS_DIAGNOSTIC",
+  "inspectedAt": "2026-08-22T11:01:19Z",
+  "cutoff": "2026-08-22T10:45:00Z",
+  "scanner": {
+    "discovered": 0,
+    "queued": 0,
+    "ignored": 0,
+    "failed": 0,
+    "duplicates": 0
+  },
+  "before": [
+    {
+      "id": "49d685c6-9b0c-41f8-b605-9f38eef1c0c2",
+      "capturedAt": "2026-08-22T10:55:40.350097Z",
+      "receivedAt": "2026-08-22T10:56:02.345182Z",
+      "updatedAt": "2026-08-22T10:59:09.446069Z",
+      "status": "processed",
+      "sharedUrl": "https://www.facebook.com/share/18FZZvzpfF/",
+      "sharedText": "https://www.facebook.com/share/18FZZvzpfF/",
+      "mimeType": "text/plain",
+      "sourceApp": null,
+      "suggestedEntityType": "unknown",
+      "note": "AWS processor: completed.\nCapture classification: event\nArtist: Millhouse | matched | 7be3d037-1960-4178-a7ad-ff98295f430e\nFacebook: https://www.facebook.com/pages/Millhouse/87941642801\nLocation: Cheshire, United Kingdom (regional)\nArtist type: Band; act type: Covers\nCanonical capture URL: https://www.facebook.com/events/1052283023872867/\nBio: Millhouse is a 4-piece indie, rock, and punk cover band based in Cheshire, UK.\nEvents: 0 created, 0 existing duplicates, 1 held.\nEvent detail:\n- 2026-10-17 The Queens Hotel: held (admission unknown)\nNo new venues.",
+      "processingAttempt": 1,
+      "processingWorkerId": "bndy-capture-scan",
+      "leaseUntil": "2026-08-22T11:18:36.865Z"
+    },
+    {
+      "id": "84ef202f-1105-4363-a6da-3d284a219843",
+      "capturedAt": "2026-08-22T10:49:52.426851Z",
+      "receivedAt": "2026-08-22T10:53:59.838479Z",
+      "updatedAt": "2026-08-22T10:56:27.542013Z",
+      "status": "processed",
+      "sharedUrl": "https://www.facebook.com/share/1BxtH59BhN/",
+      "sharedText": "https://www.facebook.com/share/1BxtH59BhN/",
+      "mimeType": "text/plain",
+      "sourceApp": null,
+      "suggestedEntityType": "unknown",
+      "note": "AWS processor: completed.\nCapture classification: event\nArtist: Metrobeats | created | 17f5409d-1029-49d7-ba98-e2725a8f96d3\nFacebook: https://www.facebook.com/metrobeatsband/\nLocation: Swansea (city)\nArtist type: Band; act type: Covers\nCanonical capture URL: https://www.facebook.com/events/1047819011559892/\nBio: 4-piece South Wales live covers band playing classics from the 60s through to the 00s including rock, pop, soul and blues.\nEvents: 1 created, 0 existing duplicates, 0 held.\nEvent detail:\n- 2026-08-22 16:30 | The Railway Inn, Upper Killay | created 7b7139b2-da3d-492e-b31b-9d808488cbf6 | venue newly created\nNew venues:\n- The Railway Inn, Upper Killay (new)",
+      "processingAttempt": 1,
+      "processingWorkerId": "bndy-capture-scan",
+      "leaseUntil": "2026-08-22T11:16:01.563Z"
+    }
+  ],
+  "after": [
+    {
+      "id": "49d685c6-9b0c-41f8-b605-9f38eef1c0c2",
+      "capturedAt": "2026-08-22T10:55:40.350097Z",
+      "receivedAt": "2026-08-22T10:56:02.345182Z",
+      "updatedAt": "2026-08-22T10:59:09.446069Z",
+      "status": "processed",
+      "sharedUrl": "https://www.facebook.com/share/18FZZvzpfF/",
+      "sharedText": "https://www.facebook.com/share/18FZZvzpfF/",
+      "mimeType": "text/plain",
+      "sourceApp": null,
+      "suggestedEntityType": "unknown",
+      "note": "AWS processor: completed.\nCapture classification: event\nArtist: Millhouse | matched | 7be3d037-1960-4178-a7ad-ff98295f430e\nFacebook: https://www.facebook.com/pages/Millhouse/87941642801\nLocation: Cheshire, United Kingdom (regional)\nArtist type: Band; act type: Covers\nCanonical capture URL: https://www.facebook.com/events/1052283023872867/\nBio: Millhouse is a 4-piece indie, rock, and punk cover band based in Cheshire, UK.\nEvents: 0 created, 0 existing duplicates, 1 held.\nEvent detail:\n- 2026-10-17 The Queens Hotel: held (admission unknown)\nNo new venues.",
+      "processingAttempt": 1,
+      "processingWorkerId": "bndy-capture-scan",
+      "leaseUntil": "2026-08-22T11:18:36.865Z"
+    },
+    {
+      "id": "84ef202f-1105-4363-a6da-3d284a219843",
+      "capturedAt": "2026-08-22T10:49:52.426851Z",
+      "receivedAt": "2026-08-22T10:53:59.838479Z",
+      "updatedAt": "2026-08-22T10:56:27.542013Z",
+      "status": "processed",
+      "sharedUrl": "https://www.facebook.com/share/1BxtH59BhN/",
+      "sharedText": "https://www.facebook.com/share/1BxtH59BhN/",
+      "mimeType": "text/plain",
+      "sourceApp": null,
+      "suggestedEntityType": "unknown",
+      "note": "AWS processor: completed.\nCapture classification: event\nArtist: Metrobeats | created | 17f5409d-1029-49d7-ba98-e2725a8f96d3\nFacebook: https://www.facebook.com/metrobeatsband/\nLocation: Swansea (city)\nArtist type: Band; act type: Covers\nCanonical capture URL: https://www.facebook.com/events/1047819011559892/\nBio: 4-piece South Wales live covers band playing classics from the 60s through to the 00s including rock, pop, soul and blues.\nEvents: 1 created, 0 existing duplicates, 0 held.\nEvent detail:\n- 2026-08-22 16:30 | The Railway Inn, Upper Killay | created 7b7139b2-da3d-492e-b31b-9d808488cbf6 | venue newly created\nNew venues:\n- The Railway Inn, Upper Killay (new)",
+      "processingAttempt": 1,
+      "processingWorkerId": "bndy-capture-scan",
+      "leaseUntil": "2026-08-22T11:16:01.563Z"
+    }
+  ]
+}
