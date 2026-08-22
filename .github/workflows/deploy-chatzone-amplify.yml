@@ -38,22 +38,28 @@ jobs:
             fi
           done
           test -n "$REGION"
-          aws amplify get-branch --region "$REGION" --app-id "$APP_ID" --branch-name main >/tmp/branch-before.json
+          aws amplify get-branch --region "$REGION" --app-id "$APP_ID" --branch-name main >/tmp/branch-before.json 2>/tmp/branch.err
           echo "AMPLIFY_REGION=$REGION" >> "$GITHUB_ENV"
           echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
 
       - name: Start Amplify release
         shell: bash
         run: |
-          set -euo pipefail
-          JOB_ID=$(aws amplify start-job --region "$AMPLIFY_REGION" --app-id "$APP_ID" --branch-name main --job-type RELEASE --query 'jobSummary.jobId' --output text)
-          test -n "$JOB_ID" && test "$JOB_ID" != "None"
-          echo "JOB_ID=$JOB_ID" >> "$GITHUB_ENV"
+          set +e
+          aws amplify start-job --region "$AMPLIFY_REGION" --app-id "$APP_ID" --branch-name main --job-type RELEASE >/tmp/start-job.json 2>/tmp/start-job.err
+          RC=$?
+          echo "$RC" >/tmp/start-job.rc
+          if [ "$RC" -eq 0 ]; then
+            JOB_ID=$(jq -r '.jobSummary.jobId // empty' /tmp/start-job.json)
+            if [ -n "$JOB_ID" ]; then echo "JOB_ID=$JOB_ID" >> "$GITHUB_ENV"; fi
+          fi
+          exit "$RC"
 
       - name: Wait for deployment
         shell: bash
         run: |
           set -euo pipefail
+          test -n "${JOB_ID:-}"
           FINAL=''
           for i in $(seq 1 120); do
             aws amplify get-job --region "$AMPLIFY_REGION" --app-id "$APP_ID" --branch-name main --job-id "$JOB_ID" >/tmp/job.json
@@ -107,13 +113,27 @@ jobs:
               if not p.exists(): return {}
               try:return json.loads(p.read_text())
               except:return {}
+          def read_text(path):
+              p=pathlib.Path(path)
+              return p.read_text(errors='replace').strip() if p.exists() else None
           job=read_json('/tmp/job.json').get('job',{})
           summary=job.get('summary',{})
-          bundle=pathlib.Path('/tmp/bundle.txt').read_text(errors='replace') if pathlib.Path('/tmp/bundle.txt').exists() else ''
+          bundle=read_text('/tmp/bundle.txt') or ''
+          branch=read_json('/tmp/branch-before.json').get('branch',{})
+          start=read_json('/tmp/start-job.json')
           payload={
             'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'appId':os.getenv('APP_ID'),
             'region':os.getenv('AMPLIFY_REGION'),
+            'branch':{
+              'branchName':branch.get('branchName'),
+              'enableAutoBuild':branch.get('enableAutoBuild'),
+              'stage':branch.get('stage'),
+              'activeJobId':branch.get('activeJobId'),
+            },
+            'startJobRc':read_text('/tmp/start-job.rc'),
+            'startJobError':read_text('/tmp/start-job.err'),
+            'startJobResponse':start,
             'jobId':os.getenv('JOB_ID'),
             'jobStatus':summary.get('status'),
             'sourceUrl':summary.get('sourceUrl'),
