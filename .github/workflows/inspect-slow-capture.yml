@@ -1,0 +1,99 @@
+name: Inspect slow Dropzone capture
+
+on:
+  push:
+    branches:
+      - dropzone-poster-diagnostic
+    paths:
+      - '.github/workflows/inspect-slow-capture.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dropzone-poster-diagnostic
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Inspect capture and runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          ID=0739e6ff-fe08-41f3-baf4-3e2841dd42d2
+          TOKEN_JSON="$(aws secretsmanager get-secret-value --secret-id bndy/capture-service --query SecretString --output text)"
+          TOKEN="$(jq -r '.token // .CAPTURE_TOKEN' <<<"$TOKEN_JSON")"
+          test -n "$TOKEN" && test "$TOKEN" != null
+          echo "::add-mask::$TOKEN"
+          curl -fsS -H "Authorization: Bearer $TOKEN" "https://capture.bndy.co.uk/v1/captures/$ID" >/tmp/capture.json
+
+          # Get queue attributes if the enrichment stack is available.
+          STACK=BndyEnrichmentStack
+          QUEUE_URL=$(aws cloudformation describe-stacks --stack-name "$STACK" --query "Stacks[0].Outputs[?OutputKey=='CaptureQueueUrl'].OutputValue | [0]" --output text 2>/dev/null || true)
+          if [ -n "$QUEUE_URL" ] && [ "$QUEUE_URL" != "None" ]; then
+            aws sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names All >/tmp/queue.json || true
+          else
+            echo '{}' >/tmp/queue.json
+          fi
+
+          START_MS=$(( ($(date +%s) - 1800) * 1000 ))
+          aws logs filter-log-events --log-group-name /aws/lambda/bndy-capture-processor --start-time "$START_MS" --filter-pattern '0739e6ff-fe08-41f3-baf4-3e2841dd42d2' --limit 100 >/tmp/processor-logs.json 2>/tmp/processor-logs.err || echo '{"events":[]}' >/tmp/processor-logs.json
+          aws logs filter-log-events --log-group-name /aws/lambda/bndy-capture-scan --start-time "$START_MS" --limit 200 >/tmp/scanner-logs.json 2>/tmp/scanner-logs.err || echo '{"events":[]}' >/tmp/scanner-logs.json
+          aws lambda get-function-configuration --function-name bndy-capture-processor --query '{Timeout:Timeout,MemorySize:MemorySize,LastModified:LastModified,State:State,LastUpdateStatus:LastUpdateStatus}' --output json >/tmp/processor-config.json
+          aws lambda get-function-configuration --function-name bndy-capture-scan --query '{Timeout:Timeout,MemorySize:MemorySize,LastModified:LastModified,State:State,LastUpdateStatus:LastUpdateStatus}' --output json >/tmp/scanner-config.json
+
+          mkdir -p diagnostics
+          python - <<'PY'
+          import json, pathlib, datetime
+          def read(p):
+              try:return json.loads(pathlib.Path(p).read_text())
+              except:return {}
+          raw=read('/tmp/capture.json')
+          c=raw.get('capture',raw)
+          note=str(c.get('note') or '')
+          proc=read('/tmp/processor-logs.json').get('events',[])
+          scan=read('/tmp/scanner-logs.json').get('events',[])
+          q=read('/tmp/queue.json').get('Attributes',{})
+          def clean_events(events):
+              out=[]
+              for e in events[-50:]:
+                  msg=str(e.get('message') or '').strip()
+                  out.append({'timestamp':e.get('timestamp'),'message':msg[:2000]})
+              return out
+          payload={
+            'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'capture':{
+              'id':c.get('id'),'status':c.get('status'),'sourceApp':c.get('sourceApp'),
+              'capturedAt':c.get('capturedAt'),'receivedAt':c.get('receivedAt'),'updatedAt':c.get('updatedAt'),
+              'processingAttempt':c.get('processingAttempt'),'processingOwner':c.get('processingOwner'),
+              'leaseExpiresAt':c.get('leaseExpiresAt'),
+              'media':c.get('media'),
+              'noteLines':[x[:2000] for x in note.splitlines() if x.strip()],
+            },
+            'queue':{
+              'ApproximateNumberOfMessages':q.get('ApproximateNumberOfMessages'),
+              'ApproximateNumberOfMessagesNotVisible':q.get('ApproximateNumberOfMessagesNotVisible'),
+              'ApproximateNumberOfMessagesDelayed':q.get('ApproximateNumberOfMessagesDelayed'),
+            },
+            'processorConfig':read('/tmp/processor-config.json'),
+            'scannerConfig':read('/tmp/scanner-config.json'),
+            'processorLogs':clean_events(proc),
+            'scannerLogs':clean_events(scan),
+          }
+          pathlib.Path('diagnostics/slow-dropzone-capture.json').write_text(json.dumps(payload,indent=2))
+          print(json.dumps(payload,indent=2))
+          PY
+      - name: Record
+        if: always()
+        run: |
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/slow-dropzone-capture.json
+          git commit -m 'Record slow Dropzone capture inspection' || true
+          git push origin HEAD:dropzone-poster-diagnostic
