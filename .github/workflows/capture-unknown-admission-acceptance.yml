@@ -1,4 +1,5 @@
 name: capture-unknown-admission-acceptance
+# Trigger production acceptance after the workflow is registered on master.
 
 on:
   push:
