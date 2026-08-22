@@ -1,0 +1,35 @@
+{
+  "result": "FACEBOOK_EVENT_STABILITY_ACCEPTANCE",
+  "inspectedAt": "2026-08-22T11:36:42Z",
+  "before": {
+    "id": "49d685c6-9b0c-41f8-b605-9f38eef1c0c2",
+    "status": "processed",
+    "sharedUrl": "https://www.facebook.com/share/18FZZvzpfF/",
+    "processingAttempt": 4
+  },
+  "run1": {
+    "status": "processing",
+    "processingAttempt": 5,
+    "note": "",
+    "scanner": {
+      "discovered": 1,
+      "queued": 1,
+      "ignored": 0,
+      "failed": 0,
+      "duplicates": 0
+    }
+  },
+  "run2": {
+    "status": null,
+    "processingAttempt": null,
+    "note": "",
+    "scanner": {}
+  },
+  "processor": {
+    "LastModified": "2026-08-22T11:29:11.000+0000",
+    "CodeSha256": "VvL1LtoyE1q/J4KFQixGewhbp14LbWCn8GLhitMiFCw=",
+    "Runtime": "nodejs22.x",
+    "State": "Active",
+    "LastUpdateStatus": "Successful"
+  }
+}
