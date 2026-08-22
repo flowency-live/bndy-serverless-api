@@ -10,6 +10,9 @@ on:
       - 'artists-lambda/lib/data-quality.js'
       - 'artists-lambda/package.json'
       - 'artists-lambda/package-lock.json'
+      - 'shared/identity/identity.js'
+      - 'shared/identity/data-quality.js'
+      - 'shared/identity/check-sync.test.js'
       - 'source-inspector-template.yaml'
       - '.github/workflows/deploy-source-inspector.yml'
   workflow_dispatch:
@@ -35,6 +38,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: artists-lambda/package-lock.json
+
+      - name: Install source inspector test dependencies
+        working-directory: artists-lambda
+        run: npm ci --legacy-peer-deps
+
+      - name: Test source inspector
+        working-directory: artists-lambda
+        run: node --test source-inspector.test.js
+
+      - name: Verify shared identity copies
+        run: node shared/identity/check-sync.test.js
+
+      - name: Keep production dependencies only
+        working-directory: artists-lambda
+        run: npm prune --omit=dev --ignore-scripts
 
       - name: Setup SAM CLI
         uses: aws-actions/setup-sam@v2
@@ -47,10 +67,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Install source inspector dependencies
-        working-directory: artists-lambda
-        run: npm install --production --legacy-peer-deps --ignore-scripts
 
       - name: Resolve existing BNDY HTTP API
         shell: bash
@@ -116,7 +132,7 @@ jobs:
             -H 'Accept: application/vnd.github+json' \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
-            -d '{"state":"success","context":"source-inspector/deploy","description":"Companion stack deployed and smoke-tested"}'
+            -d '{"state":"success","context":"source-inspector/deploy","description":"Tests passed; companion stack deployed and smoke-tested"}'
 
       - name: Mark source inspector deployment failed
         if: failure()
@@ -129,4 +145,4 @@ jobs:
             -H 'Accept: application/vnd.github+json' \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
-            -d '{"state":"failure","context":"source-inspector/deploy","description":"Companion stack deployment or smoke test failed"}'
+            -d '{"state":"failure","context":"source-inspector/deploy","description":"Source inspector test, deploy or smoke test failed"}'
