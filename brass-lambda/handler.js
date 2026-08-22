@@ -6,7 +6,6 @@ const dynamodb = new AWS.DynamoDB.DocumentClient({ region: process.env.AWS_REGIO
 const ARTISTS_TABLE = process.env.ARTISTS_TABLE || 'bndy-artists';
 const EVENTS_TABLE = process.env.EVENTS_TABLE || 'bndy-events';
 const VENUES_TABLE = process.env.VENUES_TABLE || 'bndy-venues';
-const PRODUCTIONS_TABLE = process.env.PRODUCTIONS_TABLE || 'bndy-productions';
 
 const ALLOWED_ORIGINS = new Set([
   'https://brass.bndy.live',
@@ -75,19 +74,24 @@ function publicBand(item) {
   };
 }
 
-function publicProduction(item) {
+function slugify(value) {
+  return String(value || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function publicProduction(act, performerId) {
   return {
-    id: item.id,
-    performerId: item.performerId,
-    name: item.name,
-    slug: item.slug,
-    productionKind: item.productionKind || 'other',
-    description: item.description || '',
-    imageUrl: item.imageUrl || null,
-    websiteUrl: item.websiteUrl || null,
-    status: item.status || 'active',
-    publicationScopes: item.publicationScopes || ['brass'],
-    provenance: item.provenance || null
+    id: act.id,
+    performerId,
+    name: act.name,
+    slug: act.slug || slugify(act.name),
+    productionKind: act.productionKind || act.kind || 'other',
+    description: act.description || '',
+    imageUrl: act.imageUrl || null,
+    websiteUrl: act.websiteUrl || null,
+    status: act.status || 'active',
+    publicationScopes: ['brass'],
+    isDefault: act.isDefault === true,
+    provenance: act.provenance || null
   };
 }
 
@@ -115,7 +119,7 @@ function publicFestival(item) {
 async function getBands(event) {
   const items = await scanAll({
     TableName: ARTISTS_TABLE,
-    ProjectionExpression: 'id,#name,artist_type,artistType,performerKind,publicationScopes,#names,name_variants,#location,locationLat,locationLng,locationType,profileImageUrl,bio,websiteUrl,facebookUrl,instagramUrl,socialMediaUrls,domainProfiles,claimStatus,owner_user_id,isVerified,#source,createdAt,updated_at,updatedAt,hidden',
+    ProjectionExpression: 'id,#name,artist_type,artistType,performerKind,publicationScopes,#names,name_variants,#location,locationLat,locationLng,locationType,profileImageUrl,bio,websiteUrl,facebookUrl,instagramUrl,socialMediaUrls,domainProfiles,claimStatus,owner_user_id,isVerified,#source,createdAt,updated_at,updatedAt,hidden,acts',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#names': 'names',
@@ -161,6 +165,8 @@ async function getConcerts(event) {
     const artistId = item.artistId || item.artist_id || null;
     const artist = artistId ? artistById.get(artistId) : null;
     const venue = item.venueId ? venueById.get(item.venueId) : null;
+    const productionId = item.productionId || item.actId || item.act_id || null;
+    const act = productionId && Array.isArray(artist?.acts) ? artist.acts.find((candidate) => candidate.id === productionId) : null;
     return {
       id: item.id,
       title: item.title || item.name || artist?.name || 'Concert',
@@ -180,8 +186,8 @@ async function getConcerts(event) {
       cancelled: item.cancelled === true,
       festivalId: item.festivalId || null,
       festivalName: item.festivalName || null,
-      productionId: item.productionId || null,
-      productionName: item.productionName || null,
+      productionId,
+      productionName: item.productionName || item.actName || act?.name || null,
       conductorName: item.conductorName || null,
       publicationScopes: item.publicationScopes,
       source: item.source || null,
@@ -204,10 +210,15 @@ async function getFestivals(event) {
 
 async function getProductions(event) {
   const bandId = event.queryStringParameters?.bandId;
-  const items = await scanAll({ TableName: PRODUCTIONS_TABLE });
-  const productions = items
-    .filter((item) => item.status !== 'inactive' && hasScope(item, 'brass') && (!bandId || item.performerId === bandId))
-    .map(publicProduction)
+  const artists = await scanAll({
+    TableName: ARTISTS_TABLE,
+    ProjectionExpression: 'id,performerKind,publicationScopes,hidden,acts'
+  });
+  const productions = artists
+    .filter((artist) => artist.hidden !== true && artist.performerKind === 'brass_band' && hasScope(artist, 'brass') && (!bandId || artist.id === bandId))
+    .flatMap((artist) => (Array.isArray(artist.acts) ? artist.acts : [])
+      .filter((act) => act && act.id && act.name && act.status !== 'inactive')
+      .map((act) => publicProduction(act, artist.id)))
     .sort((a, b) => a.name.localeCompare(b.name, 'en-GB', { sensitivity: 'base' }));
   return response(event, 200, productions);
 }
