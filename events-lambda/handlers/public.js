@@ -14,6 +14,7 @@ const { resolveTicketing } = require('./ticketing-resolution');
 const { computeGeohashFields } = require('../lib/geohash');
 const { parseBbox, validateDateWindow, planBboxQuery, GH6_INDEX } = require('../lib/geo-query');
 const { verifyMembership } = require('../lib/auth');
+const { hasPrivilegedIngestionFields, validateScopedIngestion, editionMetadata } = require('../lib/edition-domain');
 const { triggerNotification } = require('../lib/notifications');
 const { jsonResponse } = require('../lib/http-response');
 const { batchGetByIds } = require('../lib/batch-get');
@@ -847,6 +848,13 @@ async function handleCreateCommunityEvent(deps, event) {
 
   try {
     const body = JSON.parse(event.body);
+    if (hasPrivilegedIngestionFields(body) && !event.__allowScopedIngestion) {
+      return { statusCode: 403, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'Scoped ingestion fields require MCP service authentication' }) };
+    }
+    if (event.__allowScopedIngestion) {
+      const scopedError = validateScopedIngestion(body, 'event');
+      if (scopedError) return { statusCode: 400, headers: getCorsHeaders(event), body: JSON.stringify({ error: scopedError }) };
+    }
     const {
       artistId, artistIds, venueId, date, startTime, endTime, title, isPublic, source, isOpenMic,
       // Enrichment fields (parity with edit_event)
@@ -923,7 +931,8 @@ async function handleCreateCommunityEvent(deps, event) {
             existingEventTitle: duplicateByExtId.title,
             existingDate: duplicateByExtId.date,
             existingStartTime: duplicateByExtId.startTime,
-            matchedExternalId: duplicateByExtId.matchedExternalId
+            matchedExternalId: duplicateByExtId.matchedExternalId,
+            editionMetadata: editionMetadata(duplicateByExtId)
           })
         };
       }
@@ -942,7 +951,8 @@ async function handleCreateCommunityEvent(deps, event) {
             message: `An event with this artist at this venue on ${date} already exists (${duplicateEvent.startTime || 'time unknown'})`,
             existingEventId: duplicateEvent.id,
             existingEventTitle: duplicateEvent.title,
-            existingStartTime: duplicateEvent.startTime
+            existingStartTime: duplicateEvent.startTime,
+            editionMetadata: editionMetadata(duplicateEvent)
           })
         };
       }
@@ -1021,6 +1031,14 @@ async function handleCreateCommunityEvent(deps, event) {
       ...(stageId !== undefined && { stageId }),
       ...(billing !== undefined && { billing }),
       ...(billingOrder !== undefined && { billingOrder }),
+
+      ...(event.__allowScopedIngestion && {
+        publicationScopes: body.publicationScopes,
+        eventKind: body.eventKind,
+        ...(body.productionId !== undefined && { productionId: body.productionId }),
+        ...(body.productionName !== undefined && { productionName: body.productionName }),
+        ...(body.conductorName !== undefined && { conductorName: body.conductorName })
+      }),
 
       // Community event flags
       source: source || 'community_wizard',

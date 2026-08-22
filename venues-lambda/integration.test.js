@@ -316,3 +316,42 @@ describe('Venues Integration API', () => {
     });
   });
 });
+
+describe('edition-scoped venue find-or-create', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.MCP_SERVICE_TOKEN = 'test-service-token';
+    mockDynamoDB.scan.mockResolvedValue({ Items: [] });
+    mockDynamoDB.transactWrite.mockResolvedValue({});
+  });
+  const payload = {
+    name: 'Atomic Concert Hall', city: 'Stoke', address: '1 Music Way',
+    googlePlaceId: 'ChIJ_atomic_concert_hall', latitude: 53.01, longitude: -2.18,
+    publicationScopes: ['brass'], discoveryScopes: [], venueKind: 'concert_hall'
+  };
+  const eventFor = (path, bearer) => ({
+    requestContext: { http: { method: 'POST', path } },
+    headers: bearer ? { Authorization: `Bearer ${bearer}` } : {},
+    body: JSON.stringify(payload)
+  });
+
+  it('rejects privileged fields on a non-service route', async () => {
+    const res = await handler(eventFor('/api/community/venues/find-or-create'), {});
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('atomically stores brass-safe venue scopes through the existing gate', async () => {
+    const res = await handler(eventFor('/api/venues/find-or-create/mcp', 'test-service-token'), {});
+    expect(res.statusCode).toBe(201);
+    const put = mockDynamoDB.transactWrite.mock.calls[0][0].TransactItems.find(i => i.Put?.TableName === 'bndy-venues').Put.Item;
+    expect(put).toMatchObject({ publicationScopes: ['brass'], discoveryScopes: [], venueKind: 'concert_hall' });
+  });
+
+  it('returns an existing venue scopes without widening them', async () => {
+    mockDynamoDB.scan.mockResolvedValue({ Items: [{ id: 'live-v', name: payload.name, google_place_id: payload.googlePlaceId, publicationScopes: ['live'], discoveryScopes: ['live'] }] });
+    const res = await handler(eventFor('/api/venues/find-or-create/mcp', 'test-service-token'), {});
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toMatchObject({ publicationScopes: ['live'], discoveryScopes: ['live'] });
+    expect(mockDynamoDB.transactWrite).not.toHaveBeenCalled();
+  });
+});

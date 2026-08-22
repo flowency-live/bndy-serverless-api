@@ -85,6 +85,12 @@ describe('Multi-Artist Events', () => {
     body: JSON.stringify(body)
   });
 
+  const createScopedEvent = (body, token = 'scoped-event-token') => ({
+    requestContext: { http: { method: 'POST', path: '/api/events/community/mcp' } },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body)
+  });
+
   const createGetPublicEventsEvent = (queryParams = {}) => ({
     requestContext: {
       http: {
@@ -121,6 +127,7 @@ describe('Multi-Artist Events', () => {
     const mockArtist4 = { id: 'artist-4', name: 'Rock Band' };
 
     beforeEach(() => {
+      process.env.MCP_SERVICE_TOKEN = 'scoped-event-token';
       // Track created events for verification read-back
       let createdEvents = {};
 
@@ -161,6 +168,23 @@ describe('Multi-Artist Events', () => {
         }
         return Promise.resolve({});
       });
+    });
+
+    it('rejects scoped fields on the ordinary community route', async () => {
+      const res = await handler(createCommunityEvent({ artistId: 'artist-1', venueId: 'venue-123', date: '2025-06-15', startTime: '20:00', publicationScopes: ['brass'] }), {});
+      expect(res.statusCode).toBe(403);
+      expect(mockDynamoDB.transactWrite).not.toHaveBeenCalled();
+    });
+
+    it('stores brass and optional concert metadata in the initial gated write', async () => {
+      const res = await handler(createScopedEvent({
+        artistId: 'artist-1', venueId: 'venue-123', date: '2025-06-16', startTime: '20:00',
+        publicationScopes: ['brass'], eventKind: 'concert', productionId: null,
+        productionName: 'Test Production', conductorName: 'Test Conductor'
+      }), {});
+      expect(res.statusCode).toBe(201);
+      const put = mockDynamoDB.transactWrite.mock.calls[0][0].TransactItems.find(i => i.Put?.TableName === 'bndy-events').Put.Item;
+      expect(put).toMatchObject({ publicationScopes: ['brass'], eventKind: 'concert', productionId: null, productionName: 'Test Production', conductorName: 'Test Conductor' });
     });
 
     it('should store collaboratingArtistIds when multiple artists provided', async () => {

@@ -108,6 +108,13 @@ exports.handler = async (event, context) => {
       return await handleGetVenueEvents(deps, event);
     }
 
+    if (routeKey.match(/^POST \/api\/events\/community\/mcp$/)) {
+      const mcpAuth = requireMcpAuth(deps, event);
+      if (mcpAuth.statusCode) return mcpAuth;
+      event.__allowScopedIngestion = true;
+      return await handleCreateCommunityEvent(deps, event);
+    }
+
     // SEC-COMMUNITY: Also handles /api/community/events (public wizard namespace)
     if (routeKey.match(/POST \/api\/events\/community/) || routeKey.match(/POST \/api\/community\/events$/)) {
       return await handleCreateCommunityEvent(deps, event);

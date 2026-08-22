@@ -23,6 +23,7 @@ const {
 } = require('./fuzzy-matcher');
 const { scanAll } = require('./scan-all');
 const { venuePlaceKey } = require('./identity');
+const { hasPrivilegedIngestionFields, validateScopedIngestion, editionMetadata } = require('./edition-domain');
 const { gatedPut, duplicateResponseBody } = require('./unique-gate');
 
 /**
@@ -42,7 +43,8 @@ function formatVenueResponse(venue) {
     googlePlaceId: venue.google_place_id || null,
     website: venue.website || '',
     validated: venue.validated || false,
-    externalIds: venue.external_ids || []
+    externalIds: venue.external_ids || [],
+    ...editionMetadata(venue)
   };
 }
 
@@ -76,6 +78,13 @@ async function triggerVenueEnrichment(lambda, venueId) {
  */
 async function handleFindOrCreateVenue(deps, venueData, event) {
   const { dynamodb, lambda, getCorsHeaders } = deps;
+  if (hasPrivilegedIngestionFields(venueData) && !event.__allowScopedIngestion) {
+    return { statusCode: 403, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'Scoped ingestion fields require MCP service authentication' }) };
+  }
+  if (event.__allowScopedIngestion) {
+    const scopedError = validateScopedIngestion(venueData, 'venue');
+    if (scopedError) return { statusCode: 400, headers: getCorsHeaders(event), body: JSON.stringify({ error: scopedError }) };
+  }
 
   console.log('[Venues] Venues Lambda: Find-or-create venue with deduplication');
   // ADR-021: canCreate defaults true (backwards compat); runner passes false to prevent auto-create
@@ -137,7 +146,8 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
           validated: googlePlaceMatch.validated,
           externalIds: mergedExternalIds,
           matchConfidence: 100,
-          matchMethod: 'google_place_id'
+          matchMethod: 'google_place_id',
+          ...editionMetadata(googlePlaceMatch)
         };
         return {
           statusCode: 200,
@@ -197,6 +207,7 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
                 externalIds: mergedExternalIds,
                 matchConfidence: 90,
                 matchMethod: 'location_and_name',
+                ...editionMetadata(venue),
                 matchDetails: { nameSimilarity: nameSimilarity.toFixed(1) }
               };
               return {
@@ -252,6 +263,7 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
             externalIds: mergedExternalIds,
             matchConfidence: 70,
             matchMethod: 'name_and_address_tokens',
+            ...editionMetadata(venue),
             matchDetails: {
               nameSimilarity: nameSimilarity.toFixed(1),
               addressOverlap: addressOverlap.toFixed(1)
@@ -349,6 +361,7 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
               externalIds: mergedExternalIds,
               matchConfidence: 100,
               matchMethod: 'google_place_id',
+              ...editionMetadata(googlePlaceMatch),
             };
             return {
               statusCode: 200,
@@ -460,7 +473,12 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
       // AI creation flags + B4: community wizard venues need review
       ai_created: venueData.ai_created || false,
       needs_review: venueData.needs_review || venueData.source === 'community_wizard' || false,
-      created_source: venueData.created_source || venueData.source || 'backstage_wizard'
+      created_source: venueData.created_source || venueData.source || 'backstage_wizard',
+      ...(event.__allowScopedIngestion && {
+        publicationScopes: venueData.publicationScopes,
+        discoveryScopes: venueData.discoveryScopes,
+        ...(venueData.venueKind !== undefined && { venueKind: venueData.venueKind })
+      })
     };
 
     // HARD GATE (2026-07-27): venue UID = google_place_id. The sentinel
@@ -512,7 +530,8 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
       validated: newVenue.validated,
       externalIds: newVenue.external_ids,
       matchConfidence: 0,
-      matchMethod: 'new_venue_created'
+      matchMethod: 'new_venue_created',
+      ...editionMetadata(newVenue)
     };
 
     return {

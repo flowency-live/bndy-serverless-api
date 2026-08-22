@@ -131,6 +131,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/find-or-create
             Method: POST
+        FindOrCreateArtistMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/find-or-create/mcp
+            Method: POST
         # SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)
         CommunityFindOrCreateArtist:
           Type: HttpApi
@@ -255,6 +261,12 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/events/community
+            Method: POST
+        CreateCommunityEventMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/events/community/mcp
             Method: POST
         # SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited, honeypot+time-trap)
         CommunityCreateEvent:
@@ -593,6 +605,12 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues/find-or-create
+            Method: POST
+        FindOrCreateVenueMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/find-or-create/mcp
             Method: POST
         # SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)
         CommunityFindOrCreateVenue:

@@ -521,3 +521,56 @@ describe('Artist baseline createdAt and MCP list filters', () => {
     expect(artistPut.Put.Item.created_at).toBeUndefined();
   });
 });
+
+describe('edition-scoped artist find-or-create', () => {
+  const token = 'scoped-test-token';
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.MCP_SERVICE_TOKEN = token;
+    mockDynamoDB.transactWrite.mockResolvedValue({});
+    mockDynamoDB.get.mockResolvedValue({});
+  });
+
+  const eventFor = (path, body, bearer) => ({
+    requestContext: { http: { method: 'POST', path } },
+    headers: bearer ? { Authorization: `Bearer ${bearer}` } : {},
+    body: JSON.stringify(body)
+  });
+
+  const scopedBody = {
+    name: 'Atomic Brass Band', location: 'Staffordshire', confirmNew: true,
+    performerKind: 'brass_band', publicationScopes: ['brass'], discoveryScopes: ['brass'],
+    nameVariants: ['Atomic BB'], names: [{ name: 'Atomic Brass Band' }],
+    domainProfiles: { brass: { section: 'championship' } }, acts: []
+  };
+
+  it('rejects privileged fields on the public route', async () => {
+    const res = await handler(eventFor('/api/artists/find-or-create', scopedBody), {});
+    expect(res.statusCode).toBe(403);
+    expect(mockDynamoDB.transactWrite).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid service token', async () => {
+    const res = await handler(eventFor('/api/artists/find-or-create/mcp', scopedBody, 'wrong'), {});
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('writes brass metadata inside the artist uniqueness transaction', async () => {
+    const res = await handler(eventFor('/api/artists/find-or-create/mcp', scopedBody, token), {});
+    expect(res.statusCode).toBe(201);
+    const put = mockDynamoDB.transactWrite.mock.calls[0][0].TransactItems.find(i => i.Put?.TableName === 'bndy-artists').Put.Item;
+    expect(put).toMatchObject({
+      performerKind: 'brass_band', publicationScopes: ['brass'], discoveryScopes: ['brass'],
+      name_variants: ['Atomic BB'], names: scopedBody.names, domainProfiles: scopedBody.domainProfiles, acts: []
+    });
+  });
+
+  it('returns existing scope metadata without updating a matched artist', async () => {
+    mockDynamoDB.get.mockResolvedValue({ Item: { id: 'live-1', name: 'Existing', location: 'Staffordshire', publicationScopes: ['live'] } });
+    const res = await handler(eventFor('/api/artists/find-or-create/mcp', { ...scopedBody, confirmNew: false, resolveTo: 'live-1' }, token), {});
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).artist.publicationScopes).toEqual(['live']);
+    expect(mockDynamoDB.update).not.toHaveBeenCalled();
+    expect(mockDynamoDB.transactWrite).not.toHaveBeenCalled();
+  });
+});

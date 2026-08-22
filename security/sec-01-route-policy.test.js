@@ -59,8 +59,10 @@ const MUTATION_ROUTE_BASELINE = {
   'POST /api/community/venues/find-or-create': 'community',
   'POST /api/community/events': 'community',
   'POST /api/artists/find-or-create': 'community',
+  'POST /api/artists/find-or-create/mcp': 'mcp',
   'POST /api/artists/community': 'community',
   'POST /api/events/community': 'community',
+  'POST /api/events/community/mcp': 'mcp',
 
   // === Events ===
   'POST /api/events': 'handler-auth',
@@ -95,6 +97,7 @@ const MUTATION_ROUTE_BASELINE = {
   // === Venues ===
   'POST /api/venues': 'handler-auth',
   'POST /api/venues/find-or-create': 'handler-auth',
+  'POST /api/venues/find-or-create/mcp': 'mcp',
   'PUT /api/venues/{id}': 'handler-auth',
   'DELETE /api/venues/{id}': 'handler-auth',
   'DELETE /api/venues/{id}/mcp': 'mcp', // SEC-AUD-004: now requires service token auth

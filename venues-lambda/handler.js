@@ -333,6 +333,13 @@ exports.handler = async (event, context) => {
       return await handleFindOrCreateVenue(deps, parseBody(event.body), event);
     }
 
+    if (method === 'POST' && path === '/api/venues/find-or-create/mcp') {
+      const mcpAuth = requireMcpAuth(event);
+      if (mcpAuth.error) return { statusCode: mcpAuth.statusCode, headers: getCorsHeaders(event), body: JSON.stringify({ error: mcpAuth.error }) };
+      event.__allowScopedIngestion = true;
+      return await handleFindOrCreateVenue(deps, parseBody(event.body), event);
+    }
+
     if (method === 'POST' && path === '/api/venues/find-or-create') {
       // SEC-04: Require authentication for find-or-create
       const authResult = await requireAuth(event);

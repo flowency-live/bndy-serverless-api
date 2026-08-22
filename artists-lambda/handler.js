@@ -18,7 +18,7 @@ const { gatedPut, rekeyUniqueKeys, releaseUniqueKeys, duplicateResponseBody, gat
 const { validateArtistData } = require('./lib/data-quality');
 const { deleteArtistEvents } = require('./lib/cascade-delete-events');
 const { hasEventsForArtist, countEventsForArtist } = require('./lib/artist-event-guard');
-const { isPublishedInEdition } = require('./lib/edition-domain');
+const { isPublishedInEdition, hasPrivilegedIngestionFields, validateScopedIngestion, editionMetadata } = require('./lib/edition-domain');
 const { requireRole: requireCuratorRole, logActivity: logCuratorActivity, pickFields: pickCuratorFields, hideEntity: hideArtistEntity, restoreEntity: restoreArtistEntity } = require('./curator-core');
 
 /**
@@ -519,6 +519,14 @@ exports.handler = async (event, context) => {
     // Community artist creation endpoint (public, no auth required)
     if (method === 'POST' && path === '/api/artists/community') {
       return await handleCreateCommunityArtist(event);
+    }
+
+    // Trusted scoped ingestion uses the same matching and uniqueness gates.
+    if (method === 'POST' && path === '/api/artists/find-or-create/mcp') {
+      const mcpAuth = requireMcpAuth(event);
+      if (mcpAuth.error) return { statusCode: mcpAuth.statusCode, headers: getCommunityHeaders(), body: JSON.stringify({ error: mcpAuth.error }) };
+      event.__allowScopedIngestion = true;
+      return await handleFindOrCreateArtist(event);
     }
 
     // Find-or-create artist (public, no auth) - server-side resolution gate (ADR-014)
@@ -2190,6 +2198,13 @@ async function handleCreateCommunityArtist(event) {
 
   try {
     const body = JSON.parse(event.body);
+    if (hasPrivilegedIngestionFields(body) && !event.__allowScopedIngestion) {
+      return { statusCode: 403, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Scoped ingestion fields require MCP service authentication' }) };
+    }
+    if (event.__allowScopedIngestion) {
+      const scopedError = validateScopedIngestion(body, 'artist');
+      if (scopedError) return { statusCode: 400, headers: getCommunityHeaders(), body: JSON.stringify({ error: scopedError }) };
+    }
     const { name, location, locationType, locationLat, locationLng, facebookUrl, instagramUrl, websiteUrl, bio, genres, artist_type, artistType, actType, acoustic, profileImageUrl, externalIds, nameVariants, verifiedSourceName } = body;
 
     // Validation
@@ -2344,6 +2359,16 @@ async function handleCreateCommunityArtist(event) {
       // Name variants for known billing variations (Fix #3a)
       name_variants: safeNameVariants,
 
+      // Privileged edition metadata is included in the same gated transaction.
+      ...(event.__allowScopedIngestion && {
+        performerKind: body.performerKind,
+        publicationScopes: body.publicationScopes,
+        discoveryScopes: body.discoveryScopes,
+        names: Array.isArray(body.names) ? body.names : [],
+        domainProfiles: body.domainProfiles && typeof body.domainProfiles === 'object' ? body.domainProfiles : {},
+        acts: Array.isArray(body.acts) ? body.acts : []
+      }),
+
       // Fix #7: Record if name passed via verified-source-name exception (§2A.5)
       // Allows reviewers to see why a listing-copy-looking name was accepted
       ...(dataQualityCheck.verifiedSourceName ? {
@@ -2415,7 +2440,8 @@ async function handleCreateCommunityArtist(event) {
           locationLng: newArtist.locationLng,
           locationType: newArtist.locationType,
           externalIds: newArtist.external_ids,
-          nameVariants: newArtist.name_variants
+          nameVariants: newArtist.name_variants,
+          ...editionMetadata(newArtist)
         }
       })
     };
@@ -2729,6 +2755,13 @@ const MARGIN_THRESHOLD = 10;     // If #2 within 10pts of #1 → REVIEW
 async function handleFindOrCreateArtist(event) {
   console.log(' Artists Lambda: find-or-create artist');
   const body = JSON.parse(event.body || '{}');
+  if (hasPrivilegedIngestionFields(body) && !event.__allowScopedIngestion) {
+    return { statusCode: 403, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Scoped ingestion fields require MCP service authentication' }) };
+  }
+  if (event.__allowScopedIngestion) {
+    const scopedError = validateScopedIngestion(body, 'artist');
+    if (scopedError) return { statusCode: 400, headers: getCommunityHeaders(), body: JSON.stringify({ error: scopedError }) };
+  }
   // canCreate defaults true (Cowork path); runner passes false
   // venueRegion is the listing's venue region for footprint scoring (Batch 3)
   // verifiedSourceName: §2A.5 exception for acts whose FB page name IS the billing (Fix #7)
@@ -2773,7 +2806,7 @@ async function handleFindOrCreateArtist(event) {
         headers: getCommunityHeaders(),
         body: JSON.stringify({
           action: 'matched',
-          artist: { id: resolved.Item.id, name: resolved.Item.name, location: resolved.Item.location || '' },
+          artist: { id: resolved.Item.id, name: resolved.Item.name, location: resolved.Item.location || '', ...editionMetadata(resolved.Item) },
           confidence: 1,
           matchedBy: 'manual_resolution'
         })
@@ -2889,7 +2922,7 @@ async function handleFindOrCreateArtist(event) {
             headers: getCommunityHeaders(),
             body: JSON.stringify({
               action: 'matched',
-              artist: { id: fbMatch.Item.id, name: fbMatch.Item.name, location: fbMatch.Item.location },
+              artist: { id: fbMatch.Item.id, name: fbMatch.Item.name, location: fbMatch.Item.location, ...editionMetadata(fbMatch.Item) },
               confidence: 1,
               matchedBy: 'facebook'
             })
@@ -2949,7 +2982,7 @@ async function handleFindOrCreateArtist(event) {
         IndexName: 'name-search-index',
         KeyConditionExpression: 'name_prefix = :prefix',
         ExpressionAttributeValues: { ':prefix': prefix },
-        ProjectionExpression: 'id, #name, bio, #location, name_variants',
+        ProjectionExpression: 'id, #name, bio, #location, name_variants, publicationScopes, discoveryScopes, performerKind',
         ExpressionAttributeNames: { '#name': 'name', '#location': 'location' },
         Limit: 500
       }).promise();
@@ -2981,7 +3014,7 @@ async function handleFindOrCreateArtist(event) {
           headers: getCommunityHeaders(),
           body: JSON.stringify({
             action: 'matched',
-            artist: { id: candidate.id, name: candidate.name, location: candidate.location },
+            artist: { id: candidate.id, name: candidate.name, location: candidate.location, ...editionMetadata(candidate) },
             confidence: 1,
             matchedBy: 'name_variant',
             variant: variant
@@ -3130,7 +3163,7 @@ async function handleFindOrCreateArtist(event) {
       headers: getCommunityHeaders(),
       body: JSON.stringify({
         action: 'matched',
-        artist: { id: best.id, name: best.name, location: best.location },
+        artist: { id: best.id, name: best.name, location: best.location, ...editionMetadata(best) },
         confidence: Math.round(matchScore) / 100,
         matchedBy: matchMethod,
         // ADR-023: If billing string had an act qualifier, return it separately
