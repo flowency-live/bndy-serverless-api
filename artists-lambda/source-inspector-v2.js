@@ -1,14 +1,17 @@
 'use strict';
 
 /**
- * Thin enrichment wrapper around source-inspector.js.
+ * Enrichment wrapper around source-inspector.js.
  *
- * The base inspector owns URL safety, identity resolution and DynamoDB lookup.
- * This wrapper only adds deterministic, source-backed fallbacks when Facebook's
- * primary anonymous HTML is too sparse to expose useful Open Graph metadata:
- *  - a second read from Facebook's mbasic surface for a real page <title>
- *  - the long-standing Graph profile-picture redirect for artist artwork
- *  - a clearly-labelled handle-derived name hint as a last resort
+ * The base inspector owns URL safety, core identity resolution and DynamoDB
+ * lookup. This wrapper adds deterministic, source-backed fallbacks for the
+ * messy reality of anonymous Facebook pages:
+ *  - reject Facebook system/login routes as entity identity
+ *  - preserve stable input identity when Facebook redirects anonymous users to login
+ *  - inspect mbasic profile and About surfaces in parallel
+ *  - parse conservative structured fields embedded in Facebook HTML
+ *  - reuse the long-standing Graph profile-picture redirect for artist artwork
+ *  - use a clearly-labelled handle-derived name hint only as the final fallback
  *
  * None of these fallbacks create or update entities. Handle-derived names are
  * deliberately marked as hints so callers must not treat them as verified data.
@@ -18,7 +21,7 @@ const https = require('https');
 const base = require('./source-inspector');
 
 const FALLBACK_TIMEOUT_MS = 2200;
-const FALLBACK_HTML_BYTES = 256 * 1024;
+const FALLBACK_HTML_BYTES = 384 * 1024;
 const MAX_IMAGE_REDIRECTS = 3;
 
 function response(statusCode, body) {
@@ -35,17 +38,43 @@ function handleFromFacebookKey(key) {
   if (!key.startsWith(prefix)) return null;
   const handle = key.slice(prefix.length);
   if (!handle || handle.includes('/')) return null;
-  return /^[a-z0-9.]{2,}$/i.test(handle) ? handle : null;
+  return /^[a-z0-9._-]{2,}$/i.test(handle) ? handle : null;
+}
+
+function isFacebookSystemIdentityKey(key) {
+  const handle = handleFromFacebookKey(key);
+  if (!handle) return false;
+  return /^(?:login(?:\.php)?|home(?:\.php)?|recover(?:\/.*)?|checkpoint|help|privacy|policies|settings|notifications|friends|marketplace|gaming)$/i.test(handle);
 }
 
 function nameHintFromHandle(handle) {
-  if (!handle || /^\d+$/.test(handle)) return null;
-  const words = handle
-    .split('.')
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (!words.length) return null;
-  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  if (!handle || /^\d+$/.test(handle) || isFacebookSystemIdentityKey(`facebook.com/${handle}`)) return null;
+
+  const separated = handle
+    .replace(/[._-]+/g, ' ')
+    .trim();
+  if (!separated) return null;
+
+  const words = separated.split(/\s+/).filter(Boolean);
+  if (words.length > 1) {
+    return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  }
+
+  // A very common band-page convention is a compact vanity handle such as
+  // "thecurrantsband". This remains an UNVERIFIED hint, but splitting the
+  // explicit The…Band wrapper is materially more useful than "Thecurrantsband".
+  const compactBand = separated.match(/^the([a-z0-9]{2,})band$/i);
+  if (compactBand) {
+    const middle = compactBand[1];
+    return `The ${middle.charAt(0).toUpperCase()}${middle.slice(1)} Band`;
+  }
+  const bandSuffix = separated.match(/^([a-z0-9]{3,})band$/i);
+  if (bandSuffix) {
+    const stem = bandSuffix[1];
+    return `${stem.charAt(0).toUpperCase()}${stem.slice(1)} Band`;
+  }
+
+  return separated.charAt(0).toUpperCase() + separated.slice(1);
 }
 
 function unwrapGroupMemberProfileInput(input) {
@@ -60,6 +89,9 @@ function isGenericFacebookName(value) {
   if (!name) return true;
   return name === 'error'
     || name === 'facebook error'
+    || name === 'facebook'
+    || name === 'login'
+    || name === 'log in'
     || name === 'content not available'
     || name === 'this content isn\'t available'
     || name === 'this content is not available';
@@ -76,6 +108,8 @@ function isGenericFacebookDescription(value) {
 
 function sanitiseFacebookBoilerplate(result) {
   if (!result?.observed) return result;
+  if (result.existing) return result;
+
   const observed = { ...result.observed };
   const evidence = { ...(result.evidence || {}) };
 
@@ -91,10 +125,216 @@ function sanitiseFacebookBoilerplate(result) {
   return { ...result, observed, evidence };
 }
 
+function restoreStableInputIdentity(result, input) {
+  if (!result?.valid || !isFacebookSystemIdentityKey(result.facebookKey)) return result;
+
+  const inputIdentity = base.stableFacebookIdentity(input);
+  if (!inputIdentity || isFacebookSystemIdentityKey(inputIdentity.key)) {
+    return {
+      ...result,
+      facebookUrl: null,
+      facebookKey: null,
+      identityResolved: false,
+    };
+  }
+
+  return {
+    ...result,
+    facebookUrl: inputIdentity.url,
+    facebookKey: inputIdentity.key,
+    identityResolved: true,
+    observed: {
+      ...(result.observed || {}),
+      canonicalUrl: inputIdentity.url,
+    },
+    evidence: {
+      ...(result.evidence || {}),
+      canonicalUrl: 'facebook_input_identity_restored',
+    },
+    warnings: [...new Set([...(result.warnings || []), 'facebook_redirected_to_system_route'])],
+  };
+}
+
 function readHtmlTitle(html) {
   const match = String(html || '').match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
   const title = match ? base.cleanFacebookTitle(match[1]) : null;
   return isGenericFacebookName(title) ? null : title;
+}
+
+function decodeJsonString(value) {
+  if (value === undefined || value === null) return null;
+  try {
+    return JSON.parse(`"${value}"`).replace(/\s+/g, ' ').trim() || null;
+  } catch {
+    return String(value)
+      .replace(/\\u([0-9a-f]{4})/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+      .replace(/\\n|\\r|\\t/g, ' ')
+      .replace(/\\\//g, '/')
+      .replace(/\\"/g, '"')
+      .replace(/\s+/g, ' ')
+      .trim() || null;
+  }
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function findJsonString(html, keys) {
+  const text = String(html || '');
+  for (const key of keys) {
+    const pattern = new RegExp(`"${escapeRegExp(key)}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, 'i');
+    const match = text.match(pattern);
+    if (match) {
+      const decoded = decodeJsonString(match[1]);
+      if (decoded) return decoded;
+    }
+  }
+  return null;
+}
+
+function findNestedObjectName(html, keys) {
+  const text = String(html || '');
+  for (const key of keys) {
+    const pattern = new RegExp(`"${escapeRegExp(key)}"\\s*:\\s*\\{[\\s\\S]{0,900}?"name"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, 'i');
+    const match = text.match(pattern);
+    if (match) {
+      const decoded = decodeJsonString(match[1]);
+      if (decoded) return decoded;
+    }
+  }
+  return null;
+}
+
+function safeExternalWebsite(urlString) {
+  if (!urlString) return null;
+  let value = String(urlString).trim();
+  if (!/^https?:\/\//i.test(value) && /^[a-z0-9.-]+\.[a-z]{2,}(?:\/.*)?$/i.test(value)) {
+    value = `https://${value}`;
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    const host = parsed.hostname.toLowerCase();
+    if (host === 'facebook.com' || host.endsWith('.facebook.com') || host === 'fb.me' || host.endsWith('.fb.me')) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonLd(html) {
+  const text = String(html || '');
+  const tags = text.match(/<script\b[^>]*>[\s\S]*?<\/script>/gi) || [];
+  for (const tag of tags) {
+    const open = tag.match(/^<script\b[^>]*>/i)?.[0] || '';
+    if (!/application\/ld\+json/i.test(open)) continue;
+    const raw = tag.replace(/^<script\b[^>]*>/i, '').replace(/<\/script>$/i, '').trim();
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw);
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+      for (const item of items) {
+        if (!item || typeof item !== 'object') continue;
+        const address = item.address && typeof item.address === 'object' ? item.address : null;
+        const website = safeExternalWebsite(item.url);
+        const name = typeof item.name === 'string' && !isGenericFacebookName(item.name) ? item.name.trim() : null;
+        const description = typeof item.description === 'string' && !isGenericFacebookDescription(item.description) ? item.description.trim() : null;
+        const location = address && typeof address.addressLocality === 'string' ? address.addressLocality.trim() : null;
+        const addressText = address
+          ? [address.streetAddress, address.addressLocality, address.addressRegion, address.postalCode]
+            .filter((part) => typeof part === 'string' && part.trim())
+            .map((part) => part.trim())
+            .join(', ') || null
+          : null;
+        if (name || description || location || addressText || website) {
+          return { name, description, location, address: addressText, websiteUrl: website };
+        }
+      }
+    } catch {
+      // Facebook pages often include non-JSON scripts; ignore malformed JSON-LD.
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract only fields with recognisable semantic keys from Facebook's embedded
+ * page payload. We deliberately do not use a generic "name" or "description"
+ * search because the document contains many unrelated Facebook objects.
+ */
+function parseEmbeddedFacebookDetails(html) {
+  const jsonLd = parseJsonLd(html) || {};
+
+  const name = jsonLd.name || findJsonString(html, [
+    'profile_name',
+    'page_name',
+    'display_name',
+  ]);
+
+  const description = jsonLd.description || findJsonString(html, [
+    'bio_text',
+    'biography',
+    'about_text',
+    'page_description',
+  ]);
+
+  const location = jsonLd.location
+    || findJsonString(html, ['hometown_name', 'current_city_name', 'city_name', 'location_name'])
+    || findNestedObjectName(html, ['hometown', 'current_city', 'city']);
+
+  const address = jsonLd.address || findJsonString(html, [
+    'single_line_address',
+    'full_address',
+  ]);
+
+  const websiteUrl = jsonLd.websiteUrl || safeExternalWebsite(findJsonString(html, [
+    'website_url',
+    'external_url',
+    'website',
+  ]));
+
+  return {
+    name: name && !isGenericFacebookName(name) ? name : null,
+    description: description && !isGenericFacebookDescription(description) ? description.slice(0, 1000) : null,
+    location: location ? location.slice(0, 200) : null,
+    address: address ? address.slice(0, 500) : null,
+    websiteUrl,
+  };
+}
+
+function parseRichFacebookMetadata(html, finalUrl, evidenceLabel) {
+  let parsed = sanitiseFacebookBoilerplate(base.parseFacebookMetadata(html, finalUrl));
+  const observed = { ...(parsed.observed || {}) };
+  const evidence = { ...(parsed.evidence || {}) };
+  const embedded = parseEmbeddedFacebookDetails(html);
+
+  if (!observed.name) {
+    const title = readHtmlTitle(html);
+    const name = embedded.name || title;
+    if (name) {
+      observed.name = name;
+      evidence.name = embedded.name ? evidenceLabel : 'facebook_basic_html';
+    }
+  }
+  if (!observed.description && embedded.description) {
+    observed.description = embedded.description;
+    evidence.description = evidenceLabel;
+  }
+  if (!observed.location && embedded.location) {
+    observed.location = embedded.location;
+    evidence.location = evidenceLabel;
+  }
+  if (!observed.address && embedded.address) {
+    observed.address = embedded.address;
+    evidence.address = evidenceLabel;
+  }
+  if (!observed.websiteUrl && embedded.websiteUrl) {
+    observed.websiteUrl = embedded.websiteUrl;
+    evidence.websiteUrl = evidenceLabel;
+  }
+
+  return { ...parsed, observed, evidence };
 }
 
 async function fetchBasicFacebookMetadata(handle, fetchHtml = base.fetchFacebookHtml) {
@@ -106,18 +346,19 @@ async function fetchBasicFacebookMetadata(handle, fetchHtml = base.fetchFacebook
   });
 
   if (fetched.statusCode < 200 || fetched.statusCode >= 300) return null;
-  let parsed = sanitiseFacebookBoilerplate(base.parseFacebookMetadata(fetched.html, fetched.finalUrl || url));
-  if (!parsed.observed.name) {
-    const title = readHtmlTitle(fetched.html);
-    if (title) {
-      parsed.observed.name = title;
-      parsed.evidence.name = 'facebook_basic_html';
-    }
-  }
-  if (parsed.observed.description && !parsed.evidence.description) {
-    parsed.evidence.description = 'facebook_basic_html';
-  }
-  return parsed;
+  return parseRichFacebookMetadata(fetched.html, fetched.finalUrl || url, 'facebook_structured_html');
+}
+
+async function fetchBasicFacebookAbout(handle, fetchHtml = base.fetchFacebookHtml) {
+  const url = `https://mbasic.facebook.com/${encodeURIComponent(handle)}/about`;
+  const fetched = await fetchHtml(url, {
+    timeoutMs: FALLBACK_TIMEOUT_MS,
+    maxBytes: FALLBACK_HTML_BYTES,
+    redirectsLeft: 2,
+  });
+
+  if (fetched.statusCode < 200 || fetched.statusCode >= 300) return null;
+  return parseRichFacebookMetadata(fetched.html, fetched.finalUrl || url, 'facebook_about_html');
 }
 
 function isAllowedImageUrl(urlString) {
@@ -155,7 +396,7 @@ function fetchGraphProfilePicture(handle, redirectsLeft = MAX_IMAGE_REDIRECTS) {
 
     const request = https.get(urlString, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; bndy-source-inspector/1.2; +https://bndy.co.uk)',
+        'User-Agent': 'Mozilla/5.0 (compatible; bndy-source-inspector/1.3; +https://bndy.co.uk)',
         'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
       },
     }, (res) => {
@@ -191,44 +432,54 @@ function fetchGraphProfilePicture(handle, redirectsLeft = MAX_IMAGE_REDIRECTS) {
   return visit(startUrl, redirectsLeft);
 }
 
+function mergeMissingObserved(observed, evidence, fallback) {
+  if (!fallback?.observed) return;
+  const fields = ['name', 'imageUrl', 'description', 'location', 'address', 'websiteUrl'];
+  for (const field of fields) {
+    if (!observed[field] && fallback.observed[field]) {
+      observed[field] = fallback.observed[field];
+      if (fallback.evidence?.[field]) evidence[field] = fallback.evidence[field];
+    }
+  }
+}
+
 async function enrichInspectionResult(result, { expectedType = null, fetchHtml = base.fetchFacebookHtml, fetchPicture = fetchGraphProfilePicture } = {}) {
+  if (!result?.valid || result.existing) return result;
+
   result = sanitiseFacebookBoilerplate(result);
-  if (!result?.valid || result.existing || !result.identityResolved || !result.facebookKey) return result;
+  if (!result.identityResolved || !result.facebookKey) return result;
 
   const handle = handleFromFacebookKey(result.facebookKey);
-  if (!handle) return result;
+  if (!handle || isFacebookSystemIdentityKey(result.facebookKey)) return result;
 
   const observed = { ...(result.observed || {}) };
   const evidence = { ...(result.evidence || {}) };
 
-  if (!observed.name || !observed.imageUrl || !observed.description) {
-    try {
-      const fallback = await fetchBasicFacebookMetadata(handle, fetchHtml);
-      if (fallback) {
-        if (!observed.name && fallback.observed.name) {
-          observed.name = fallback.observed.name;
-          evidence.name = fallback.evidence.name || 'facebook_basic_html';
-        }
-        if (!observed.imageUrl && fallback.observed.imageUrl) {
-          observed.imageUrl = fallback.observed.imageUrl;
-          evidence.imageUrl = fallback.evidence.imageUrl || 'facebook_basic_html';
-        }
-        if (!observed.description && fallback.observed.description) {
-          observed.description = fallback.observed.description;
-          evidence.description = fallback.evidence.description || 'facebook_basic_html';
-        }
-      }
-    } catch {
-      // Optional fallback only. The base result remains valid and usable.
-    }
-  }
+  // Keep fallbacks parallel so the Lambda's total latency is one fallback timeout,
+  // not root + About + image timeouts added together.
+  const needsMetadata = !observed.name || !observed.description || !observed.location || !observed.websiteUrl;
+  const basicPromise = needsMetadata
+    ? fetchBasicFacebookMetadata(handle, fetchHtml)
+    : Promise.resolve(null);
+  const aboutPromise = needsMetadata
+    ? fetchBasicFacebookAbout(handle, fetchHtml)
+    : Promise.resolve(null);
+  const picturePromise = expectedType === 'artist' && !observed.imageUrl
+    ? fetchPicture(handle)
+    : Promise.resolve(null);
 
-  if (expectedType === 'artist' && !observed.imageUrl) {
-    const picture = await fetchPicture(handle);
-    if (picture) {
-      observed.imageUrl = picture;
-      evidence.imageUrl = 'facebook_graph_picture';
-    }
+  const [basicResult, aboutResult, pictureResult] = await Promise.allSettled([
+    basicPromise,
+    aboutPromise,
+    picturePromise,
+  ]);
+
+  if (basicResult.status === 'fulfilled') mergeMissingObserved(observed, evidence, basicResult.value);
+  if (aboutResult.status === 'fulfilled') mergeMissingObserved(observed, evidence, aboutResult.value);
+
+  if (!observed.imageUrl && pictureResult.status === 'fulfilled' && pictureResult.value) {
+    observed.imageUrl = pictureResult.value;
+    evidence.imageUrl = 'facebook_graph_picture';
   }
 
   if (!observed.name) {
@@ -249,13 +500,39 @@ async function enrichInspectionResult(result, { expectedType = null, fetchHtml =
 async function inspectFacebookSourceV2({ input, expectedType = null, client, fetchHtml, fetchPicture } = {}) {
   const wrappedProfile = expectedType === 'venue' ? null : unwrapGroupMemberProfileInput(input);
   const inspectionInput = wrappedProfile || input;
-  const result = await base.inspectFacebookSource({ input: inspectionInput, expectedType, client, fetchHtml });
+
+  let result = await base.inspectFacebookSource({ input: inspectionInput, expectedType, client, fetchHtml });
+  result = restoreStableInputIdentity(result, inspectionInput);
+
+  // A group-member wrapper is provenance, not identity. The embedded numeric id
+  // remains canonical even if anonymous Facebook redirects the probe to /login.
+  if (wrappedProfile) {
+    const wrappedIdentity = base.stableFacebookIdentity(wrappedProfile);
+    if (wrappedIdentity) {
+      result = {
+        ...result,
+        facebookUrl: wrappedIdentity.url,
+        facebookKey: wrappedIdentity.key,
+        identityResolved: true,
+        observed: {
+          ...(result.observed || {}),
+          canonicalUrl: wrappedIdentity.url,
+        },
+        evidence: {
+          ...(result.evidence || {}),
+          canonicalUrl: 'facebook_group_member_profile',
+        },
+      };
+    }
+  }
+
   const enriched = await enrichInspectionResult(result, { expectedType, fetchHtml, fetchPicture });
   if (!wrappedProfile) return enriched;
 
   return {
     ...enriched,
     input,
+    sourceUrl: input,
     evidence: {
       ...(enriched.evidence || {}),
       canonicalUrl: 'facebook_group_member_profile',
@@ -289,13 +566,18 @@ async function handler(event) {
 module.exports = {
   handler,
   handleFromFacebookKey,
+  isFacebookSystemIdentityKey,
   nameHintFromHandle,
   unwrapGroupMemberProfileInput,
   isGenericFacebookName,
   isGenericFacebookDescription,
   sanitiseFacebookBoilerplate,
+  restoreStableInputIdentity,
   readHtmlTitle,
+  parseEmbeddedFacebookDetails,
+  parseRichFacebookMetadata,
   fetchBasicFacebookMetadata,
+  fetchBasicFacebookAbout,
   fetchGraphProfilePicture,
   enrichInspectionResult,
   inspectFacebookSourceV2,
