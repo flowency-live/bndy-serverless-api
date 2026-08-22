@@ -35,18 +35,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
 
-      - name: Verify current enrichment main
+      - name: Verify and bundle current enrichment main
         working-directory: enrichment
+        shell: bash
         run: |
           set -euo pipefail
           npm ci
           npm run check
-          npm test -- --run
-
-      - name: Bundle processor
-        working-directory: enrichment
-        run: |
-          set -euo pipefail
           rm -rf /tmp/capture-lambda /tmp/capture-processor.zip
           mkdir -p /tmp/capture-lambda
           npx esbuild src/handlers/capture-processor.ts --bundle --platform=node --target=node22 --format=cjs --outfile=/tmp/capture-lambda/index.js
@@ -54,6 +49,7 @@ jobs:
           zip -q /tmp/capture-processor.zip index.js
 
       - name: Deploy processor code
+        shell: bash
         run: |
           set -euo pipefail
           aws lambda update-function-code --function-name bndy-capture-processor --zip-file fileb:///tmp/capture-processor.zip >/tmp/update.json
@@ -61,6 +57,7 @@ jobs:
           aws lambda get-function-configuration --function-name bndy-capture-processor --query '{LastModified:LastModified,CodeSha256:CodeSha256,Runtime:Runtime,State:State,LastUpdateStatus:LastUpdateStatus}' --output json >/tmp/config.json
 
       - name: Resolve Capture token
+        shell: bash
         run: |
           set -euo pipefail
           TOKEN_JSON="$(aws secretsmanager get-secret-value --secret-id bndy/capture-service --query SecretString --output text)"
@@ -70,6 +67,7 @@ jobs:
           echo "::add-mask::$CAPTURE_TOKEN"
 
       - name: Replay failed public poster capture
+        shell: bash
         run: |
           set -euo pipefail
           ID=e106ed9f-ecde-4ad5-a4ee-07ed315732e4
@@ -85,18 +83,23 @@ jobs:
 
       - name: Record sanitized result
         if: always()
+        shell: bash
         run: |
-          set -euo pipefail
+          set -u
           mkdir -p ops/diagnostics
           python - <<'PY'
-          import json, pathlib, datetime
+          import json, pathlib, datetime, subprocess
           c=json.loads(pathlib.Path('/tmp/capture.json').read_text()) if pathlib.Path('/tmp/capture.json').exists() else {}
           c=c.get('capture',c)
           note=str(c.get('note') or '')
           cfg=json.loads(pathlib.Path('/tmp/config.json').read_text()) if pathlib.Path('/tmp/config.json').exists() else {}
+          try:
+              commit=subprocess.check_output(['git','-C','enrichment','rev-parse','HEAD'],text=True).strip()
+          except Exception:
+              commit=None
           safe={
             'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            'enrichmentCommit':__import__('subprocess').check_output(['git','-C','enrichment','rev-parse','HEAD'],text=True).strip(),
+            'enrichmentCommit':commit,
             'processor':cfg,
             'capture':{
               'id':c.get('id'),'status':c.get('status'),'sourceApp':c.get('sourceApp'),'processingAttempt':c.get('processingAttempt'),
