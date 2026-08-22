@@ -99,13 +99,13 @@ test('v2 rewrites group-member wrapper before inspection and preserves original 
   const input = 'https://www.facebook.com/groups/257127181399411/user/100095600102594';
   assert.equal(unwrapGroupMemberProfileInput(input), 'https://www.facebook.com/100095600102594');
 
-  let fetchedUrl = null;
+  const fetchedUrls = [];
   const result = await inspectFacebookSourceV2({
     input,
     expectedType: 'artist',
     client: fakeClient([{}]),
     fetchHtml: async (url) => {
-      fetchedUrl = url;
+      fetchedUrls.push(url);
       return {
         statusCode: 200,
         finalUrl: url,
@@ -115,7 +115,8 @@ test('v2 rewrites group-member wrapper before inspection and preserves original 
     fetchPicture: async () => null,
   });
 
-  assert.equal(fetchedUrl, 'https://www.facebook.com/100095600102594');
+  assert.equal(fetchedUrls[0], 'https://www.facebook.com/100095600102594');
+  assert.ok(fetchedUrls.includes('https://mbasic.facebook.com/100095600102594'));
   assert.equal(result.input, input);
   assert.equal(result.facebookKey, 'facebook.com/100095600102594');
   assert.equal(result.facebookUrl, 'https://www.facebook.com/100095600102594');
@@ -242,6 +243,6 @@ test('existing artists are not enriched or network-fetched again', async () => {
     fetchPicture: async () => { called = true; return null; },
   });
 
-  assert.equal(result, existing);
+  assert.deepEqual(result, existing);
   assert.equal(called, false);
 });
