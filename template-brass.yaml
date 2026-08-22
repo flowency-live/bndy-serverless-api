@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: BNDY Brass isolated public read API
+
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    MemorySize: 768
+    Timeout: 30
+    Tracing: Active
+    Environment:
+      Variables:
+        NODE_ENV: production
+
+Resources:
+  BrassHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      Description: BNDY Brass public read API
+      CorsConfiguration:
+        AllowOrigins:
+          - https://brass.bndy.live
+          - http://localhost:3000
+          - http://localhost:3001
+        AllowHeaders:
+          - Content-Type
+        AllowMethods:
+          - GET
+          - OPTIONS
+        MaxAge: 86400
+
+  BrassReadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Read-only edition-scoped API for brass.bndy.live
+      CodeUri: ./brass-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Environment:
+        Variables:
+          ARTISTS_TABLE: bndy-artists
+          EVENTS_TABLE: bndy-events
+          VENUES_TABLE: bndy-venues
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BrassHttpApi
+            Path: /health
+            Method: GET
+        Bands:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BrassHttpApi
+            Path: /bands
+            Method: GET
+        Concerts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BrassHttpApi
+            Path: /concerts
+            Method: GET
+        Festivals:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BrassHttpApi
+            Path: /festivals
+            Method: GET
+        Productions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BrassHttpApi
+            Path: /productions
+            Method: GET
+
+Outputs:
+  BrassApiUrl:
+    Description: Base URL for NEXT_PUBLIC_BRASS_API_URL
+    Value: !Sub 'https://${BrassHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
