@@ -1,11 +1,13 @@
 {
-  "recordedAt": "2026-08-22T16:24:54.437021+00:00",
-  "stackStatus": "CREATE_IN_PROGRESS",
-  "stackStatusReason": null,
+  "recordedAt": "2026-08-22T16:31:58.918520+00:00",
+  "stackStatus": "REVIEW_IN_PROGRESS",
+  "stackStatusReason": "User Initiated",
   "outputs": {},
   "stackError": null,
+  "failures": [],
   "records": [
     {
+      "name": "chat.bndy.live",
       "type": "A",
       "alias": "d31tiyfnjihe81.cloudfront.net.",
       "values": []
