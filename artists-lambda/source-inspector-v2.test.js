@@ -3,6 +3,7 @@
 const nodeTest = require('node:test');
 const assert = require('node:assert/strict');
 const test = typeof globalThis.test === 'function' ? globalThis.test : nodeTest.test;
+const base = require('./source-inspector');
 const {
   handleFromFacebookKey,
   nameHintFromHandle,
@@ -26,6 +27,29 @@ test('nameHintFromHandle creates an explicitly unverified display hint', () => {
 test('readHtmlTitle accepts real Facebook page titles and rejects login shells', () => {
   assert.equal(readHtmlTitle('<title>Soulskunks | Facebook</title>'), 'Soulskunks');
   assert.equal(readHtmlTitle('<title>Facebook – log in or sign up</title>'), null);
+});
+
+test('existing artist lookup aliases DynamoDB reserved projection fields', async () => {
+  let artistGetParams = null;
+  const client = {
+    get(params) {
+      if (params.TableName === 'bndy-unique-keys') {
+        return { promise: async () => ({ Item: { refId: 'artist-1' } }) };
+      }
+      artistGetParams = params;
+      return { promise: async () => ({ Item: { id: 'artist-1', name: 'Soulskunks' } }) };
+    },
+  };
+
+  const artist = await base.findExistingArtistByFacebookKey('facebook.com/soulskunks', client);
+  assert.equal(artist.name, 'Soulskunks');
+  assert.ok(artistGetParams);
+  assert.match(artistGetParams.ProjectionExpression, /#hidden/);
+  assert.match(artistGetParams.ProjectionExpression, /#deleted/);
+  assert.equal(artistGetParams.ExpressionAttributeNames['#hidden'], 'hidden');
+  assert.equal(artistGetParams.ExpressionAttributeNames['#deleted'], 'deleted');
+  assert.doesNotMatch(artistGetParams.ProjectionExpression, /(?:^|,\s*)hidden(?:\s*,|$)/);
+  assert.doesNotMatch(artistGetParams.ProjectionExpression, /(?:^|,\s*)deleted(?:\s*,|$)/);
 });
 
 test('enrichInspectionResult uses mbasic title and Graph picture when primary metadata is barren', async () => {
