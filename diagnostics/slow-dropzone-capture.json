@@ -1,0 +1,141 @@
+{
+  "recordedAt": "2026-08-22T17:16:14.313386+00:00",
+  "capture": {
+    "id": "0739e6ff-fe08-41f3-baf4-3e2841dd42d2",
+    "status": "processing",
+    "sourceApp": "chatzone",
+    "capturedAt": "2026-08-22T17:13:42.509701Z",
+    "receivedAt": "2026-08-22T17:13:42.509701Z",
+    "updatedAt": "2026-08-22T17:16:01.486961Z",
+    "processingAttempt": 1,
+    "processingOwner": null,
+    "leaseExpiresAt": null,
+    "media": {
+      "type": "image",
+      "bucket": "bndy-capture-images-771551874768-eu-west-2",
+      "originalName": "777801309_1815947363874166_129354994319967696_n.jpg",
+      "key": "captures/public/2026/08/22/4d339840-dcb6-4785-b6f6-058f21710a88.jpg",
+      "mimeType": "image/jpeg",
+      "size": 142526
+    },
+    "noteLines": []
+  },
+  "queue": {
+    "ApproximateNumberOfMessages": "0",
+    "ApproximateNumberOfMessagesNotVisible": "1",
+    "ApproximateNumberOfMessagesDelayed": "0"
+  },
+  "processorConfig": {
+    "Timeout": 300,
+    "MemorySize": 1024,
+    "LastModified": "2026-08-22T16:18:17.000+0000",
+    "State": "Active",
+    "LastUpdateStatus": "Successful"
+  },
+  "scannerConfig": {
+    "Timeout": 60,
+    "MemorySize": 512,
+    "LastModified": "2026-08-22T16:18:20.000+0000",
+    "State": "Active",
+    "LastUpdateStatus": "Successful"
+  },
+  "processorLogs": [],
+  "scannerLogs": [
+    {
+      "timestamp": 1787417461337,
+      "message": "START RequestId: f7603d94-eac6-4dfe-8675-5862057c1cb0 Version: $LATEST"
+    },
+    {
+      "timestamp": 1787417461521,
+      "message": "2026-08-22T16:51:01.521Z\tf7603d94-eac6-4dfe-8675-5862057c1cb0\tINFO\tCapture scan complete { discovered: 0, queued: 0, ignored: 0, failed: 0, duplicates: 0 }"
+    },
+    {
+      "timestamp": 1787417461524,
+      "message": "END RequestId: f7603d94-eac6-4dfe-8675-5862057c1cb0"
+    },
+    {
+      "timestamp": 1787417461524,
+      "message": "REPORT RequestId: f7603d94-eac6-4dfe-8675-5862057c1cb0\tDuration: 185.49 ms\tBilled Duration: 186 ms\tMemory Size: 512 MB\tMax Memory Used: 113 MB"
+    },
+    {
+      "timestamp": 1787417761321,
+      "message": "START RequestId: 7cd6ccd5-67e0-4dd2-93ea-e7fb2087e41c Version: $LATEST"
+    },
+    {
+      "timestamp": 1787417761514,
+      "message": "2026-08-22T16:56:01.514Z\t7cd6ccd5-67e0-4dd2-93ea-e7fb2087e41c\tINFO\tCapture scan complete { discovered: 0, queued: 0, ignored: 0, failed: 0, duplicates: 0 }"
+    },
+    {
+      "timestamp": 1787417761516,
+      "message": "END RequestId: 7cd6ccd5-67e0-4dd2-93ea-e7fb2087e41c"
+    },
+    {
+      "timestamp": 1787417761516,
+      "message": "REPORT RequestId: 7cd6ccd5-67e0-4dd2-93ea-e7fb2087e41c\tDuration: 194.02 ms\tBilled Duration: 195 ms\tMemory Size: 512 MB\tMax Memory Used: 113 MB"
+    },
+    {
+      "timestamp": 1787418061460,
+      "message": "START RequestId: d481c3d5-049e-4b33-80c8-1b4846cde9b4 Version: $LATEST"
+    },
+    {
+      "timestamp": 1787418061653,
+      "message": "2026-08-22T17:01:01.653Z\td481c3d5-049e-4b33-80c8-1b4846cde9b4\tINFO\tCapture scan complete { discovered: 0, queued: 0, ignored: 0, failed: 0, duplicates: 0 }"
+    },
+    {
+      "timestamp": 1787418061656,
+      "message": "END RequestId: d481c3d5-049e-4b33-80c8-1b4846cde9b4"
+    },
+    {
+      "timestamp": 1787418061656,
+      "message": "REPORT RequestId: d481c3d5-049e-4b33-80c8-1b4846cde9b4\tDuration: 195.07 ms\tBilled Duration: 196 ms\tMemory Size: 512 MB\tMax Memory Used: 113 MB"
+    },
+    {
+      "timestamp": 1787418361404,
+      "message": "START RequestId: 8e37ea0a-f4d5-4559-992e-3738f6ef4101 Version: $LATEST"
+    },
+    {
+      "timestamp": 1787418361587,
+      "message": "2026-08-22T17:06:01.587Z\t8e37ea0a-f4d5-4559-992e-3738f6ef4101\tINFO\tCapture scan complete { discovered: 0, queued: 0, ignored: 0, failed: 0, duplicates: 0 }"
+    },
+    {
+      "timestamp": 1787418361589,
+      "message": "END RequestId: 8e37ea0a-f4d5-4559-992e-3738f6ef4101"
+    },
+    {
+      "timestamp": 1787418361589,
+      "message": "REPORT RequestId: 8e37ea0a-f4d5-4559-992e-3738f6ef4101\tDuration: 184.22 ms\tBilled Duration: 185 ms\tMemory Size: 512 MB\tMax Memory Used: 113 MB"
+    },
+    {
+      "timestamp": 1787418661373,
+      "message": "START RequestId: a4673c2a-33ff-4f26-a4f5-38f7c63f363c Version: $LATEST"
+    },
+    {
+      "timestamp": 1787418661500,
+      "message": "2026-08-22T17:11:01.500Z\ta4673c2a-33ff-4f26-a4f5-38f7c63f363c\tINFO\tCapture scan complete { discovered: 1, queued: 1, ignored: 0, failed: 0, duplicates: 0 }"
+    },
+    {
+      "timestamp": 1787418661502,
+      "message": "END RequestId: a4673c2a-33ff-4f26-a4f5-38f7c63f363c"
+    },
+    {
+      "timestamp": 1787418661502,
+      "message": "REPORT RequestId: a4673c2a-33ff-4f26-a4f5-38f7c63f363c\tDuration: 128.75 ms\tBilled Duration: 129 ms\tMemory Size: 512 MB\tMax Memory Used: 113 MB"
+    },
+    {
+      "timestamp": 1787418961395,
+      "message": "START RequestId: 38a6c4cc-5613-42a1-afb7-5b7bc519c3b6 Version: $LATEST"
+    },
+    {
+      "timestamp": 1787418961531,
+      "message": "2026-08-22T17:16:01.531Z\t38a6c4cc-5613-42a1-afb7-5b7bc519c3b6\tINFO\tCapture scan complete { discovered: 1, queued: 1, ignored: 0, failed: 0, duplicates: 0 }"
+    },
+    {
+      "timestamp": 1787418961533,
+      "message": "END RequestId: 38a6c4cc-5613-42a1-afb7-5b7bc519c3b6"
+    },
+    {
+      "timestamp": 1787418961533,
+      "message": "REPORT RequestId: 38a6c4cc-5613-42a1-afb7-5b7bc519c3b6\tDuration: 136.94 ms\tBilled Duration: 137 ms\tMemory Size: 512 MB\tMax Memory Used: 113 MB"
+    }
+  ]
+}
