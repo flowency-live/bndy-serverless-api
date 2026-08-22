@@ -7,8 +7,10 @@ const base = require('./source-inspector');
 const {
   handleFromFacebookKey,
   nameHintFromHandle,
+  unwrapGroupMemberProfileInput,
   readHtmlTitle,
   enrichInspectionResult,
+  inspectFacebookSourceV2,
 } = require('./source-inspector-v2');
 
 function fakeClient(sequence) {
@@ -34,9 +36,10 @@ test('nameHintFromHandle creates an explicitly unverified display hint', () => {
   assert.equal(nameHintFromHandle('123456789'), null);
 });
 
-test('readHtmlTitle accepts real Facebook page titles and rejects login shells', () => {
+test('readHtmlTitle accepts real Facebook page titles and rejects generic shells', () => {
   assert.equal(readHtmlTitle('<title>Soulskunks | Facebook</title>'), 'Soulskunks');
   assert.equal(readHtmlTitle('<title>Facebook – log in or sign up</title>'), null);
+  assert.equal(readHtmlTitle('<title>Error</title>'), null);
 });
 
 test('existing artist lookup aliases DynamoDB reserved projection fields', async () => {
@@ -92,6 +95,35 @@ test('group-member wrapper resolves embedded numeric profile and inspects canoni
   assert.ok(result.sourceUrl.includes('/groups/257127181399411/user/100095600102594'));
 });
 
+test('v2 rewrites group-member wrapper before inspection and preserves original input', async () => {
+  const input = 'https://www.facebook.com/groups/257127181399411/user/100095600102594';
+  assert.equal(unwrapGroupMemberProfileInput(input), 'https://www.facebook.com/100095600102594');
+
+  const fetchedUrls = [];
+  const result = await inspectFacebookSourceV2({
+    input,
+    expectedType: 'artist',
+    client: fakeClient([{}]),
+    fetchHtml: async (url) => {
+      fetchedUrls.push(url);
+      return {
+        statusCode: 200,
+        finalUrl: url,
+        html: '<meta property="og:title" content="Example Artist | Facebook">',
+      };
+    },
+    fetchPicture: async () => null,
+  });
+
+  assert.equal(fetchedUrls[0], 'https://www.facebook.com/100095600102594');
+  assert.ok(fetchedUrls.includes('https://mbasic.facebook.com/100095600102594'));
+  assert.equal(result.input, input);
+  assert.equal(result.facebookKey, 'facebook.com/100095600102594');
+  assert.equal(result.facebookUrl, 'https://www.facebook.com/100095600102594');
+  assert.equal(result.observed.name, 'Example Artist');
+  assert.equal(result.evidence.canonicalUrl, 'facebook_group_member_profile');
+});
+
 test('enrichInspectionResult uses mbasic title and Graph picture when primary metadata is barren', async () => {
   const baseResult = {
     source: 'facebook',
@@ -128,6 +160,46 @@ test('enrichInspectionResult uses mbasic title and Graph picture when primary me
   assert.equal(enriched.observed.description, 'Soul and ska band');
   assert.equal(enriched.observed.imageUrl, 'https://scontent-lhr8-1.xx.fbcdn.net/soulskunks.jpg');
   assert.equal(enriched.evidence.imageUrl, 'facebook_graph_picture');
+});
+
+test('generic Facebook Error metadata is discarded before handle fallback', async () => {
+  const baseResult = {
+    source: 'facebook',
+    valid: true,
+    identityResolved: true,
+    facebookUrl: 'https://www.facebook.com/thecurrantsband',
+    facebookKey: 'facebook.com/thecurrantsband',
+    existing: null,
+    observed: {
+      name: 'Error',
+      imageUrl: 'https://scontent-lhr8-1.xx.fbcdn.net/currants.jpg',
+      description: 'See posts, photos and more on Facebook.',
+      canonicalUrl: 'https://www.facebook.com/thecurrantsband',
+    },
+    evidence: {
+      name: 'facebook_html_meta',
+      imageUrl: 'facebook_html_meta',
+      description: 'facebook_html_meta',
+      canonicalUrl: 'facebook_identity',
+    },
+    warnings: [],
+  };
+
+  const enriched = await enrichInspectionResult(baseResult, {
+    expectedType: 'artist',
+    fetchHtml: async () => ({
+      statusCode: 200,
+      finalUrl: 'https://mbasic.facebook.com/thecurrantsband',
+      html: '<title>Error</title><meta name="description" content="See posts, photos and more on Facebook.">',
+    }),
+    fetchPicture: async () => null,
+  });
+
+  assert.equal(enriched.observed.name, 'Thecurrantsband');
+  assert.equal(enriched.evidence.name, 'facebook_handle_hint');
+  assert.equal(enriched.observed.description, null);
+  assert.equal(enriched.evidence.description, undefined);
+  assert.equal(enriched.observed.imageUrl, 'https://scontent-lhr8-1.xx.fbcdn.net/currants.jpg');
 });
 
 test('enrichInspectionResult falls back to a handle hint but never marks it verified', async () => {
@@ -171,6 +243,6 @@ test('existing artists are not enriched or network-fetched again', async () => {
     fetchPicture: async () => { called = true; return null; },
   });
 
-  assert.equal(result, existing);
+  assert.deepEqual(result, existing);
   assert.equal(called, false);
 });
