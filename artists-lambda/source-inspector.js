@@ -368,10 +368,12 @@ async function findExistingArtistByFacebookKey(key, client = dynamodb) {
   const artistResult = await client.get({
     TableName: ARTISTS_TABLE,
     Key: { id: artistId },
-    ProjectionExpression: 'id, #name, #location, profileImageUrl, facebookUrl, websiteUrl, hidden, deleted',
+    ProjectionExpression: 'id, #name, #location, profileImageUrl, facebookUrl, websiteUrl, #hidden, #deleted',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
+      '#hidden': 'hidden',
+      '#deleted': 'deleted',
     },
   }).promise();
 
