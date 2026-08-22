@@ -1,0 +1,151 @@
+name: Deploy consolidated chat.bndy.live
+
+on:
+  push:
+    branches:
+      - deploy-chatzone-hosting
+    paths:
+      - 'infra/chatzone-hosting.yml'
+      - '.github/workflows/deploy-chatzone-hosting.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout ops branch
+        uses: actions/checkout@v4
+        with:
+          ref: deploy-chatzone-hosting
+          path: ops
+
+      - name: Checkout Chatzone
+        uses: actions/checkout@v4
+        with:
+          repository: flowency-live/bndy-chatzone
+          ref: main
+          path: chatzone
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: chatzone/package-lock.json
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Test and build Chatzone
+        working-directory: chatzone
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run test:run
+          npm run build
+          grep -R -q 'capture.bndy.co.uk' dist/assets
+          if grep -R -q '/signals' dist/assets; then
+            echo 'Old Signals API reference remains in production bundle' >&2
+            exit 1
+          fi
+
+      - name: Resolve bndy.live hosted zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZONE_ID="$(aws route53 list-hosted-zones-by-name --dns-name bndy.live --query "HostedZones[?Name=='bndy.live.'].Id | [0]" --output text | sed 's#^/hostedzone/##')"
+          test -n "$ZONE_ID" && test "$ZONE_ID" != "None"
+          echo "ZONE_ID=$ZONE_ID" >> "$GITHUB_ENV"
+
+      - name: Deploy static hosting stack
+        working-directory: ops
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudformation deploy \
+            --region us-east-1 \
+            --stack-name bndy-chatzone-hosting \
+            --template-file infra/chatzone-hosting.yml \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides HostedZoneId="$ZONE_ID" DomainName="chat.bndy.live"
+          BUCKET="$(aws cloudformation describe-stacks --region us-east-1 --stack-name bndy-chatzone-hosting --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue | [0]" --output text)"
+          DISTRIBUTION_ID="$(aws cloudformation describe-stacks --region us-east-1 --stack-name bndy-chatzone-hosting --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue | [0]" --output text)"
+          DISTRIBUTION_DOMAIN="$(aws cloudformation describe-stacks --region us-east-1 --stack-name bndy-chatzone-hosting --query "Stacks[0].Outputs[?OutputKey=='DistributionDomainName'].OutputValue | [0]" --output text)"
+          test -n "$BUCKET" && test "$BUCKET" != "None"
+          test -n "$DISTRIBUTION_ID" && test "$DISTRIBUTION_ID" != "None"
+          echo "SITE_BUCKET=$BUCKET" >> "$GITHUB_ENV"
+          echo "DISTRIBUTION_ID=$DISTRIBUTION_ID" >> "$GITHUB_ENV"
+          echo "DISTRIBUTION_DOMAIN=$DISTRIBUTION_DOMAIN" >> "$GITHUB_ENV"
+
+      - name: Publish build
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3 sync chatzone/dist/ "s3://$SITE_BUCKET/" --delete --cache-control 'public,max-age=31536000,immutable' --exclude 'index.html'
+          aws s3 cp chatzone/dist/index.html "s3://$SITE_BUCKET/index.html" --content-type 'text/html; charset=utf-8' --cache-control 'no-cache,no-store,must-revalidate'
+          INVALIDATION_ID="$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths '/*' --query 'Invalidation.Id' --output text)"
+          aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION_ID" --id "$INVALIDATION_ID"
+
+      - name: Smoke test new distribution and live domain
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_site() {
+            local url="$1"
+            rm -f /tmp/index.html /tmp/assets.txt
+            curl -fsS --retry 3 "$url/" -o /tmp/index.html
+            python - "$url" <<'PY'
+          import re,sys,urllib.request,pathlib
+          base=sys.argv[1].rstrip('/')
+          html=pathlib.Path('/tmp/index.html').read_text(errors='replace')
+          srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)["\']',html,re.I)
+          if not srcs: raise SystemExit(2)
+          body=''
+          for src in srcs:
+              target=src if src.startswith('http') else base + ('/' if not src.startswith('/') else '') + src
+              with urllib.request.urlopen(target,timeout=30) as r: body += r.read().decode('utf-8','replace')
+          if 'capture.bndy.co.uk' not in body or '/v1/public/captures' not in body: raise SystemExit(3)
+          if '/signals' in body: raise SystemExit(4)
+          PY
+          }
+          check_site "https://$DISTRIBUTION_DOMAIN"
+
+          LIVE_OK=0
+          for i in $(seq 1 30); do
+            if check_site 'https://chat.bndy.live'; then LIVE_OK=1; break; fi
+            sleep 10
+          done
+          test "$LIVE_OK" = "1"
+
+      - name: Record deployment result
+        if: always()
+        working-directory: ops
+        shell: bash
+        run: |
+          set -u
+          mkdir -p diagnostics
+          python - <<'PY'
+          import json,os,pathlib,datetime,subprocess
+          def out(cmd):
+              try: return subprocess.check_output(cmd,text=True,stderr=subprocess.DEVNULL).strip()
+              except Exception: return None
+          payload={
+            'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'chatzoneCommit':out(['git','-C','../chatzone','rev-parse','HEAD']),
+            'bucketConfigured':bool(os.getenv('SITE_BUCKET')),
+            'distributionId':os.getenv('DISTRIBUTION_ID'),
+            'distributionDomain':os.getenv('DISTRIBUTION_DOMAIN'),
+            'liveUrl':'https://chat.bndy.live',
+          }
+          pathlib.Path('diagnostics/chatzone-hosting-deploy.json').write_text(json.dumps(payload,indent=2))
+          PY
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/chatzone-hosting-deploy.json
+          git commit -m 'Record chat.bndy.live deployment' || true
+          git push origin HEAD:deploy-chatzone-hosting
