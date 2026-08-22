@@ -115,7 +115,7 @@ function publicFestival(item) {
 async function getBands(event) {
   const items = await scanAll({
     TableName: ARTISTS_TABLE,
-    ProjectionExpression: 'id,#name,artist_type,artistType,performerKind,publicationScopes,#names,name_variants,#location,locationLat,locationLng,locationType,profileImageUrl,bio,websiteUrl,facebookUrl,instagramUrl,socialMediaUrls,domainProfiles,claimStatus,owner_user_id,isVerified,#source,createdAt,updated_at,updatedAt',
+    ProjectionExpression: 'id,#name,artist_type,artistType,performerKind,publicationScopes,#names,name_variants,#location,locationLat,locationLng,locationType,profileImageUrl,bio,websiteUrl,facebookUrl,instagramUrl,socialMediaUrls,domainProfiles,claimStatus,owner_user_id,isVerified,#source,createdAt,updated_at,updatedAt,hidden',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#names': 'names',
