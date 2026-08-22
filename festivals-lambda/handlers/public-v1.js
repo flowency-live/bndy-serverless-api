@@ -43,6 +43,24 @@ async function scanAll(dynamodb, params) {
   return items;
 }
 
+/**
+ * Public festival summaries used to scan the whole bndy-events table even
+ * though festivals are a tiny subset of it. Production already has the bySlug
+ * GSI used by detail reads; it is sparse because only slug-bearing rows are in
+ * the index and it projects the festival records needed by those reads. Scan
+ * that small index for listings, retaining the table scan only as a compatibility
+ * fallback for environments where the legacy index has not been provisioned.
+ */
+async function scanFestivalSummaries(dynamodb, params) {
+  try {
+    return await scanAll(dynamodb, { ...params, IndexName: 'bySlug' });
+  } catch (error) {
+    if (!isMissingIndex(error)) throw error;
+    console.warn('[FESTIVALS_PUBLIC] bySlug unavailable for listing; using compatibility table scan', { message: error.message });
+    return scanAll(dynamodb, params);
+  }
+}
+
 async function findFestivalBySlug(dynamodb, slug) {
   try {
     const result = await dynamodb.query({
@@ -99,7 +117,7 @@ async function handleGetPublicFestivals(deps, event) {
     values[':endDate'] = endDate;
   }
 
-  const allItems = await scanAll(dynamodb, {
+  const allItems = await scanFestivalSummaries(dynamodb, {
     TableName: FESTIVALS_TABLE,
     FilterExpression: filters.join(' AND '),
     ExpressionAttributeValues: values
@@ -197,6 +215,7 @@ async function handleGetFestivalBySlug(deps, event) {
 module.exports = {
   handleGetPublicFestivals,
   handleGetFestivalBySlug,
+  scanFestivalSummaries,
   // exported to test index-fallback behaviour directly
   findFestivalBySlug,
   findChildEvents,
