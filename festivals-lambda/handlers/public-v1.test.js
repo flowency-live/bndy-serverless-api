@@ -1,6 +1,7 @@
 const {
   handleGetPublicFestivals,
   handleGetFestivalBySlug,
+  scanFestivalSummaries,
   findFestivalBySlug,
   findChildEvents,
   isMissingIndex
@@ -23,6 +24,41 @@ describe('public-v1 festival reads', () => {
     const err = new Error('The table does not have the specified index');
     err.code = 'ValidationException';
     expect(isMissingIndex(err)).toBe(true);
+  });
+
+  it('uses the sparse bySlug index for festival listings', async () => {
+    const festival = { id: 'f1', entityType: 'festival', slug: 'jazz', isPublic: true };
+    const dynamodb = {
+      scan: jest.fn(() => promiseResult({ Items: [festival] }))
+    };
+    const result = await scanFestivalSummaries(dynamodb, {
+      TableName: 'bndy-events',
+      FilterExpression: 'entityType = :festival',
+      ExpressionAttributeValues: { ':festival': 'festival' }
+    });
+    expect(result).toEqual([festival]);
+    expect(dynamodb.scan).toHaveBeenCalledTimes(1);
+    expect(dynamodb.scan.mock.calls[0][0]).toMatchObject({
+      TableName: 'bndy-events',
+      IndexName: 'bySlug'
+    });
+  });
+
+  it('falls back to the table when bySlug is unavailable for festival listings', async () => {
+    const festival = { id: 'f1', entityType: 'festival', slug: 'jazz', isPublic: true };
+    let scanNo = 0;
+    const dynamodb = {
+      scan: jest.fn(() => (++scanNo === 1 ? missingIndex() : promiseResult({ Items: [festival] })))
+    };
+    const result = await scanFestivalSummaries(dynamodb, {
+      TableName: 'bndy-events',
+      FilterExpression: 'entityType = :festival',
+      ExpressionAttributeValues: { ':festival': 'festival' }
+    });
+    expect(result).toEqual([festival]);
+    expect(dynamodb.scan).toHaveBeenCalledTimes(2);
+    expect(dynamodb.scan.mock.calls[0][0].IndexName).toBe('bySlug');
+    expect(dynamodb.scan.mock.calls[1][0].IndexName).toBeUndefined();
   });
 
   it('falls back to scan when bySlug is unavailable', async () => {
@@ -57,6 +93,7 @@ describe('public-v1 festival reads', () => {
     const response = await handleGetPublicFestivals({ dynamodb, getCorsHeaders }, { queryStringParameters: {} });
     const body = JSON.parse(response.body);
     expect(body.festivals[0]).toMatchObject({ location: 'Congleton', venueCount: 2, actCount: 1 });
+    expect(dynamodb.scan.mock.calls[0][0].IndexName).toBe('bySlug');
   });
 
   it('keeps legacy and live festivals but excludes brass-only festivals', async () => {
