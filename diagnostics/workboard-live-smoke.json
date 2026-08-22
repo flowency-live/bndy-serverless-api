@@ -1,11 +1,55 @@
 {
-  "recordedAt": "2026-08-22T18:02:45.552296+00:00",
+  "recordedAt": "2026-08-22T18:22:25.901541+00:00",
   "url": "https://www.bndy.co.uk/workboard",
   "htmlStatus": "200",
   "jsonStatus": "200",
   "passed": true,
   "hasKanbanMarker": true,
-  "jsonVersion": 1,
-  "laneCount": 14,
-  "repositoryCount": 13
+  "hasNowFocus": true,
+  "hasTargetStamp": true,
+  "jsonVersion": 2,
+  "laneCount": 16,
+  "repositoryCount": 13,
+  "venueWorkers": {
+    "id": "venue-workers",
+    "title": "Venue listing workers",
+    "objective": "Keep high-value venue calendars fresh by revisiting known reliable venue websites on a predictable cadence.",
+    "health": "blue",
+    "deliveryState": "planned",
+    "targetState": true,
+    "repos": [
+      "enrichment",
+      "api"
+    ],
+    "done": [
+      {
+        "title": "Capability fits the Source Registry model",
+        "detail": "Known venue websites are sources. Their pages can be scheduled, observed, interpreted into event claims and deduped through the normal projection path."
+      }
+    ],
+    "now": [
+      {
+        "title": "Define the watched-venue registry",
+        "detail": "Identify venues with reliable, actively maintained listings and store source URL, parsing/acquisition strategy, cadence and last successful scan."
+      }
+    ],
+    "next": [
+      {
+        "title": "Weekly venue worker schedule",
+        "detail": "Run one source job per watched venue weekly, with retry/backoff and a faster cadence only where evidence justifies it."
+      },
+      {
+        "title": "Delta new listings into Claims",
+        "detail": "Only new/changed gigs become claims. Existing gigs dedupe normally; removed listings are not treated as cancellations unless source semantics are explicit."
+      },
+      {
+        "title": "Venue freshness dashboard",
+        "detail": "Show last checked, last changed, failures and new gigs found in Godmode so reliable sources can be expanded safely."
+      }
+    ]
+  },
+  "intelligenceState": {
+    "deliveryState": "building",
+    "targetState": true
+  }
 }
