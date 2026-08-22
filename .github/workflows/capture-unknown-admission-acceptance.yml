@@ -1,5 +1,5 @@
 name: capture-unknown-admission-acceptance
-# Trigger production acceptance after the workflow is registered on master.
+# Trigger final production acceptance for publish-always + non-ticketed-by-default Capture policy.
 
 on:
   push:
