@@ -36,6 +36,8 @@ jobs:
       - uses: aws-actions/setup-sam@v2
 
       - name: Resolve existing stack parameters
+        id: params
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -50,14 +52,20 @@ jobs:
           echo "::add-mask::$HOSTED_ZONE_ID"
 
       - name: Build
+        id: build
+        if: steps.params.outcome == 'success'
+        continue-on-error: true
         working-directory: capture/aws
         run: sam build
 
       - name: Deploy
+        id: deploy
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
         working-directory: capture/aws
         shell: bash
         run: |
-          set -euo pipefail
+          set -o pipefail
           sam deploy \
             --stack-name bndy-capture \
             --region eu-west-2 \
@@ -73,10 +81,12 @@ jobs:
               PublicAllowedOrigins="https://chat.bndy.live" \
               PublicRateLimit="20" \
               PublicRateWindowSeconds="600" \
-              PublicMaxImageBytes="5242880"
+              PublicMaxImageBytes="5242880" 2>&1 | tee /tmp/capture-deploy.log
 
       - name: Smoke test public transport
         id: smoke
+        if: steps.deploy.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -97,27 +107,38 @@ jobs:
             --data '{"mimeType":"image/jpeg","fileName":"test.jpg","size":0}')"
           test "$BAD_SIZE_STATUS" = "400"
           jq -e '.error == "invalid_image_size"' /tmp/bad-size.json
-
           echo "bad_origin_status=$BAD_ORIGIN_STATUS" >> "$GITHUB_OUTPUT"
           echo "bad_size_status=$BAD_SIZE_STATUS" >> "$GITHUB_OUTPUT"
 
       - name: Record result
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p ops/diagnostics
+          ERROR_TEXT=""
+          if [ -f /tmp/capture-deploy.log ]; then
+            ERROR_TEXT="$(grep -E 'Error|error|FAILED|failed|ROLLBACK|AccessDenied|ValidationError' /tmp/capture-deploy.log | tail -20 | sed 's/"/\\"/g' | tr '\n' ' ' || true)"
+          fi
           cat > ops/diagnostics/public-dropzone-deploy.json <<JSON
           {
             "captureCommit": "$(git -C capture rev-parse HEAD)",
-            "deployedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "health": "ok",
-            "badOriginStatus": ${{ steps.smoke.outputs.bad_origin_status }},
-            "badImageSizeStatus": ${{ steps.smoke.outputs.bad_size_status }},
-            "publicOrigin": "https://chat.bndy.live"
+            "recordedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "paramsOutcome": "${{ steps.params.outcome }}",
+            "buildOutcome": "${{ steps.build.outcome }}",
+            "deployOutcome": "${{ steps.deploy.outcome }}",
+            "smokeOutcome": "${{ steps.smoke.outcome }}",
+            "badOriginStatus": "${{ steps.smoke.outputs.bad_origin_status }}",
+            "badImageSizeStatus": "${{ steps.smoke.outputs.bad_size_status }}",
+            "errorSummary": "$ERROR_TEXT"
           }
           JSON
           git -C ops config user.name bndy-bot
           git -C ops config user.email actions@users.noreply.github.com
           git -C ops add diagnostics/public-dropzone-deploy.json
-          git -C ops commit -m 'Record Capture public Dropzone deployment' || exit 0
+          git -C ops commit -m 'Record Capture public Dropzone deployment' || true
           git -C ops push origin HEAD:deploy-capture-public-dropzone
+
+      - name: Fail unsuccessful deployment
+        if: always() && (steps.params.outcome != 'success' || steps.build.outcome != 'success' || steps.deploy.outcome != 'success' || steps.smoke.outcome != 'success')
+        run: exit 1
