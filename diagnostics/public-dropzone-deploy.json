@@ -1,0 +1,8 @@
+{
+  "captureCommit": "e905f162c737c36a386169a31ee0ea0e9e117605",
+  "deployedAt": "2026-08-22T15:52:59Z",
+  "health": "ok",
+  "badOriginStatus": 403,
+  "badImageSizeStatus": 400,
+  "publicOrigin": "https://chat.bndy.live"
+}
