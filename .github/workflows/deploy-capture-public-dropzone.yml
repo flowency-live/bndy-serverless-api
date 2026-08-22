@@ -7,15 +7,25 @@ on:
     paths:
       - '.github/workflows/deploy-capture-public-dropzone.yml'
 
+permissions:
+  contents: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout ops branch
+        uses: actions/checkout@v4
+        with:
+          path: ops
+          ref: deploy-capture-public-dropzone
+
       - name: Checkout Capture
         uses: actions/checkout@v4
         with:
           repository: flowency-live/bndy-capture
           ref: main
+          path: capture
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -40,11 +50,11 @@ jobs:
           echo "::add-mask::$HOSTED_ZONE_ID"
 
       - name: Build
-        working-directory: aws
+        working-directory: capture/aws
         run: sam build
 
       - name: Deploy
-        working-directory: aws
+        working-directory: capture/aws
         shell: bash
         run: |
           set -euo pipefail
@@ -66,22 +76,48 @@ jobs:
               PublicMaxImageBytes="5242880"
 
       - name: Smoke test public transport
+        id: smoke
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error https://capture.bndy.co.uk/health | jq -e '.ok == true'
+          HEALTH="$(curl --fail --silent --show-error https://capture.bndy.co.uk/health)"
+          jq -e '.ok == true' <<<"$HEALTH"
 
-          STATUS="$(curl --silent --output /tmp/bad-origin.json --write-out '%{http_code}' \
+          BAD_ORIGIN_STATUS="$(curl --silent --output /tmp/bad-origin.json --write-out '%{http_code}' \
             -X POST https://capture.bndy.co.uk/v1/public/captures \
             -H 'Origin: https://example.com' \
             -H 'Content-Type: application/json' \
             --data '{"sharedText":"test"}')"
-          test "$STATUS" = "403"
+          test "$BAD_ORIGIN_STATUS" = "403"
 
-          STATUS="$(curl --silent --output /tmp/bad-size.json --write-out '%{http_code}' \
+          BAD_SIZE_STATUS="$(curl --silent --output /tmp/bad-size.json --write-out '%{http_code}' \
             -X POST https://capture.bndy.co.uk/v1/public/uploads/image \
             -H 'Origin: https://chat.bndy.live' \
             -H 'Content-Type: application/json' \
             --data '{"mimeType":"image/jpeg","fileName":"test.jpg","size":0}')"
-          test "$STATUS" = "400"
+          test "$BAD_SIZE_STATUS" = "400"
           jq -e '.error == "invalid_image_size"' /tmp/bad-size.json
+
+          echo "bad_origin_status=$BAD_ORIGIN_STATUS" >> "$GITHUB_OUTPUT"
+          echo "bad_size_status=$BAD_SIZE_STATUS" >> "$GITHUB_OUTPUT"
+
+      - name: Record result
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ops/diagnostics
+          cat > ops/diagnostics/public-dropzone-deploy.json <<JSON
+          {
+            "captureCommit": "$(git -C capture rev-parse HEAD)",
+            "deployedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "health": "ok",
+            "badOriginStatus": ${{ steps.smoke.outputs.bad_origin_status }},
+            "badImageSizeStatus": ${{ steps.smoke.outputs.bad_size_status }},
+            "publicOrigin": "https://chat.bndy.live"
+          }
+          JSON
+          git -C ops config user.name bndy-bot
+          git -C ops config user.email actions@users.noreply.github.com
+          git -C ops add diagnostics/public-dropzone-deploy.json
+          git -C ops commit -m 'Record Capture public Dropzone deployment' || exit 0
+          git -C ops push origin HEAD:deploy-capture-public-dropzone
