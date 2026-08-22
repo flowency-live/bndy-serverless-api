@@ -14,7 +14,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - name: Checkout ops branch
         uses: actions/checkout@v4
@@ -61,8 +61,19 @@ jobs:
           ZONE_ID="$(aws route53 list-hosted-zones-by-name --dns-name bndy.live --query "HostedZones[?Name=='bndy.live.'].Id | [0]" --output text | sed 's#^/hostedzone/##')"
           test -n "$ZONE_ID" && test "$ZONE_ID" != "None"
           echo "ZONE_ID=$ZONE_ID" >> "$GITHUB_ENV"
+          echo "::add-mask::$ZONE_ID"
 
-      - name: Deploy static hosting stack
+      - name: Recover failed first hosting attempt
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATUS="$(aws cloudformation describe-stacks --region us-east-1 --stack-name bndy-chatzone-hosting --query 'Stacks[0].StackStatus' --output text 2>/dev/null || true)"
+          if [ "$STATUS" = 'ROLLBACK_COMPLETE' ]; then
+            aws cloudformation delete-stack --region us-east-1 --stack-name bndy-chatzone-hosting
+            aws cloudformation wait stack-delete-complete --region us-east-1 --stack-name bndy-chatzone-hosting
+          fi
+
+      - name: Create target distribution without conflicting alias
         working-directory: ops
         shell: bash
         run: |
@@ -72,7 +83,7 @@ jobs:
             --stack-name bndy-chatzone-hosting \
             --template-file infra/chatzone-hosting.yml \
             --no-fail-on-empty-changeset \
-            --parameter-overrides HostedZoneId="$ZONE_ID" DomainName="chat.bndy.live"
+            --parameter-overrides HostedZoneId="$ZONE_ID" DomainName="chat.bndy.live" AttachAlias="false"
           BUCKET="$(aws cloudformation describe-stacks --region us-east-1 --stack-name bndy-chatzone-hosting --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue | [0]" --output text)"
           DISTRIBUTION_ID="$(aws cloudformation describe-stacks --region us-east-1 --stack-name bndy-chatzone-hosting --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue | [0]" --output text)"
           DISTRIBUTION_DOMAIN="$(aws cloudformation describe-stacks --region us-east-1 --stack-name bndy-chatzone-hosting --query "Stacks[0].Outputs[?OutputKey=='DistributionDomainName'].OutputValue | [0]" --output text)"
@@ -82,7 +93,7 @@ jobs:
           echo "DISTRIBUTION_ID=$DISTRIBUTION_ID" >> "$GITHUB_ENV"
           echo "DISTRIBUTION_DOMAIN=$DISTRIBUTION_DOMAIN" >> "$GITHUB_ENV"
 
-      - name: Publish build
+      - name: Publish build to target distribution
         shell: bash
         run: |
           set -euo pipefail
@@ -91,36 +102,110 @@ jobs:
           INVALIDATION_ID="$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths '/*' --query 'Invalidation.Id' --output text)"
           aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION_ID" --id "$INVALIDATION_ID"
 
-      - name: Smoke test new distribution and live domain
+      - name: Verify target build before domain migration
         shell: bash
         run: |
           set -euo pipefail
-          check_site() {
-            local url="$1"
-            rm -f /tmp/index.html /tmp/assets.txt
-            curl -fsS --retry 3 "$url/" -o /tmp/index.html
-            python - "$url" <<'PY'
+          curl -fsS --retry 5 "https://$DISTRIBUTION_DOMAIN/" >/tmp/target-index.html
+          python - "https://$DISTRIBUTION_DOMAIN" <<'PY'
           import re,sys,urllib.request,pathlib
           base=sys.argv[1].rstrip('/')
-          html=pathlib.Path('/tmp/index.html').read_text(errors='replace')
+          html=pathlib.Path('/tmp/target-index.html').read_text(errors='replace')
           srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)["\']',html,re.I)
-          if not srcs: raise SystemExit(2)
+          if not srcs: raise SystemExit('No JS bundle found')
           body=''
           for src in srcs:
               target=src if src.startswith('http') else base + ('/' if not src.startswith('/') else '') + src
               with urllib.request.urlopen(target,timeout=30) as r: body += r.read().decode('utf-8','replace')
-          if 'capture.bndy.co.uk' not in body or '/v1/public/captures' not in body: raise SystemExit(3)
-          if '/signals' in body: raise SystemExit(4)
+          if 'capture.bndy.co.uk' not in body or '/v1/public/captures' not in body: raise SystemExit('Target does not contain Capture client')
+          if '/signals' in body: raise SystemExit('Target still contains Signals API')
           PY
-          }
-          check_site "https://$DISTRIBUTION_DOMAIN"
 
-          LIVE_OK=0
-          for i in $(seq 1 30); do
-            if check_site 'https://chat.bndy.live'; then LIVE_OK=1; break; fi
+      - name: Prove ownership and move CloudFront alias
+        id: alias
+        shell: bash
+        run: |
+          set -uo pipefail
+          # CloudFront requires DNS ownership proof when an alias may belong to another AWS account.
+          cat >/tmp/txt-change.json <<JSON
+          {
+            "Changes": [{
+              "Action": "UPSERT",
+              "ResourceRecordSet": {
+                "Name": "_chat.bndy.live",
+                "Type": "TXT",
+                "TTL": 60,
+                "ResourceRecords": [{"Value": "\"$DISTRIBUTION_DOMAIN\""}]
+              }
+            }]
+          }
+          JSON
+          aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch file:///tmp/txt-change.json >/tmp/txt-result.json
+          sleep 15
+
+          aws cloudfront list-conflicting-aliases --distribution-id "$DISTRIBUTION_ID" --alias chat.bndy.live --output json >/tmp/conflicts.json 2>/tmp/conflicts.err || true
+
+          set +e
+          aws cloudfront associate-alias --target-distribution-id "$DISTRIBUTION_ID" --alias chat.bndy.live >/tmp/associate.out 2>/tmp/associate.err
+          RC=$?
+          set -e
+          echo "associate_rc=$RC" >> "$GITHUB_OUTPUT"
+          if [ "$RC" != "0" ]; then
+            echo 'CloudFront alias move failed' >&2
+            cat /tmp/associate.err >&2
+            exit 1
+          fi
+
+      - name: Converge CloudFormation after alias move
+        working-directory: ops
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudformation deploy \
+            --region us-east-1 \
+            --stack-name bndy-chatzone-hosting \
+            --template-file infra/chatzone-hosting.yml \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides HostedZoneId="$ZONE_ID" DomainName="chat.bndy.live" AttachAlias="true"
+
+      - name: Point live DNS to new distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >/tmp/dns-change.json <<JSON
+          {
+            "Changes": [
+              {"Action":"UPSERT","ResourceRecordSet":{"Name":"chat.bndy.live","Type":"A","AliasTarget":{"HostedZoneId":"Z2FDTNDATAQYW2","DNSName":"$DISTRIBUTION_DOMAIN","EvaluateTargetHealth":false}}},
+              {"Action":"UPSERT","ResourceRecordSet":{"Name":"chat.bndy.live","Type":"AAAA","AliasTarget":{"HostedZoneId":"Z2FDTNDATAQYW2","DNSName":"$DISTRIBUTION_DOMAIN","EvaluateTargetHealth":false}}}
+            ]
+          }
+          JSON
+          CHANGE_ID="$(aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch file:///tmp/dns-change.json --query 'ChangeInfo.Id' --output text)"
+          aws route53 wait resource-record-sets-changed --id "$CHANGE_ID"
+
+      - name: Smoke test live consolidated site
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 36); do
+            rm -f /tmp/live-index.html /tmp/live-bundle.txt
+            if curl -fsS --retry 2 -H 'Cache-Control: no-cache' https://chat.bndy.live/ -o /tmp/live-index.html; then
+              if python - <<'PY'
+          import re,urllib.request,pathlib
+          html=pathlib.Path('/tmp/live-index.html').read_text(errors='replace')
+          srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)["\']',html,re.I)
+          body=''
+          for src in srcs:
+              target=src if src.startswith('http') else 'https://chat.bndy.live' + ('/' if not src.startswith('/') else '') + src
+              with urllib.request.urlopen(target,timeout=30) as r: body += r.read().decode('utf-8','replace')
+          if 'capture.bndy.co.uk' not in body or '/v1/public/captures' not in body: raise SystemExit(2)
+          if '/signals' in body: raise SystemExit(3)
+          PY
+              then exit 0; fi
+            fi
             sleep 10
           done
-          test "$LIVE_OK" = "1"
+          exit 1
 
       - name: Record deployment result
         if: always()
@@ -134,12 +219,25 @@ jobs:
           def out(cmd):
               try: return subprocess.check_output(cmd,text=True,stderr=subprocess.DEVNULL).strip()
               except Exception: return None
+          def read(path):
+              p=pathlib.Path(path)
+              return p.read_text(errors='replace')[-1500:] if p.exists() else None
+          conflicts={}
+          try: conflicts=json.loads(pathlib.Path('/tmp/conflicts.json').read_text())
+          except: pass
+          # Keep only CloudFront's masked conflict identifiers; never persist credentials.
+          conflict_items=[]
+          for item in (conflicts.get('ConflictingAliasesList') or {}).get('Items',[]):
+              conflict_items.append({'alias':item.get('Alias'),'distributionId':item.get('DistributionId'),'accountId':item.get('AccountId')})
           payload={
             'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'chatzoneCommit':out(['git','-C','../chatzone','rev-parse','HEAD']),
             'bucketConfigured':bool(os.getenv('SITE_BUCKET')),
             'distributionId':os.getenv('DISTRIBUTION_ID'),
             'distributionDomain':os.getenv('DISTRIBUTION_DOMAIN'),
+            'associateRc':os.getenv('ASSOCIATE_RC'),
+            'associateError':read('/tmp/associate.err'),
+            'conflicts':conflict_items,
             'liveUrl':'https://chat.bndy.live',
           }
           pathlib.Path('diagnostics/chatzone-hosting-deploy.json').write_text(json.dumps(payload,indent=2))
