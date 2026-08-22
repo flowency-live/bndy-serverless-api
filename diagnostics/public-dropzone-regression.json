@@ -1,0 +1,28 @@
+{
+  "recordedAt": "2026-08-22T15:58:39.882147+00:00",
+  "regression": {
+    "captureId": "e106ed9f-ecde-4ad5-a4ee-07ed315732e4",
+    "publicState": "could_not_resolve",
+    "status": "failed",
+    "sourceApp": "chatzone",
+    "mediaMimeType": "image/jpeg",
+    "containsMarvelInResult": false,
+    "containsPistachioNuts": false,
+    "containsBritonFerry": false,
+    "containsExpectedDate": false,
+    "containsExpectedTime": false,
+    "artistLine": null,
+    "eventDetail": null
+  },
+  "hosting": {
+    "route53": [
+      {
+        "Type": "A",
+        "AliasDNSName": "d31tiyfnjihe81.cloudfront.net.",
+        "Values": []
+      }
+    ],
+    "amplify": [],
+    "cloudfront": []
+  }
+}
