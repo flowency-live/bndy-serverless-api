@@ -37,172 +37,106 @@ jobs:
           echo "CAPTURE_TOKEN=$CAPTURE_TOKEN" >> "$GITHUB_ENV"
           echo "::add-mask::$CAPTURE_TOKEN"
 
-      - name: Run poster through public Dropzone path
-        id: regression
+      - name: Submit visual poster through public Capture path
         shell: bash
         run: |
           set -euo pipefail
-          cat > /tmp/regression.py <<'PY'
+          cat >/tmp/regression.py <<'PY'
           import json, os, subprocess, time
           from pathlib import Path
           from PIL import Image, ImageDraw, ImageFont
           import requests
 
-          API = 'https://capture.bndy.co.uk'
-          ORIGIN = 'https://chat.bndy.live'
-          TOKEN = os.environ['CAPTURE_TOKEN']
-          headers = {'Origin': ORIGIN, 'Content-Type': 'application/json'}
+          API='https://capture.bndy.co.uk'
+          ORIGIN='https://chat.bndy.live'
+          TOKEN=os.environ['CAPTURE_TOKEN']
+          headers={'Origin':ORIGIN,'Content-Type':'application/json'}
 
-          # Visual regression fixture deliberately contains MARVEL as low-level visual noise,
-          # reproducing the failure mode from the real Pistachio Nuts poster without feeding
-          # flattened OCR text to the model.
-          im = Image.new('RGB', (900, 1270), 'black')
-          d = ImageDraw.Draw(im)
+          im=Image.new('RGB',(900,1270),'black')
+          d=ImageDraw.Draw(im)
           try:
-              bold = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 88)
-              big = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 72)
-              med = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 44)
-              small = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 27)
-              tiny = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 17)
+              bold=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',88)
+              big=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',72)
+              med=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',44)
+              small=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',27)
+              tiny=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',17)
           except Exception:
-              bold = big = med = small = tiny = ImageFont.load_default()
-          def centered(text, y, font, fill='white'):
-              box = d.textbbox((0,0), text, font=font)
-              x = (900 - (box[2]-box[0])) // 2
-              d.text((x,y), text, font=font, fill=fill)
-          centered('DYNAMIC BOOKINGS & PROMOTIONS', 45, small)
-          centered('PRESENTS', 95, small)
-          centered('PISTACHIO', 170, bold)
-          centered('NUTS', 265, bold, '#9baa43')
-          # four performer-photo placeholders; MARVEL exists only on the drummer shirt/noise area
+              bold=big=med=small=tiny=ImageFont.load_default()
+          def centered(text,y,font,fill='white'):
+              box=d.textbbox((0,0),text,font=font)
+              d.text(((900-(box[2]-box[0]))//2,y),text,font=font,fill=fill)
+          centered('DYNAMIC BOOKINGS & PROMOTIONS',45,small)
+          centered('PRESENTS',95,small)
+          centered('PISTACHIO',170,bold)
+          centered('NUTS',265,bold,'#9baa43')
           for i in range(4):
-              x = 55 + i*205
-              d.rectangle((x,390,x+165,610), outline='white', width=4, fill='#303030')
-          d.rectangle((690,485,785,535), fill='#eeeeee')
-          d.text((705,498), 'MARVEL', font=tiny, fill='black')
-          centered('LIVE AT', 650, med, '#9baa43')
-          centered('BRITON FERRY WORKIES', 715, big)
-          centered('SUNDAY', 885, med)
-          centered('AUGUST 23RD', 950, big, '#9baa43')
-          centered('6.30PM', 1050, med)
-          centered('FOR ARTIST BOOKINGS CALL 07960 293144', 1180, small)
-          path = Path('/tmp/pistachio-regression.jpg')
-          im.save(path, 'JPEG', quality=90)
+              x=55+i*205
+              d.rectangle((x,390,x+165,610),outline='white',width=4,fill='#303030')
+          d.rectangle((690,485,785,535),fill='#eeeeee')
+          d.text((705,498),'MARVEL',font=tiny,fill='black')
+          centered('LIVE AT',650,med,'#9baa43')
+          centered('BRITON FERRY WORKIES',715,big)
+          centered('SUNDAY',885,med)
+          centered('AUGUST 23RD',950,big,'#9baa43')
+          centered('6.30PM',1050,med)
+          centered('FOR ARTIST BOOKINGS CALL 07960 293144',1180,small)
+          path=Path('/tmp/pistachio-regression.jpg')
+          im.save(path,'JPEG',quality=90)
 
-          up = requests.post(API + '/v1/public/uploads/image', headers=headers, json={
+          upload=requests.post(API+'/v1/public/uploads/image',headers=headers,json={
               'mimeType':'image/jpeg','fileName':'pistachio-regression.jpg','size':path.stat().st_size
-          }, timeout=30)
-          up.raise_for_status()
-          upload = up.json()
+          },timeout=30)
+          upload.raise_for_status()
+          u=upload.json()
           with path.open('rb') as f:
-              s3 = requests.post(upload['uploadUrl'], data=upload['fields'], files={'file':('pistachio-regression.jpg',f,'image/jpeg')}, timeout=60)
+              s3=requests.post(u['uploadUrl'],data=u['fields'],files={'file':('pistachio-regression.jpg',f,'image/jpeg')},timeout=60)
           s3.raise_for_status()
 
-          create = requests.post(API + '/v1/public/captures', headers=headers, json={'media':upload['media']}, timeout=30)
+          create=requests.post(API+'/v1/public/captures',headers=headers,json={'media':u['media']},timeout=30)
           create.raise_for_status()
-          public = create.json()
-          capture_id = public['captureId']
+          capture_id=create.json()['captureId']
+          subprocess.run(['aws','lambda','invoke','--function-name','bndy-capture-scan','--payload','{}','--cli-binary-format','raw-in-base64-out','/tmp/scan.json'],check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
-          # Nudge the production scanner if it exists, otherwise normal scheduled scanning will pick it up.
-          subprocess.run(['aws','lambda','invoke','--function-name','bndy-capture-scan','--payload','{}','--cli-binary-format','raw-in-base64-out','/tmp/scanner.json'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-          deadline = time.time() + 360
-          terminal = None
-          while time.time() < deadline:
-              r = requests.get(API + f'/v1/public/captures/{capture_id}', headers={'Origin':ORIGIN}, timeout=20)
+          deadline=time.time()+360
+          terminal={}
+          while time.time()<deadline:
+              r=requests.get(API+f'/v1/public/captures/{capture_id}',headers={'Origin':ORIGIN},timeout=20)
               r.raise_for_status()
-              terminal = r.json()
+              terminal=r.json()
               if terminal.get('state') in {'added','already_exists','processed','could_not_resolve','ignored'}:
                   break
               time.sleep(5)
 
-          private = requests.get(API + f'/v1/captures/{capture_id}', headers={'Authorization':f'Bearer {TOKEN}'}, timeout=20)
+          private=requests.get(API+f'/v1/captures/{capture_id}',headers={'Authorization':f'Bearer {TOKEN}'},timeout=20)
           private.raise_for_status()
-          item = private.json()
-          note = str(item.get('note') or '')
-          result = {
-              'captureId': capture_id,
-              'publicState': (terminal or {}).get('state'),
-              'status': item.get('status'),
-              'note': note,
-              'sourceApp': item.get('sourceApp'),
-              'mediaMimeType': (item.get('media') or {}).get('mimeType'),
-              'containsMarvelInResult': 'marvel' in note.lower(),
-              'containsPistachioNuts': 'pistachio nuts' in note.lower(),
-              'containsBritonFerry': 'briton ferry' in note.lower(),
-              'containsExpectedDate': '2026-08-23' in note,
-              'containsExpectedTime': '18:30' in note,
+          item=private.json()
+          note=str(item.get('note') or '')
+          result={
+              'captureId':capture_id,
+              'publicState':terminal.get('state'),
+              'status':item.get('status'),
+              'sourceApp':item.get('sourceApp'),
+              'processingAttempt':item.get('processingAttempt'),
+              'containsMarvelInResult':'marvel' in note.lower(),
+              'containsPistachioNuts':'pistachio nuts' in note.lower(),
+              'containsBritonFerry':'briton ferry' in note.lower(),
+              'containsExpectedDate':'2026-08-23' in note,
+              'containsExpectedTime':'18:30' in note,
+              'artistLine':next((x.strip() for x in note.splitlines() if x.startswith('Artist: ')),None),
+              'eventDetail':next((x.strip() for x in note.splitlines() if '2026-08-23 18:30' in x),None),
           }
-          Path('/tmp/regression-result.json').write_text(json.dumps(result, indent=2))
-          print(json.dumps({k:v for k,v in result.items() if k != 'note'}, indent=2))
+          Path('/tmp/regression-result.json').write_text(json.dumps(result,indent=2))
+          print(json.dumps(result,indent=2))
           PY
           python /tmp/regression.py
 
-      - name: Diagnose chat.bndy.live hosting
-        id: hosting
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json, subprocess
-          def aws(*args):
-              p=subprocess.run(['aws',*args,'--output','json'],capture_output=True,text=True)
-              return json.loads(p.stdout) if p.returncode==0 and p.stdout.strip() else {'error':p.stderr.strip()[-500:]}
-          out={}
-          # Route53
-          zones=aws('route53','list-hosted-zones-by-name','--dns-name','bndy.live','--max-items','5')
-          records=[]
-          for z in zones.get('HostedZones',[]):
-              name=z.get('Name','').rstrip('.')
-              if name=='bndy.live':
-                  zid=z['Id'].split('/')[-1]
-                  rr=aws('route53','list-resource-record-sets','--hosted-zone-id',zid,'--start-record-name','chat.bndy.live','--max-items','5')
-                  for r in rr.get('ResourceRecordSets',[]):
-                      if r.get('Name','').rstrip('.')=='chat.bndy.live':
-                          records.append({'Type':r.get('Type'),'AliasDNSName':(r.get('AliasTarget') or {}).get('DNSName'),'Values':[x.get('Value') for x in r.get('ResourceRecords',[])]})
-          out['route53']=records
-          # Amplify apps/domains
-          apps=aws('amplify','list-apps')
-          amps=[]
-          for a in apps.get('apps',[]):
-              aid=a.get('appId')
-              ds=aws('amplify','list-domain-associations','--app-id',aid)
-              for d in ds.get('domainAssociations',[]):
-                  if d.get('domainName')=='bndy.live' or any((s.get('subDomainSetting') or {}).get('prefix')=='chat' for s in d.get('subDomains',[])):
-                      branches=aws('amplify','list-branches','--app-id',aid)
-                      amps.append({'name':a.get('name'),'repository':a.get('repository'),'defaultDomain':a.get('defaultDomain'),'domain':d.get('domainName'),'domainStatus':d.get('domainStatus'),'branches':[{'branchName':b.get('branchName'),'stage':b.get('stage'),'enableAutoBuild':b.get('enableAutoBuild')} for b in branches.get('branches',[])]})
-          out['amplify']=amps
-          # CloudFront alias matches
-          cf=aws('cloudfront','list-distributions')
-          cfs=[]
-          for dist in (cf.get('DistributionList') or {}).get('Items',[]):
-              aliases=(dist.get('Aliases') or {}).get('Items',[])
-              if 'chat.bndy.live' in aliases:
-                  cfs.append({'domainName':dist.get('DomainName'),'status':dist.get('Status'),'aliases':aliases})
-          out['cloudfront']=cfs
-          open('/tmp/hosting.json','w').write(json.dumps(out,indent=2))
-          print(json.dumps(out,indent=2))
-          PY
-
-      - name: Record sanitized regression result
+      - name: Record sanitized result
         if: always()
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p diagnostics
-          python - <<'PY'
-          import json, pathlib, re, datetime
-          p=pathlib.Path('/tmp/regression-result.json')
-          r=json.loads(p.read_text()) if p.exists() else {'error':'regression did not produce a result'}
-          # Do not persist arbitrary model notes. Persist only explicit acceptance assertions.
-          note=str(r.pop('note',''))
-          r['artistLine'] = next((x.strip() for x in note.splitlines() if x.startswith('Artist: ')), None)
-          r['eventDetail'] = next((x.strip() for x in note.splitlines() if re.search(r'2026-08-23.*18:30|2026-08-23 18:30', x)), None)
-          h=pathlib.Path('/tmp/hosting.json')
-          payload={'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(), 'regression':r, 'hosting':json.loads(h.read_text()) if h.exists() else {}}
-          pathlib.Path('diagnostics/public-dropzone-regression.json').write_text(json.dumps(payload,indent=2))
-          PY
+          if [ -s /tmp/regression-result.json ]; then cp /tmp/regression-result.json diagnostics/public-dropzone-regression.json; else echo '{"error":"no regression result"}' > diagnostics/public-dropzone-regression.json; fi
           git config user.name bndy-bot
           git config user.email actions@users.noreply.github.com
           git add diagnostics/public-dropzone-regression.json
@@ -219,13 +153,13 @@ jobs:
           if not p.exists(): sys.exit('No regression result')
           r=json.loads(p.read_text())
           checks={
-            'terminal': r.get('publicState') in {'added','already_exists'},
-            'processed': r.get('status')=='processed',
-            'artist': r.get('containsPistachioNuts') is True,
-            'venue': r.get('containsBritonFerry') is True,
-            'date': r.get('containsExpectedDate') is True,
-            'time': r.get('containsExpectedTime') is True,
-            'no_marvel': r.get('containsMarvelInResult') is False,
+            'terminal':r.get('publicState') in {'added','already_exists'},
+            'processed':r.get('status')=='processed',
+            'artist':r.get('containsPistachioNuts') is True,
+            'venue':r.get('containsBritonFerry') is True,
+            'date':r.get('containsExpectedDate') is True,
+            'time':r.get('containsExpectedTime') is True,
+            'no_marvel':r.get('containsMarvelInResult') is False,
           }
           print(json.dumps(checks,indent=2))
           if not all(checks.values()): sys.exit(1)
