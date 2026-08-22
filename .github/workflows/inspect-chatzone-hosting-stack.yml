@@ -31,28 +31,35 @@ jobs:
           def run(args):
               p=subprocess.run(['aws',*args,'--output','json'],capture_output=True,text=True)
               if p.returncode:
-                  return {'error':p.stderr.strip()[-1000:]}
+                  return {'error':p.stderr.strip()[-1200:]}
               try:return json.loads(p.stdout)
               except:return {'raw':p.stdout.strip()}
           stacks=run(['cloudformation','describe-stacks','--region','us-east-1','--stack-name','bndy-chatzone-hosting'])
           stack=(stacks.get('Stacks') or [{}])[0] if not stacks.get('error') else {}
           outputs={o.get('OutputKey'):o.get('OutputValue') for o in stack.get('Outputs',[])}
+          events=run(['cloudformation','describe-stack-events','--region','us-east-1','--stack-name','bndy-chatzone-hosting','--max-items','30'])
+          failures=[]
+          for e in events.get('StackEvents',[]):
+              if 'FAILED' in str(e.get('ResourceStatus') or ''):
+                  failures.append({'logicalId':e.get('LogicalResourceId'),'type':e.get('ResourceType'),'status':e.get('ResourceStatus'),'reason':e.get('ResourceStatusReason')})
           zone=run(['route53','list-hosted-zones-by-name','--dns-name','bndy.live','--max-items','5'])
           zid=None
           for z in zone.get('HostedZones',[]):
               if z.get('Name')=='bndy.live.': zid=z.get('Id','').split('/')[-1]
           records=[]
           if zid:
-              rr=run(['route53','list-resource-record-sets','--hosted-zone-id',zid,'--start-record-name','chat.bndy.live','--max-items','5'])
+              rr=run(['route53','list-resource-record-sets','--hosted-zone-id',zid,'--start-record-name','chat.bndy.live','--max-items','10'])
               for r in rr.get('ResourceRecordSets',[]):
-                  if r.get('Name','').rstrip('.')=='chat.bndy.live':
-                      records.append({'type':r.get('Type'),'alias':(r.get('AliasTarget') or {}).get('DNSName'),'values':[x.get('Value') for x in r.get('ResourceRecords',[])]})
+                  name=r.get('Name','').rstrip('.')
+                  if name in {'chat.bndy.live','_chat.bndy.live'}:
+                      records.append({'name':name,'type':r.get('Type'),'alias':(r.get('AliasTarget') or {}).get('DNSName'),'values':[x.get('Value') for x in r.get('ResourceRecords',[])]})
           payload={
               'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
               'stackStatus':stack.get('StackStatus'),
               'stackStatusReason':stack.get('StackStatusReason'),
               'outputs':outputs,
               'stackError':stacks.get('error'),
+              'failures':failures[:10],
               'records':records,
           }
           pathlib.Path('diagnostics/chatzone-hosting-stack.json').write_text(json.dumps(payload,indent=2))
@@ -64,5 +71,5 @@ jobs:
           git config user.name bndy-bot
           git config user.email actions@users.noreply.github.com
           git add diagnostics/chatzone-hosting-stack.json
-          git commit -m 'Record chat hosting stack state' || true
+          git commit -m 'Refresh chat hosting stack state' || true
           git push origin HEAD:dropzone-poster-diagnostic
