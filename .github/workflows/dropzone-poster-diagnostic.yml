@@ -1,0 +1,60 @@
+name: Dropzone poster diagnostic
+
+on:
+  push:
+    branches:
+      - dropzone-poster-diagnostic
+    paths:
+      - '.github/workflows/dropzone-poster-diagnostic.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dropzone-poster-diagnostic
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+
+      - name: Inspect failed poster capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN_JSON="$(aws secretsmanager get-secret-value --secret-id bndy/capture-service --query SecretString --output text)"
+          CAPTURE_TOKEN="$(jq -r '.token // .CAPTURE_TOKEN' <<<"$TOKEN_JSON")"
+          echo "::add-mask::$CAPTURE_TOKEN"
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $CAPTURE_TOKEN" \
+            https://capture.bndy.co.uk/v1/captures/e106ed9f-ecde-4ad5-a4ee-07ed315732e4 > /tmp/capture.json
+          python - <<'PY'
+          import json, pathlib, re, datetime
+          x=json.loads(pathlib.Path('/tmp/capture.json').read_text())
+          note=str(x.get('note') or '')
+          safe={
+            'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'id':x.get('id'),
+            'status':x.get('status'),
+            'attempt':x.get('processingAttempt'),
+            'sourceApp':x.get('sourceApp'),
+            'suggestedEntityType':x.get('suggestedEntityType'),
+            'mimeType':x.get('mimeType'),
+            'noteLines':[line[:1000] for line in note.splitlines() if line.strip()],
+          }
+          pathlib.Path('diagnostics/dropzone-poster-failure.json').write_text(json.dumps(safe,indent=2))
+          PY
+
+      - name: Record
+        run: |
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/dropzone-poster-failure.json
+          git commit -m 'Record poster capture failure' || true
+          git push origin HEAD:dropzone-poster-diagnostic
