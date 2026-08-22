@@ -1,0 +1,72 @@
+name: Smoke BNDY workboard
+
+on:
+  push:
+    branches:
+      - deploy-bndy-workboard
+    paths:
+      - '.github/workflows/smoke-bndy-workboard.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: deploy-bndy-workboard
+      - name: Verify live page and JSON
+        shell: bash
+        run: |
+          set -euo pipefail
+          : >/tmp/workboard.html
+          : >/tmp/workboard.json
+          PASS=0
+          HTML_CODE=''
+          JSON_CODE=''
+          for i in $(seq 1 18); do
+            HTML_CODE=$(curl -L -sS -o /tmp/workboard.html -w '%{http_code}' 'https://www.bndy.co.uk/workboard' || true)
+            JSON_CODE=$(curl -L -sS -o /tmp/workboard.json -w '%{http_code}' 'https://www.bndy.co.uk/workboard.json' || true)
+            if [ "$HTML_CODE" = 200 ] && [ "$JSON_CODE" = 200 ] && grep -q 'KANBAN / SWIMLANES' /tmp/workboard.html && jq -e '.version == 1 and (.lanes|length) >= 10 and (.repositories|length) >= 10' /tmp/workboard.json >/dev/null 2>&1; then
+              PASS=1
+              break
+            fi
+            echo "poll=$i html=$HTML_CODE json=$JSON_CODE"
+            sleep 10
+          done
+          echo "$HTML_CODE" >/tmp/html.code
+          echo "$JSON_CODE" >/tmp/json.code
+          echo "$PASS" >/tmp/pass
+          test "$PASS" = 1
+      - name: Record result
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p diagnostics
+          python - <<'PY'
+          import json, pathlib, datetime
+          def text(p):
+              q=pathlib.Path(p); return q.read_text(errors='replace').strip() if q.exists() else None
+          try: board=json.loads(pathlib.Path('/tmp/workboard.json').read_text())
+          except: board={}
+          html=text('/tmp/workboard.html') or ''
+          payload={
+            'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'url':'https://www.bndy.co.uk/workboard',
+            'htmlStatus':text('/tmp/html.code'),
+            'jsonStatus':text('/tmp/json.code'),
+            'passed':text('/tmp/pass')=='1',
+            'hasKanbanMarker':'KANBAN / SWIMLANES' in html,
+            'jsonVersion':board.get('version'),
+            'laneCount':len(board.get('lanes',[])) if isinstance(board.get('lanes'),list) else None,
+            'repositoryCount':len(board.get('repositories',[])) if isinstance(board.get('repositories'),list) else None
+          }
+          pathlib.Path('diagnostics/workboard-live-smoke.json').write_text(json.dumps(payload,indent=2))
+          PY
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/workboard-live-smoke.json
+          git commit -m 'Record live workboard smoke test' || true
+          git push origin HEAD:deploy-bndy-workboard
