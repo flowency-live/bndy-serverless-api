@@ -19,6 +19,7 @@ const { jsonResponse } = require('../lib/http-response');
 const { batchGetByIds } = require('../lib/batch-get');
 const { scanAll } = require('../lib/scan-all');
 const { DEFAULT_END_TIME } = require('../lib/event-defaults');
+const { isPublishedInEdition } = require('../lib/edition-domain');
 
 // Table constants
 const ARTISTS_TABLE = 'bndy-artists';
@@ -219,7 +220,7 @@ async function handleGetPublicEventsGeo(deps, event) {
   }
 
   // Lightweight shape — enough for map pins; details via POST /api/events/batch.
-  const events = items.map(e => ({
+  const events = items.filter(e => e.hidden !== true && isPublishedInEdition(e, 'live')).map(e => ({
     id: e.id, artistId: e.artistId, venueId: e.venueId,
     date: e.date, startTime: e.startTime, geoLat: e.geoLat, geoLng: e.geoLng,
     ticketed: !!e.ticketed,
@@ -261,7 +262,9 @@ async function handleBatchEventsWithJoins(deps, event) {
 
   // Batch get events (BatchGetItem, chunks of 25)
   const eventsById = await batchGetByIds(dynamodb, EVENTS_TABLE, eventIds);
-  const events = eventIds.map(id => eventsById[id]).filter(Boolean);
+  const events = eventIds.map(id => eventsById[id]).filter(e =>
+    e && e.isPublic === true && e.hidden !== true && isPublishedInEdition(e, 'live')
+  );
 
   // Collect unique artistIds (primary + collaborating) and venueIds
   const allArtistIds = new Set();
@@ -360,7 +363,7 @@ async function handleGetVenueEvents(deps, event) {
     }
   }).promise();
 
-  const events = result.Items || [];
+  const events = (result.Items || []).filter(e => e.hidden !== true && isPublishedInEdition(e, 'live'));
 
   console.log('VENUE_EVENTS: Found events', { count: events.length });
 
@@ -440,7 +443,7 @@ async function handleGetAllPublicEvents(deps, event) {
       }
 
       const result = await dynamodb.scan(scanParams).promise();
-      allEvents.push(...(result.Items || []));
+      allEvents.push(...(result.Items || []).filter(e => e.hidden !== true && isPublishedInEdition(e, 'live')));
       lastEvaluatedKey = result.LastEvaluatedKey;
     } while (lastEvaluatedKey);
 
@@ -577,7 +580,7 @@ async function handleGetArtistPublicEvents(deps, event) {
         eventMap.set(e.id, e);
       }
     });
-    const events = Array.from(eventMap.values());
+    const events = Array.from(eventMap.values()).filter(e => e.hidden !== true && isPublishedInEdition(e, 'live'));
 
     console.log('ARTIST_PUBLIC_EVENTS: Total unique events', { artistId, count: events.length });
 

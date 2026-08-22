@@ -14,6 +14,7 @@ const { jsonResponse } = require('../lib/http-response');
 const { scanAll } = require('../lib/scan-all');
 const { venuePlaceKey } = require('../lib/identity');
 const { gatedPut, releaseUniqueKeys, duplicateResponseBody } = require('../lib/unique-gate');
+const { isPublishedInEdition } = require('../lib/edition-domain');
 
 /**
  * GET /api/venues - Get all venues with optional search
@@ -38,7 +39,8 @@ async function handleGetAllVenues(deps, event) {
     let validVenues = allItems.filter(venue =>
       venue.latitude && venue.longitude &&
       venue.latitude !== 0 && venue.longitude !== 0 &&
-      venue.hidden !== true
+      venue.hidden !== true &&
+      isPublishedInEdition(venue, 'live')
     );
 
     // If search term provided, filter by name or address (with stop word normalization)
@@ -324,7 +326,7 @@ async function handleGetVenueById(deps, venueId, event) {
 
     // Feature 4: a hidden venue is off every public surface.
     // The router sets __allowHidden after a platform-admin check.
-    if (result.Item.hidden === true && !event.__allowHidden) {
+    if (!event.__allowHidden && (result.Item.hidden === true || !isPublishedInEdition(result.Item, 'live'))) {
       return {
         statusCode: 404,
         headers: getCorsHeaders(event),

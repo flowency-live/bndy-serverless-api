@@ -18,6 +18,7 @@ const { gatedPut, rekeyUniqueKeys, releaseUniqueKeys, duplicateResponseBody, gat
 const { validateArtistData } = require('./lib/data-quality');
 const { deleteArtistEvents } = require('./lib/cascade-delete-events');
 const { hasEventsForArtist, countEventsForArtist } = require('./lib/artist-event-guard');
+const { isPublishedInEdition } = require('./lib/edition-domain');
 const { requireRole: requireCuratorRole, logActivity: logCuratorActivity, pickFields: pickCuratorFields, hideEntity: hideArtistEntity, restoreEntity: restoreArtistEntity } = require('./curator-core');
 
 /**
@@ -639,7 +640,7 @@ async function handleGetAllArtists(event) {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, availabilityMode, contactMethod, phoneNumber, whatsappNumber, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt, #hidden, enrichment_status, enrichment_data, enrichment_date',
+    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, availabilityMode, contactMethod, phoneNumber, whatsappNumber, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt, #hidden, enrichment_status, enrichment_data, enrichment_date, publicationScopes',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
@@ -651,7 +652,7 @@ async function handleGetAllArtists(event) {
   try {
     const scannedItems = await scanAll(dynamodb, params);
     // Feature 4: hidden artists never reach a public list.
-    const allItems = scannedItems.filter(a => a.hidden !== true);
+    const allItems = scannedItems.filter(a => a.hidden !== true && isPublishedInEdition(a, 'live'));
 
     // Transform to match expected API format
     const formattedArtists = allItems.map(artist => ({
@@ -730,7 +731,7 @@ async function handleGetArtistById(artistId, event) {
     }
 
     // Feature 4: a hidden artist is off every public surface.
-    if (result.Item.hidden === true && !event?.__allowHidden) {
+    if (!event?.__allowHidden && (result.Item.hidden === true || !isPublishedInEdition(result.Item, 'live'))) {
       return {
         statusCode: 404,
         headers: getCorsHeaders(),
@@ -922,7 +923,9 @@ async function handleGetArtistEvents(artistId, event) {
     }
 
     const result = await dynamodb.query(queryParams).promise();
-    const events = result.Items || [];
+    const events = (result.Items || []).filter(e =>
+      e.isPublic === true && e.hidden !== true && isPublishedInEdition(e, 'live')
+    );
 
     console.log(`[ARTIST_EVENTS] Found ${events.length} events for artist ${artistId}`);
 
@@ -960,7 +963,9 @@ async function handleGetArtistEvents(artistId, event) {
       TableName: 'bndy-artists',
       Key: { id: artistId }
     }).promise();
-    const artistName = artistResult.Item?.name || null;
+    const artistName = artistResult.Item && artistResult.Item.hidden !== true && isPublishedInEdition(artistResult.Item, 'live')
+      ? artistResult.Item.name
+      : null;
 
     // Format events with venue details
     const formattedEvents = events.map(e => {

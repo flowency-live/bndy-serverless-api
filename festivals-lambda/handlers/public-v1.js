@@ -10,6 +10,7 @@
 const FESTIVALS_TABLE = process.env.FESTIVALS_TABLE || 'bndy-events';
 const EVENTS_TABLE = process.env.EVENTS_TABLE || 'bndy-events';
 const ARTISTS_TABLE = process.env.ARTISTS_TABLE || 'bndy-artists';
+const { isPublishedInEdition } = require('../lib/edition-domain');
 
 function sanitizeFestival(festival) {
   if (!festival) return festival;
@@ -104,7 +105,7 @@ async function handleGetPublicFestivals(deps, event) {
     ExpressionAttributeValues: values
   });
 
-  const festivals = allItems.map((f) => {
+  const festivals = allItems.filter(f => f.hidden !== true && isPublishedInEdition(f, 'live')).map((f) => {
     const venueIds = allVenueIds(f);
     return {
       id: f.id,
@@ -140,12 +141,12 @@ async function handleGetFestivalBySlug(deps, event) {
   }
 
   const festival = await findFestivalBySlug(dynamodb, slug);
-  if (!festival || festival.isPublic !== true) {
+  if (!festival || festival.isPublic !== true || festival.hidden === true || !isPublishedInEdition(festival, 'live')) {
     return { statusCode: 404, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'Festival not found' }) };
   }
 
   const childEvents = (await findChildEvents(dynamodb, festival.id))
-    .filter((item) => item.entityType !== 'festival' && item.isPublic !== false)
+    .filter((item) => item.entityType !== 'festival' && item.isPublic === true && item.hidden !== true && isPublishedInEdition(item, 'live'))
     .sort((a, b) => `${a.date || ''}${a.startTime || ''}`.localeCompare(`${b.date || ''}${b.startTime || ''}`));
 
   const artistIds = new Set();

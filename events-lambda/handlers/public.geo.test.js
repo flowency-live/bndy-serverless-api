@@ -68,6 +68,14 @@ describe('handleGetPublicEventsGeo — bbox contract', () => {
     expect(dynamodb.query.mock.calls.every(([p]) => p.IndexName === 'geohash4-date-index')).toBe(true);
     expect(dynamodb.query.mock.calls.length).toBeLessThanOrEqual(24);
   });
+  it('keeps legacy map events and excludes brass-only map events', async () => {
+    const dynamodb = mockDynamo([
+      ITEM,
+      { ...ITEM, id: 'brass', publicationScopes: ['brass'] }
+    ]);
+    const res = await handleGetPublicEventsGeo({ dynamodb, getCorsHeaders }, evt({ bbox: '-8,50,2,59', ...WINDOW }));
+    expect(JSON.parse(res.body).events.map(e => e.id)).toEqual(['e1']);
+  });
   it('country-scale bbox → whole-window scan fallback, truncated:true, zero geo queries', async () => {
     const dynamodb = mockDynamo();
     const res = await handleGetPublicEventsGeo({ dynamodb, getCorsHeaders }, evt({ bbox: '-8,50,2,59', ...WINDOW }));

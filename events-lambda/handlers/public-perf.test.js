@@ -62,6 +62,23 @@ describe('handleGetAllPublicEvents', () => {
     expect(JSON.parse(res.body).events).toHaveLength(40);
   });
 
+  it('keeps legacy and live events but excludes brass-only events', async () => {
+    const scopedEvents = [
+      { id: 'legacy', date: '2026-07-04', isPublic: true },
+      { id: 'live', date: '2026-07-04', isPublic: true, publicationScopes: ['live'] },
+      { id: 'brass', date: '2026-07-04', isPublic: true, publicationScopes: ['brass'] }
+    ];
+    const dynamodb = {
+      scan: jest.fn(() => ({ promise: () => Promise.resolve({ Items: scopedEvents }) })),
+      batchGet: jest.fn(() => ({ promise: () => Promise.resolve({ Responses: {} }) }))
+    };
+    const body = decodeBody(await handleGetAllPublicEvents(
+      { dynamodb, getCorsHeaders },
+      { ...lambdaEvent, headers: {} }
+    ));
+    expect(body.events.map(e => e.id)).toEqual(['legacy', 'live']);
+  });
+
   it('includes festival fields (festivalId, festivalName, billing, billingOrder) when present', async () => {
     const festivalEvents = [
       {

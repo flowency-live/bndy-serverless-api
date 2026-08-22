@@ -59,6 +59,33 @@ describe('public-v1 festival reads', () => {
     expect(body.festivals[0]).toMatchObject({ location: 'Congleton', venueCount: 2, actCount: 1 });
   });
 
+  it('keeps legacy and live festivals but excludes brass-only festivals', async () => {
+    const base = { entityType: 'festival', isPublic: true, startDate: '2026-09-11' };
+    const dynamodb = {
+      scan: jest.fn(() => promiseResult({ Items: [
+        { ...base, id: 'legacy', slug: 'legacy', name: 'Legacy' },
+        { ...base, id: 'live', slug: 'live', name: 'Live', publicationScopes: ['live'] },
+        { ...base, id: 'brass', slug: 'brass', name: 'Brass', publicationScopes: ['brass'] }
+      ] }))
+    };
+    const response = await handleGetPublicFestivals({ dynamodb, getCorsHeaders }, { queryStringParameters: {} });
+    expect(JSON.parse(response.body).festivals.map(f => f.id)).toEqual(['legacy', 'live']);
+  });
+
+  it('returns not found for a brass-only festival detail', async () => {
+    const dynamodb = {
+      query: jest.fn(() => promiseResult({ Items: [{
+        id: 'brass', entityType: 'festival', slug: 'brass', isPublic: true,
+        publicationScopes: ['brass']
+      }] }))
+    };
+    const response = await handleGetFestivalBySlug(
+      { dynamodb, getCorsHeaders },
+      { pathParameters: { slug: 'brass' } }
+    );
+    expect(response.statusCode).toBe(404);
+  });
+
   it('returns a public festival, child gigs, and true gigCount using index fallbacks', async () => {
     const festival = {
       id: 'f1', entityType: 'festival', isPublic: true, slug: 'jazz', name: 'Jazz',

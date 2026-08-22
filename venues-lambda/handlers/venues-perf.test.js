@@ -94,6 +94,16 @@ describe('handleGetAllVenues', () => {
     const body = decodeBody(await handleGetAllVenues({ dynamodb, getCorsHeaders }, lambdaEvent));
     expect(body).toHaveLength(1);
   });
+
+  it('keeps legacy and live venues but excludes brass-only venues', async () => {
+    const dynamodb = mockDynamo([{ Items: [
+      venue(1),
+      { ...venue(2), publicationScopes: ['live'] },
+      { ...venue(3), publicationScopes: ['brass'] }
+    ] }]);
+    const body = decodeBody(await handleGetAllVenues({ dynamodb, getCorsHeaders }, lambdaEvent));
+    expect(body.map(v => v.id)).toEqual(['vn-1', 'vn-2']);
+  });
 });
 
 describe('handleListVenuesMcp', () => {
