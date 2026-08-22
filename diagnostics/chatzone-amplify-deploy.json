@@ -1,7 +1,16 @@
 {
-  "recordedAt": "2026-08-22T17:02:54.003195+00:00",
+  "recordedAt": "2026-08-22T17:04:24.381924+00:00",
   "appId": "d26nztin494lzx",
   "region": "eu-west-2",
+  "branch": {
+    "branchName": "main",
+    "enableAutoBuild": true,
+    "stage": "PRODUCTION",
+    "activeJobId": "0000000002"
+  },
+  "startJobRc": "254",
+  "startJobError": "aws: [ERROR]: An error occurred (BadRequestException) when calling the StartJob operation: Operation not supported for app that was not connected to a repository provider. Please use CreateDeployment and StartDeployment operations instead.",
+  "startJobResponse": {},
   "jobId": null,
   "jobStatus": null,
   "sourceUrl": null,
