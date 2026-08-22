@@ -1,0 +1,736 @@
+{
+  "caller": {
+    "UserId": "771551874768",
+    "Account": "771551874768",
+    "Arn": "arn:aws:iam::771551874768:root"
+  },
+  "amplify": [
+    {
+      "appId": "d10lqaz6ujbegt",
+      "name": "AdaptFlowDeliver-Website",
+      "repository": "https://github.com/flowency-live/AdaptFlowDeliver-Website",
+      "defaultDomain": "d10lqaz6ujbegt.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "adaptflowdeliver.com",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "master"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d1ya651g2bvpzi.cloudfront.net"
+            },
+            {
+              "subDomainSetting": {
+                "prefix": "www",
+                "branchName": "master"
+              },
+              "verified": true,
+              "dnsRecord": "www CNAME d1ya651g2bvpzi.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d11w6zg9bc5o1g",
+      "name": "bndy-centrestage",
+      "repository": "https://github.com/flowency-live/bndy-centrestage",
+      "defaultDomain": "d11w6zg9bc5o1g.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "www.bndy.co.uk",
+          "domainStatus": "FAILED",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d2hz5qkww4sxnl.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d139d86bsesfzu",
+      "name": "DorsetTransferComapny-Website",
+      "repository": "https://github.com/flowency-live/DorsetTransferComapny-Website",
+      "defaultDomain": "d139d86bsesfzu.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "dorsettransfercompany.flowency.build",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d2htz84avwctmd.cloudfront.net"
+            }
+          ]
+        },
+        {
+          "domainName": "opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "prefix": "dorsettransfercompany",
+                "branchName": "main"
+              },
+              "verified": true,
+              "dnsRecord": "dorsettransfercompany CNAME d3ejhb2ixb695a.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d1a24djvfdj565",
+      "name": "NinerOps",
+      "repository": "https://github.com/flowency-live/NinerOps",
+      "defaultDomain": "d1a24djvfdj565.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "flowency.co.uk",
+          "domainStatus": "FAILED",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "prefix": "ninerops",
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": "ninerops CNAME d20q4welssjwma.cloudfront.net"
+            }
+          ]
+        },
+        {
+          "domainName": "ninerops.flowency.build",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d1fysit6zpvz6m.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d1apn3zgo6n42q",
+      "name": "bench",
+      "repository": "https://github.com/flowency-live/bench",
+      "defaultDomain": "d1apn3zgo6n42q.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "bench.opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d3gg3s20os2j3c.cloudfront.net"
+            },
+            {
+              "subDomainSetting": {
+                "prefix": "www",
+                "branchName": "main"
+              },
+              "verified": true,
+              "dnsRecord": "www CNAME d3gg3s20os2j3c.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d1f0d12r93sxve",
+      "name": "opstack-website",
+      "repository": "https://github.com/flowency-live/opsstack-website",
+      "defaultDomain": "d1f0d12r93sxve.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d1hxvxhbhadxnb.cloudfront.net"
+            },
+            {
+              "subDomainSetting": {
+                "prefix": "www",
+                "branchName": "main"
+              },
+              "verified": true,
+              "dnsRecord": "www CNAME d1hxvxhbhadxnb.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d1gy998zss43hv",
+      "name": "Adaptavis-website",
+      "repository": "https://github.com/james-enock/website",
+      "defaultDomain": "d1gy998zss43hv.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "adaptavis-test.opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "test-version"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d20lqv1dy9epzf.cloudfront.net"
+            }
+          ]
+        },
+        {
+          "domainName": "james-enock.opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d3nscb3mm5e5pb.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d1i0owfa4h2yjw",
+      "name": "flowmap",
+      "repository": "https://github.com/flowency-live/flowmap",
+      "defaultDomain": "d1i0owfa4h2yjw.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "flowmap.opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d3e16oqoslxcf4.cloudfront.net"
+            },
+            {
+              "subDomainSetting": {
+                "prefix": "www",
+                "branchName": "main"
+              },
+              "verified": true,
+              "dnsRecord": "www CNAME d3e16oqoslxcf4.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d1ycnq6cttujtt",
+      "name": "medibee",
+      "repository": "https://github.com/flowency-live/medibee",
+      "defaultDomain": "d1ycnq6cttujtt.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "medibee.opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d3i4vxa096uea9.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d204xti7lc5dsq",
+      "name": "bndy-app",
+      "repository": "https://github.com/flowency-live/bndy-app",
+      "defaultDomain": "d204xti7lc5dsq.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "gigmap.bndy.co.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d1yuatbct2fx5a.cloudfront.net"
+            }
+          ]
+        },
+        {
+          "domainName": "gigs.bndy.co.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d2nr1xhmqmonyo.cloudfront.net"
+            }
+          ]
+        },
+        {
+          "domainName": "live.bndy.co.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME dl56j2bgx8w2k.cloudfront.net"
+            }
+          ]
+        },
+        {
+          "domainName": "map.bndy.co.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d22lncv7pis5l7.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d26nztin494lzx",
+      "name": "bndy-chatzone",
+      "repository": null,
+      "defaultDomain": "d26nztin494lzx.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "chat.bndy.live",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d31tiyfnjihe81.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d2cioukkoocbnl",
+      "name": "opstack-builder",
+      "repository": "https://github.com/flowency-live/opsstack-builder",
+      "defaultDomain": "d2cioukkoocbnl.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "builder.opsstack.co.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d3vycszbflmxd7.cloudfront.net"
+            }
+          ]
+        },
+        {
+          "domainName": "opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "prefix": "builder",
+                "branchName": "main"
+              },
+              "verified": true,
+              "dnsRecord": "builder CNAME d1sh5urw69n0qo.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d2ickfqsuml44d",
+      "name": "TrackPlatform",
+      "repository": "https://github.com/flowency-live/TrackPlatform",
+      "defaultDomain": "d2ickfqsuml44d.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "track.opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d2oawhi50722wh.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d2tsqg2n7akobw",
+      "name": "medibeewebsite",
+      "repository": "https://github.com/flowency-live/medibeewebsite",
+      "defaultDomain": "d2tsqg2n7akobw.amplifyapp.com",
+      "domains": []
+    },
+    {
+      "appId": "d2ue2v5hmz0f4g",
+      "name": "opstacktracker",
+      "repository": "https://github.com/flowency-live/opstacktracker",
+      "defaultDomain": "d2ue2v5hmz0f4g.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "tracker.opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d13cdkgb7h70un.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d2xy4j4e36fs9c",
+      "name": "bndy-website",
+      "repository": "https://github.com/flowency-live/bndy-website",
+      "defaultDomain": "d2xy4j4e36fs9c.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "bndy.co.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": "* CNAME d3lvzcz9ruigmo.cloudfront.net"
+            },
+            {
+              "subDomainSetting": {
+                "prefix": "www",
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": "www CNAME d3lvzcz9ruigmo.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d394in80z398ek",
+      "name": "jasonjonesuk-website",
+      "repository": "https://github.com/flowency-live/jasonjones",
+      "defaultDomain": "d394in80z398ek.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "jasonjones.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d163gx7avzo2iw.cloudfront.net"
+            },
+            {
+              "subDomainSetting": {
+                "prefix": "www",
+                "branchName": "main"
+              },
+              "verified": true,
+              "dnsRecord": "www CNAME d163gx7avzo2iw.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d3hbhqxqqchzbb",
+      "name": "bndy-backstage",
+      "repository": "https://github.com/flowency-live/bndy-backstage",
+      "defaultDomain": "d3hbhqxqqchzbb.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "backstage.bndy.co.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d2sd9fnjr3j7xx.cloudfront.net"
+            },
+            {
+              "subDomainSetting": {
+                "prefix": "www",
+                "branchName": "main"
+              },
+              "verified": true,
+              "dnsRecord": "www CNAME d2sd9fnjr3j7xx.cloudfront.net"
+            }
+          ]
+        },
+        {
+          "domainName": "staging-backstage.bndy.co.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "staging"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d3ncvvtehyksso.cloudfront.net"
+            },
+            {
+              "subDomainSetting": {
+                "prefix": "www",
+                "branchName": "staging"
+              },
+              "verified": true,
+              "dnsRecord": "www CNAME d3ncvvtehyksso.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d3ox7kt0kcbfq4",
+      "name": "FlowencyWebsite",
+      "repository": "https://github.com/flowency-live/flowency",
+      "defaultDomain": "d3ox7kt0kcbfq4.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "www.flowency.co.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d1kh1fvgshohev.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d4kyitmj6hern",
+      "name": "RelaytransferDemo_Website",
+      "repository": "https://github.com/flowency-live/RelaytransferDemo_Website",
+      "defaultDomain": "d4kyitmj6hern.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "relaydemo.opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d1vezlfki15tnl.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d8dhf1zuwggxm",
+      "name": "RelayPlatformbyOpStack",
+      "repository": "https://github.com/flowency-live/RelayPlatform",
+      "defaultDomain": "d8dhf1zuwggxm.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "relay.opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d25roh16jzsz2m.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "d90cj6rhr61zn",
+      "name": "AdaptFlowDeliver",
+      "repository": "https://github.com/flowency-live/AdaptFlowDeliver",
+      "defaultDomain": "d90cj6rhr61zn.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "adaptflowdeliver.com",
+          "domainStatus": "AVAILABLE",
+          "subDomains": []
+        }
+      ]
+    },
+    {
+      "appId": "dgjon24kliu69",
+      "name": "LevelPlatform",
+      "repository": "https://github.com/flowency-live/LevelPlatform",
+      "defaultDomain": "dgjon24kliu69.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "level.opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d1t46cfpn60309.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "dompdl7h5elwb",
+      "name": "opstack-backlog",
+      "repository": "https://github.com/flowency-live/opsstack-backlog",
+      "defaultDomain": "dompdl7h5elwb.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "backlog.opsstack.co.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d38synk3cvpw1d.cloudfront.net"
+            }
+          ]
+        },
+        {
+          "domainName": "opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "prefix": "backlog",
+                "branchName": "main"
+              },
+              "verified": true,
+              "dnsRecord": "backlog CNAME d2hrdilz2miww7.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "appId": "dywtjpld4miw6",
+      "name": "NinerPlatform",
+      "repository": "https://github.com/flowency-live/NinerPlatform",
+      "defaultDomain": "dywtjpld4miw6.amplifyapp.com",
+      "domains": [
+        {
+          "domainName": "niner.opstack.uk",
+          "domainStatus": "AVAILABLE",
+          "subDomains": [
+            {
+              "subDomainSetting": {
+                "branchName": "main"
+              },
+              "verified": false,
+              "dnsRecord": " CNAME d1usrpr7y23y.cloudfront.net"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "cloudTrailRelevant": [],
+  "possibleStacks": [
+    {
+      "stackName": "BndySignals-Api-prod",
+      "status": "CREATE_COMPLETE",
+      "creationTime": "2026-06-17T13:40:59.750000+00:00",
+      "deletionTime": null
+    },
+    {
+      "stackName": "BndySignals-Workflow-prod",
+      "status": "CREATE_COMPLETE",
+      "creationTime": "2026-06-17T13:38:52.476000+00:00",
+      "deletionTime": null
+    },
+    {
+      "stackName": "BndySignals-Storage-prod",
+      "status": "CREATE_COMPLETE",
+      "creationTime": "2026-06-17T13:21:34.252000+00:00",
+      "deletionTime": null
+    },
+    {
+      "stackName": "BndySignals-Api-dev",
+      "status": "UPDATE_COMPLETE",
+      "creationTime": "2026-05-01T23:08:01.705000+00:00",
+      "deletionTime": null
+    },
+    {
+      "stackName": "BndySignals-Workflow-dev",
+      "status": "UPDATE_COMPLETE",
+      "creationTime": "2026-05-01T23:06:01.724000+00:00",
+      "deletionTime": null
+    },
+    {
+      "stackName": "BndySignals-Storage-dev",
+      "status": "UPDATE_COMPLETE",
+      "creationTime": "2026-05-01T23:05:23.535000+00:00",
+      "deletionTime": null
+    }
+  ]
+}
