@@ -13,7 +13,7 @@ Parameters:
 
 Globals:
   Function:
-    Runtime: nodejs20.x
+    Runtime: nodejs24.x
     MemorySize: 768
     Timeout: 30
     Tracing: Active
