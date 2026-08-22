@@ -1,0 +1,15 @@
+{
+  "recordedAt": "2026-08-22T16:19:54.711562+00:00",
+  "statusMarker": "signals",
+  "hasCapturePublicApi": false,
+  "hasSignalsApi": true,
+  "scriptCount": 1,
+  "headers": [
+    "server: AmazonS3",
+    "etag: \"55c25d01a977f866043dea269e00ae81\"",
+    "last-modified: Fri, 21 Aug 2026 19:20:10 GMT",
+    "x-cache: Hit from cloudfront",
+    "via: 1.1 fa4b93a28d2af7c945bbee127a248096.cloudfront.net (CloudFront)",
+    "x-amz-cf-pop: SFO53-P9"
+  ]
+}
