@@ -1,4 +1,5 @@
 name: inspect-recent-captures
+# Trigger: inspect the two fresh Android Facebook Event shares.
 
 on:
   push:
