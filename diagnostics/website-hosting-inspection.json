@@ -1,0 +1,431 @@
+{
+  "recordedAt": "2026-08-22T18:01:55.027779+00:00",
+  "account": "771551874768",
+  "listAppsRc": "0",
+  "listAppsError": "",
+  "apps": [
+    {
+      "appId": "d10lqaz6ujbegt",
+      "name": "AdaptFlowDeliver-Website",
+      "defaultDomain": "d10lqaz6ujbegt.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/AdaptFlowDeliver-Website",
+      "productionBranch": {
+        "lastDeployTime": "2025-12-02T22:16:08.229000+00:00",
+        "status": "SUCCEED",
+        "branchName": "master"
+      }
+    },
+    {
+      "appId": "d11w6zg9bc5o1g",
+      "name": "bndy-centrestage",
+      "defaultDomain": "d11w6zg9bc5o1g.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/bndy-centrestage",
+      "productionBranch": {
+        "lastDeployTime": "2025-11-24T18:23:31.678000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d139d86bsesfzu",
+      "name": "DorsetTransferComapny-Website",
+      "defaultDomain": "d139d86bsesfzu.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/DorsetTransferComapny-Website",
+      "productionBranch": {
+        "lastDeployTime": "2026-03-13T11:34:21.819000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d1a24djvfdj565",
+      "name": "NinerOps",
+      "defaultDomain": "d1a24djvfdj565.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/NinerOps",
+      "productionBranch": {
+        "lastDeployTime": "2025-12-01T15:32:59.300000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d1apn3zgo6n42q",
+      "name": "bench",
+      "defaultDomain": "d1apn3zgo6n42q.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/bench",
+      "productionBranch": {
+        "lastDeployTime": "2026-07-02T11:46:37.666000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d1f0d12r93sxve",
+      "name": "opstack-website",
+      "defaultDomain": "d1f0d12r93sxve.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/opsstack-website",
+      "productionBranch": {
+        "lastDeployTime": "2026-05-08T19:13:55.019000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d1gy998zss43hv",
+      "name": "Adaptavis-website",
+      "defaultDomain": "d1gy998zss43hv.amplifyapp.com",
+      "repository": "https://github.com/james-enock/website",
+      "productionBranch": null
+    },
+    {
+      "appId": "d1i0owfa4h2yjw",
+      "name": "flowmap",
+      "defaultDomain": "d1i0owfa4h2yjw.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/flowmap",
+      "productionBranch": {
+        "lastDeployTime": "2026-05-12T09:55:30.308000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d1ycnq6cttujtt",
+      "name": "medibee",
+      "defaultDomain": "d1ycnq6cttujtt.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/medibee",
+      "productionBranch": {
+        "lastDeployTime": "2026-07-11T17:05:05.735000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d204xti7lc5dsq",
+      "name": "bndy-app",
+      "defaultDomain": "d204xti7lc5dsq.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/bndy-app",
+      "productionBranch": {
+        "lastDeployTime": "2026-08-22T17:06:56.463000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d26nztin494lzx",
+      "name": "bndy-chatzone",
+      "defaultDomain": "d26nztin494lzx.amplifyapp.com",
+      "repository": null,
+      "productionBranch": {
+        "lastDeployTime": "2026-08-22T17:29:46.748000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d2cioukkoocbnl",
+      "name": "opstack-builder",
+      "defaultDomain": "d2cioukkoocbnl.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/opsstack-builder",
+      "productionBranch": {
+        "lastDeployTime": "2026-02-03T19:53:32.687000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d2ickfqsuml44d",
+      "name": "TrackPlatform",
+      "defaultDomain": "d2ickfqsuml44d.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/TrackPlatform",
+      "productionBranch": {
+        "lastDeployTime": "2026-01-13T16:44:44.210000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d2tsqg2n7akobw",
+      "name": "medibeewebsite",
+      "defaultDomain": "d2tsqg2n7akobw.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/medibeewebsite",
+      "productionBranch": {
+        "lastDeployTime": "2026-05-26T19:12:08.409000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d2ue2v5hmz0f4g",
+      "name": "opstacktracker",
+      "defaultDomain": "d2ue2v5hmz0f4g.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/opstacktracker",
+      "productionBranch": {
+        "lastDeployTime": "2026-02-04T12:08:20.747000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d2xy4j4e36fs9c",
+      "name": "bndy-website",
+      "defaultDomain": "d2xy4j4e36fs9c.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/bndy-website",
+      "productionBranch": {
+        "lastDeployTime": "2026-08-22T17:57:25.910000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d394in80z398ek",
+      "name": "jasonjonesuk-website",
+      "defaultDomain": "d394in80z398ek.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/jasonjones",
+      "productionBranch": {
+        "lastDeployTime": "2026-07-08T11:27:48.713000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d3hbhqxqqchzbb",
+      "name": "bndy-backstage",
+      "defaultDomain": "d3hbhqxqqchzbb.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/bndy-backstage",
+      "productionBranch": {
+        "lastDeployTime": "2026-08-22T16:31:06.762000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d3ox7kt0kcbfq4",
+      "name": "FlowencyWebsite",
+      "defaultDomain": "d3ox7kt0kcbfq4.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/flowency",
+      "productionBranch": {
+        "lastDeployTime": "2026-06-11T22:28:55.075000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d4kyitmj6hern",
+      "name": "RelaytransferDemo_Website",
+      "defaultDomain": "d4kyitmj6hern.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/RelaytransferDemo_Website",
+      "productionBranch": {
+        "lastDeployTime": "2026-01-06T23:15:35.018000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d8dhf1zuwggxm",
+      "name": "RelayPlatformbyOpStack",
+      "defaultDomain": "d8dhf1zuwggxm.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/RelayPlatform",
+      "productionBranch": {
+        "lastDeployTime": "2026-07-14T13:14:36.379000+00:00",
+        "status": "FAILED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "d90cj6rhr61zn",
+      "name": "AdaptFlowDeliver",
+      "defaultDomain": "d90cj6rhr61zn.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/AdaptFlowDeliver",
+      "productionBranch": {
+        "lastDeployTime": "2025-12-01T17:11:36.570000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "dgjon24kliu69",
+      "name": "LevelPlatform",
+      "defaultDomain": "dgjon24kliu69.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/LevelPlatform",
+      "productionBranch": {
+        "lastDeployTime": "2026-04-13T07:19:05.146000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "dompdl7h5elwb",
+      "name": "opstack-backlog",
+      "defaultDomain": "dompdl7h5elwb.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/opsstack-backlog",
+      "productionBranch": {
+        "lastDeployTime": "2026-04-05T15:15:44.472000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    },
+    {
+      "appId": "dywtjpld4miw6",
+      "name": "NinerPlatform",
+      "defaultDomain": "dywtjpld4miw6.amplifyapp.com",
+      "repository": "https://github.com/flowency-live/NinerPlatform",
+      "productionBranch": {
+        "lastDeployTime": "2025-12-31T23:36:35.568000+00:00",
+        "status": "SUCCEED",
+        "branchName": "main"
+      }
+    }
+  ],
+  "domains": [
+    {
+      "appId": "d10lqaz6ujbegt",
+      "appName": "AdaptFlowDeliver-Website",
+      "defaultDomain": "d10lqaz6ujbegt.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d11w6zg9bc5o1g",
+      "appName": "bndy-centrestage",
+      "defaultDomain": "d11w6zg9bc5o1g.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d139d86bsesfzu",
+      "appName": "DorsetTransferComapny-Website",
+      "defaultDomain": "d139d86bsesfzu.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d1a24djvfdj565",
+      "appName": "NinerOps",
+      "defaultDomain": "d1a24djvfdj565.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d1apn3zgo6n42q",
+      "appName": "bench",
+      "defaultDomain": "d1apn3zgo6n42q.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d1f0d12r93sxve",
+      "appName": "opstack-website",
+      "defaultDomain": "d1f0d12r93sxve.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d1gy998zss43hv",
+      "appName": "Adaptavis-website",
+      "defaultDomain": "d1gy998zss43hv.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d1i0owfa4h2yjw",
+      "appName": "flowmap",
+      "defaultDomain": "d1i0owfa4h2yjw.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d1ycnq6cttujtt",
+      "appName": "medibee",
+      "defaultDomain": "d1ycnq6cttujtt.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d204xti7lc5dsq",
+      "appName": "bndy-app",
+      "defaultDomain": "d204xti7lc5dsq.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d26nztin494lzx",
+      "appName": "bndy-chatzone",
+      "defaultDomain": "d26nztin494lzx.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d2cioukkoocbnl",
+      "appName": "opstack-builder",
+      "defaultDomain": "d2cioukkoocbnl.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d2ickfqsuml44d",
+      "appName": "TrackPlatform",
+      "defaultDomain": "d2ickfqsuml44d.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d2tsqg2n7akobw",
+      "appName": "medibeewebsite",
+      "defaultDomain": "d2tsqg2n7akobw.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d2ue2v5hmz0f4g",
+      "appName": "opstacktracker",
+      "defaultDomain": "d2ue2v5hmz0f4g.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d2xy4j4e36fs9c",
+      "appName": "bndy-website",
+      "defaultDomain": "d2xy4j4e36fs9c.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d394in80z398ek",
+      "appName": "jasonjonesuk-website",
+      "defaultDomain": "d394in80z398ek.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d3hbhqxqqchzbb",
+      "appName": "bndy-backstage",
+      "defaultDomain": "d3hbhqxqqchzbb.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d3ox7kt0kcbfq4",
+      "appName": "FlowencyWebsite",
+      "defaultDomain": "d3ox7kt0kcbfq4.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d4kyitmj6hern",
+      "appName": "RelaytransferDemo_Website",
+      "defaultDomain": "d4kyitmj6hern.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d8dhf1zuwggxm",
+      "appName": "RelayPlatformbyOpStack",
+      "defaultDomain": "d8dhf1zuwggxm.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "d90cj6rhr61zn",
+      "appName": "AdaptFlowDeliver",
+      "defaultDomain": "d90cj6rhr61zn.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "dgjon24kliu69",
+      "appName": "LevelPlatform",
+      "defaultDomain": "dgjon24kliu69.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "dompdl7h5elwb",
+      "appName": "opstack-backlog",
+      "defaultDomain": "dompdl7h5elwb.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    },
+    {
+      "appId": "dywtjpld4miw6",
+      "appName": "NinerPlatform",
+      "defaultDomain": "dywtjpld4miw6.amplifyapp.com",
+      "error": "\naws: [ERROR]: An error occurred (ValidationException) when calling the ListDomainAssociations operation: 1 validation error detected: Value '100' at 'maxResults' failed to satisfy constraint: Member must have value less than or equal to 50"
+    }
+  ]
+}
