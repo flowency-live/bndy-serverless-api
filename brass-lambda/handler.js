@@ -1,8 +1,9 @@
 'use strict';
 
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, ScanCommand } = require('@aws-sdk/lib-dynamodb');
 
-const dynamodb = new AWS.DynamoDB.DocumentClient({ region: process.env.AWS_REGION || 'eu-west-2' });
+const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION || 'eu-west-2' }));
 const ARTISTS_TABLE = process.env.ARTISTS_TABLE || 'bndy-artists';
 const EVENTS_TABLE = process.env.EVENTS_TABLE || 'bndy-events';
 const VENUES_TABLE = process.env.VENUES_TABLE || 'bndy-venues';
@@ -41,10 +42,10 @@ async function scanAll(params) {
   const items = [];
   let lastEvaluatedKey;
   do {
-    const result = await dynamodb.scan({
+    const result = await dynamodb.send(new ScanCommand({
       ...params,
       ...(lastEvaluatedKey ? { ExclusiveStartKey: lastEvaluatedKey } : {})
-    }).promise();
+    }));
     items.push(...(result.Items || []));
     lastEvaluatedKey = result.LastEvaluatedKey;
   } while (lastEvaluatedKey);
@@ -123,22 +124,8 @@ function publicFestival(item) {
 
 function venueCoordinates(venue, event) {
   return {
-    lat: numberValue(
-      event?.geoLat,
-      event?.location?.lat,
-      venue?.locationLat,
-      venue?.location?.lat,
-      venue?.latitude,
-      venue?.lat
-    ),
-    lng: numberValue(
-      event?.geoLng,
-      event?.location?.lng,
-      venue?.locationLng,
-      venue?.location?.lng,
-      venue?.longitude,
-      venue?.lng
-    )
+    lat: numberValue(event?.geoLat, event?.location?.lat, venue?.locationLat, venue?.location?.lat, venue?.latitude, venue?.lat),
+    lng: numberValue(event?.geoLng, event?.location?.lng, venue?.locationLng, venue?.location?.lng, venue?.longitude, venue?.lng)
   };
 }
 
@@ -168,11 +155,7 @@ async function getConcerts(event) {
   });
 
   const venueIds = [...new Set(sourceConcerts.map((item) => item.venueId).filter(Boolean))];
-  const artistIds = [...new Set(sourceConcerts.flatMap((item) => [
-    item.artistId,
-    item.artist_id,
-    ...(Array.isArray(item.artistIds) ? item.artistIds : [])
-  ]).filter(Boolean))];
+  const artistIds = [...new Set(sourceConcerts.flatMap((item) => [item.artistId, item.artist_id, ...(Array.isArray(item.artistIds) ? item.artistIds : [])]).filter(Boolean))];
 
   const [venues, artists] = await Promise.all([
     venueIds.length ? scanAll({ TableName: VENUES_TABLE }) : Promise.resolve([]),
