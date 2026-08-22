@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: BNDY Brass edition isolated public API
+
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+Resources:
+  BrassHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      Description: BNDY Brass public read API
+      CorsConfiguration:
+        AllowOrigins:
+          - https://brass.bndy.live
+          - http://localhost:3000
+          - http://localhost:3001
+        AllowHeaders:
+          - Content-Type
+        AllowMethods:
+          - GET
+          - OPTIONS
+        MaxAge: 86400
+
+  BrassReadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Isolated read API for brass.bndy.live
+      Runtime: nodejs20.x
+      CodeUri: ./brass-lambda/
+      Handler: handler.handler
+      MemorySize: 768
+      Timeout: 30
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Environment:
+        Variables:
+          ARTISTS_TABLE: bndy-artists
+          EVENTS_TABLE: bndy-events
+          VENUES_TABLE: bndy-venues
+          PRODUCTIONS_TABLE: !Ref BrassProductionsTable
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BrassHttpApi
+            Path: /health
+            Method: GET
+        Bands:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BrassHttpApi
+            Path: /bands
+            Method: GET
+        Concerts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BrassHttpApi
+            Path: /concerts
+            Method: GET
+        Festivals:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BrassHttpApi
+            Path: /festivals
+            Method: GET
+        Productions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BrassHttpApi
+            Path: /productions
+            Method: GET
+
+  BrassProductionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: bndy-productions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: performerId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: performerId-index
+          KeySchema:
+            - AttributeName: performerId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+Outputs:
+  BrassApiUrl:
+    Description: Base URL for NEXT_PUBLIC_BRASS_API_URL
+    Value: !Sub 'https://${BrassHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
+  ProductionsTableName:
+    Value: !Ref BrassProductionsTable
