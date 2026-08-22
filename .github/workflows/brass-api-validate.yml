@@ -28,6 +28,9 @@ jobs:
       - name: Setup SAM CLI
         uses: aws-actions/setup-sam@v2
 
+      - name: Install brass Lambda dependencies
+        run: npm install --prefix brass-lambda
+
       - name: Validate brass template
         run: sam validate --lint --template-file template-brass.yaml
 
