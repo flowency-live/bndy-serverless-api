@@ -1,0 +1,95 @@
+name: Observe Inspector Deploy Cycle
+
+on:
+  push:
+    branches: [observe-inspector-deploy-cycle]
+    paths:
+      - '.github/workflows/observe-inspector-deploy-cycle.yml'
+
+permissions:
+  actions: read
+  statuses: write
+  contents: read
+
+env:
+  TARGET_SHA: e1a4cae22b36c3b5c18c9607da51e37ecd237e3f
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Observe main API deployment and inspector recovery
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          post_status() {
+            local state="$1" context="$2" description="$3"
+            curl -fsS -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+              -d "{\"state\":\"$state\",\"context\":\"$context\",\"description\":\"$description\"}" \
+              >/dev/null
+          }
+
+          post_status pending observe/main-deploy "Waiting for target main API deployment"
+          post_status pending observe/inspector "Waiting for inspector recovery status"
+
+          for i in $(seq 1 60); do
+            runs=$(curl -fsS \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$TARGET_SHA&per_page=30")
+
+            deploy=$(echo "$runs" | jq -c '[.workflow_runs[] | select(.name == "Deploy BNDY API" and .event == "push")] | sort_by(.created_at) | last // empty')
+            if [ -n "$deploy" ]; then
+              status=$(echo "$deploy" | jq -r '.status')
+              conclusion=$(echo "$deploy" | jq -r '.conclusion // ""')
+              run_id=$(echo "$deploy" | jq -r '.id')
+              echo "main deploy run=$run_id status=$status conclusion=$conclusion"
+              if [ "$status" = completed ]; then
+                if [ "$conclusion" = success ]; then
+                  post_status success observe/main-deploy "Target main API deploy succeeded"
+                  break
+                else
+                  post_status failure observe/main-deploy "Target main API deploy ended: $conclusion"
+                  exit 2
+                fi
+              fi
+            else
+              echo "No target Deploy BNDY API push run visible yet"
+            fi
+            sleep 10
+          done
+
+          for i in $(seq 1 60); do
+            statuses=$(curl -fsS \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$TARGET_SHA/status")
+            inspector=$(echo "$statuses" | jq -c '[.statuses[] | select(.context == "source-inspector/deploy" or (.context | startswith("source-inspector/fail-")))] | first // empty')
+            if [ -n "$inspector" ]; then
+              state=$(echo "$inspector" | jq -r '.state')
+              context=$(echo "$inspector" | jq -r '.context')
+              description=$(echo "$inspector" | jq -r '.description // ""')
+              echo "inspector context=$context state=$state description=$description"
+              if [ "$context" = source-inspector/deploy ] && [ "$state" = success ]; then
+                post_status success observe/inspector "Inspector recovery succeeded after full deploy"
+                exit 0
+              fi
+              if [ "$state" = failure ]; then
+                post_status failure observe/inspector "Inspector recovery failed: $context"
+                exit 3
+              fi
+            fi
+            sleep 10
+          done
+
+          post_status failure observe/inspector "Timed out waiting for inspector recovery"
+          exit 4
