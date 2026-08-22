@@ -1,0 +1,158 @@
+name: Repair Source Inspector Now
+
+on:
+  push:
+    branches: [repair-source-inspector-now]
+    paths:
+      - '.github/workflows/repair-source-inspector-now.yml'
+
+permissions:
+  contents: read
+  statuses: write
+
+env:
+  AWS_REGION: eu-west-2
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Reconcile and verify live source inspector
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          post_status() {
+            local state="$1" context="$2" description="$3"
+            curl -fsS -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+              -d "{\"state\":\"$state\",\"context\":\"$context\",\"description\":\"$description\"}" \
+              >/dev/null
+          }
+
+          STAGE=bootstrap
+          on_error() {
+            local rc=$?
+            post_status failure "repair/fail-$STAGE" "Source inspector repair failed at $STAGE" || true
+            exit "$rc"
+          }
+          trap on_error ERR
+
+          post_status pending repair/source-inspector "Inspecting live API route"
+
+          STAGE=resolve-api
+          API_ID=$(aws cloudformation describe-stacks \
+            --stack-name bndy-serverless-api \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='BndyHttpApiId'].OutputValue | [0]" \
+            --output text)
+          test -n "$API_ID" && test "$API_ID" != "None"
+
+          STAGE=resolve-function
+          FUNCTION_ARN=$(aws cloudformation describe-stacks \
+            --stack-name bndy-source-inspector \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='SourceInspectorFunctionArn'].OutputValue | [0]" \
+            --output text)
+          test -n "$FUNCTION_ARN" && test "$FUNCTION_ARN" != "None"
+
+          ROUTE_KEY='POST /api/community/source/inspect'
+          echo "API_ID=$API_ID"
+          echo "FUNCTION_ARN=$FUNCTION_ARN"
+
+          STAGE=delete-route
+          while IFS= read -r route_id; do
+            [ -n "$route_id" ] || continue
+            echo "Deleting stale route $route_id"
+            aws apigatewayv2 delete-route \
+              --api-id "$API_ID" \
+              --route-id "$route_id" \
+              --region "$AWS_REGION"
+          done < <(aws apigatewayv2 get-routes \
+            --api-id "$API_ID" \
+            --region "$AWS_REGION" \
+            --output json | jq -r --arg key "$ROUTE_KEY" '.Items[]? | select(.RouteKey == $key) | .RouteId')
+
+          STAGE=delete-integration
+          while IFS= read -r integration_id; do
+            [ -n "$integration_id" ] || continue
+            echo "Deleting stale integration $integration_id"
+            aws apigatewayv2 delete-integration \
+              --api-id "$API_ID" \
+              --integration-id "$integration_id" \
+              --region "$AWS_REGION"
+          done < <(aws apigatewayv2 get-integrations \
+            --api-id "$API_ID" \
+            --region "$AWS_REGION" \
+            --output json | jq -r --arg uri "$FUNCTION_ARN" '.Items[]? | select(.IntegrationUri == $uri) | .IntegrationId')
+
+          STAGE=create-integration
+          INTEGRATION_ID=$(aws apigatewayv2 create-integration \
+            --api-id "$API_ID" \
+            --integration-type AWS_PROXY \
+            --integration-method POST \
+            --integration-uri "$FUNCTION_ARN" \
+            --payload-format-version '2.0' \
+            --timeout-in-millis 8000 \
+            --region "$AWS_REGION" \
+            --query IntegrationId \
+            --output text)
+          test -n "$INTEGRATION_ID" && test "$INTEGRATION_ID" != "None"
+
+          STAGE=create-route
+          ROUTE_ID=$(aws apigatewayv2 create-route \
+            --api-id "$API_ID" \
+            --route-key "$ROUTE_KEY" \
+            --target "integrations/$INTEGRATION_ID" \
+            --region "$AWS_REGION" \
+            --query RouteId \
+            --output text)
+          test -n "$ROUTE_ID" && test "$ROUTE_ID" != "None"
+          post_status success repair/route "Inspector API route recreated"
+
+          sleep 8
+          URL='https://api.bndy.co.uk/api/community/source/inspect'
+          ORIGIN='https://map.bndy.co.uk'
+
+          STAGE=post-smoke
+          status=$(curl -sS -D /tmp/post.headers -o /tmp/post.json -w '%{http_code}' \
+            -X POST "$URL" \
+            -H "Origin: $ORIGIN" \
+            -H 'content-type: application/json' \
+            --data '{"input":""}')
+          echo "POST status=$status"
+          cat /tmp/post.json
+          cat /tmp/post.headers
+          test "$status" = "400"
+          grep -q 'INPUT_REQUIRED' /tmp/post.json
+          tr -d '\r' < /tmp/post.headers | grep -qi "^access-control-allow-origin: $ORIGIN$"
+          post_status success repair/post "Inspector POST and CORS passed"
+
+          STAGE=options-smoke
+          status=$(curl -sS -D /tmp/options.headers -o /dev/null -w '%{http_code}' \
+            -X OPTIONS "$URL" \
+            -H "Origin: $ORIGIN" \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type')
+          echo "OPTIONS status=$status"
+          cat /tmp/options.headers
+          case "$status" in 200|204) ;; *) exit 1 ;; esac
+          tr -d '\r' < /tmp/options.headers | grep -qi "^access-control-allow-origin: $ORIGIN$"
+          post_status success repair/options "Inspector browser preflight passed"
+
+          STAGE=complete
+          post_status success repair/source-inspector "Live inspector route repaired and verified"
