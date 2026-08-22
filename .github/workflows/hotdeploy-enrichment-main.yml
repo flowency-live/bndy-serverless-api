@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm ci
+          npm install
           npm run check
           rm -rf /tmp/capture-lambda /tmp/capture-processor.zip
           mkdir -p /tmp/capture-lambda
