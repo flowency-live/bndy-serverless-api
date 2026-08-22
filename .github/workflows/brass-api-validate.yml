@@ -1,0 +1,38 @@
+name: Validate Brass API
+
+on:
+  push:
+    branches:
+      - feature/brass-read-api-v3
+    paths:
+      - 'brass-lambda/**'
+      - 'template-brass.yaml'
+      - '.github/workflows/brass-api-validate.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'brass-lambda/**'
+      - 'template-brass.yaml'
+      - '.github/workflows/brass-api-validate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Validate brass template
+        run: sam validate --lint --template-file template-brass.yaml
+
+      - name: Build brass stack
+        run: sam build --parallel --template-file template-brass.yaml
+
+      - name: Run brass read tests
+        run: npx --yes jest brass-lambda/handler.test.js --runInBand
