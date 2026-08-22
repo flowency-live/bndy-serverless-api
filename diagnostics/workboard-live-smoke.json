@@ -1,0 +1,11 @@
+{
+  "recordedAt": "2026-08-22T18:02:45.552296+00:00",
+  "url": "https://www.bndy.co.uk/workboard",
+  "htmlStatus": "200",
+  "jsonStatus": "200",
+  "passed": true,
+  "hasKanbanMarker": true,
+  "jsonVersion": 1,
+  "laneCount": 14,
+  "repositoryCount": 13
+}
