@@ -1,0 +1,79 @@
+name: Inspect CloudFront alias conflict
+
+on:
+  push:
+    branches:
+      - dropzone-poster-diagnostic
+    paths:
+      - '.github/workflows/inspect-cloudfront-conflict.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dropzone-poster-diagnostic
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Inspect conflict
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, subprocess, pathlib, datetime
+
+          def run(args):
+              p = subprocess.run(['aws', *args, '--output', 'json'], capture_output=True, text=True)
+              out = {'rc': p.returncode}
+              if p.stdout.strip():
+                  try: out['json'] = json.loads(p.stdout)
+                  except Exception: out['stdout'] = p.stdout.strip()[-3000:]
+              if p.stderr.strip(): out['stderr'] = p.stderr.strip()[-3000:]
+              return out
+
+          ident = run(['sts','get-caller-identity'])
+          dists = run(['cloudfront','list-distributions'])
+          ids=[]
+          for d in ((dists.get('json') or {}).get('DistributionList') or {}).get('Items',[]) or []:
+              if d.get('Id'): ids.append(d['Id'])
+
+          probes=[]
+          for did in ids:
+              p = run(['cloudfront','list-conflicting-aliases','--distribution-id',did,'--alias','chat.bndy.live'])
+              conflicts = (((p.get('json') or {}).get('ConflictingAliasesList') or {}).get('Items') or [])
+              if p.get('rc') == 0 or conflicts:
+                  probes.append({'distributionId': did, 'result': p})
+
+          # Newer CLI/API where available. This may fail on older CLI and is recorded harmlessly.
+          domain_probe = run(['cloudfront','list-domain-conflicts','--domain','chat.bndy.live'])
+
+          payload={
+            'recordedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'callerAccount': ((ident.get('json') or {}).get('Account')),
+            'visibleDistributionCount': len(ids),
+            'visibleDistributionIds': ids,
+            'conflictProbes': probes,
+            'domainProbe': domain_probe,
+          }
+          pathlib.Path('diagnostics/cloudfront-conflict.json').write_text(json.dumps(payload, indent=2))
+          print(json.dumps(payload, indent=2))
+          PY
+
+      - name: Record
+        if: always()
+        shell: bash
+        run: |
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/cloudfront-conflict.json
+          git commit -m 'Record CloudFront alias conflict' || true
+          git push origin HEAD:dropzone-poster-diagnostic
