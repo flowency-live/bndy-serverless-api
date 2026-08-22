@@ -1,0 +1,62 @@
+name: Inspect chat.bndy.live build
+
+on:
+  push:
+    branches:
+      - dropzone-poster-diagnostic
+    paths:
+      - '.github/workflows/inspect-chat-live.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dropzone-poster-diagnostic
+
+      - name: Inspect live static build
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS -D /tmp/headers.txt https://chat.bndy.live/ -o /tmp/index.html
+          python - <<'PY'
+          import json, pathlib, re, urllib.request, datetime
+          html=pathlib.Path('/tmp/index.html').read_text(errors='replace')
+          srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)["\']',html,re.I)
+          bodies=[]
+          for src in srcs:
+              if src.startswith('http'):
+                  url=src
+              elif src.startswith('/'):
+                  url='https://chat.bndy.live'+src
+              else:
+                  url='https://chat.bndy.live/'+src
+              try:
+                  with urllib.request.urlopen(url,timeout=20) as r: bodies.append(r.read().decode('utf-8','replace'))
+              except Exception as e:
+                  bodies.append('')
+          joined='\n'.join(bodies)
+          headers=pathlib.Path('/tmp/headers.txt').read_text(errors='replace')
+          out={
+            'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'statusMarker': 'capture' if ('capture.bndy.co.uk/v1/public/captures' in joined or '/v1/public/captures' in joined) else ('signals' if '/signals' in joined else 'unknown'),
+            'hasCapturePublicApi': 'capture.bndy.co.uk' in joined and '/v1/public/captures' in joined,
+            'hasSignalsApi': '/signals' in joined,
+            'scriptCount':len(srcs),
+            'headers':[x for x in headers.splitlines() if x.lower().startswith(('server:','via:','x-cache:','etag:','last-modified:','x-amz-cf-pop:'))],
+          }
+          pathlib.Path('diagnostics/chat-live-build.json').write_text(json.dumps(out,indent=2))
+          print(json.dumps(out,indent=2))
+          PY
+
+      - name: Record
+        run: |
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/chat-live-build.json
+          git commit -m 'Record live chat build inspection' || true
+          git push origin HEAD:dropzone-poster-diagnostic
