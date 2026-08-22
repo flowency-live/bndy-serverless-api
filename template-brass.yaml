@@ -44,7 +44,6 @@ Resources:
           ARTISTS_TABLE: bndy-artists
           EVENTS_TABLE: bndy-events
           VENUES_TABLE: bndy-venues
-          PRODUCTIONS_TABLE: !Ref BrassProductionsTable
       Events:
         Health:
           Type: HttpApi
@@ -77,30 +76,7 @@ Resources:
             Path: /productions
             Method: GET
 
-  BrassProductionsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: bndy-productions
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-        - AttributeName: performerId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-      GlobalSecondaryIndexes:
-        - IndexName: performerId-index
-          KeySchema:
-            - AttributeName: performerId
-              KeyType: HASH
-          Projection:
-            ProjectionType: ALL
-
 Outputs:
   BrassApiUrl:
     Description: Base URL for NEXT_PUBLIC_BRASS_API_URL
     Value: !Sub 'https://${BrassHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
-  ProductionsTableName:
-    Value: !Ref BrassProductionsTable
