@@ -1,12 +1,12 @@
 {
-  "recordedAt": "2026-08-22T17:16:14.313386+00:00",
+  "recordedAt": "2026-08-22T17:17:54.376989+00:00",
   "capture": {
     "id": "0739e6ff-fe08-41f3-baf4-3e2841dd42d2",
-    "status": "processing",
+    "status": "processed",
     "sourceApp": "chatzone",
     "capturedAt": "2026-08-22T17:13:42.509701Z",
     "receivedAt": "2026-08-22T17:13:42.509701Z",
-    "updatedAt": "2026-08-22T17:16:01.486961Z",
+    "updatedAt": "2026-08-22T17:16:18.204875Z",
     "processingAttempt": 1,
     "processingOwner": null,
     "leaseExpiresAt": null,
@@ -18,11 +18,25 @@
       "mimeType": "image/jpeg",
       "size": 142526
     },
-    "noteLines": []
+    "noteLines": [
+      "AWS processor: completed.",
+      "Capture classification: event",
+      "Artist: Walk The Dog | created | ff1ee39b-c89d-40b6-be1d-01b752f49005",
+      "Facebook: https://www.facebook.com/WalkTheDogRockCoversDuo",
+      "Location: Swansea, Wales (city)",
+      "Artist type: Duo; act type: Covers",
+      "Canonical capture URL: not resolved",
+      "Bio: not found",
+      "Events: 1 created, 0 existing duplicates, 0 held.",
+      "Event detail:",
+      "- 2026-08-23 17:00 | The Commercial, Swansea | created 2ea3120b-f349-4bb8-9b06-53fb750d306f | venue newly created",
+      "New venues:",
+      "- The Commercial, Swansea (new)"
+    ]
   },
   "queue": {
     "ApproximateNumberOfMessages": "0",
-    "ApproximateNumberOfMessagesNotVisible": "1",
+    "ApproximateNumberOfMessagesNotVisible": "0",
     "ApproximateNumberOfMessagesDelayed": "0"
   },
   "processorConfig": {
@@ -39,7 +53,36 @@
     "State": "Active",
     "LastUpdateStatus": "Successful"
   },
-  "processorLogs": [],
+  "processorLogs": [
+    {
+      "timestamp": 1787418661663,
+      "message": "INIT_START Runtime Version: nodejs:22.mainline.v95\tRuntime Version ARN: arn:aws:lambda:eu-west-2::runtime:2d0f46659d3001af09f5129710fc686880d250988a39812c5f2d3a28ded22544"
+    },
+    {
+      "timestamp": 1787418662005,
+      "message": "START RequestId: 9ab634df-2c92-5bd4-b5be-57dcf6c51331 Version: $LATEST"
+    },
+    {
+      "timestamp": 1787418685714,
+      "message": "END RequestId: 9ab634df-2c92-5bd4-b5be-57dcf6c51331"
+    },
+    {
+      "timestamp": 1787418685714,
+      "message": "REPORT RequestId: 9ab634df-2c92-5bd4-b5be-57dcf6c51331\tDuration: 23708.85 ms\tBilled Duration: 24048 ms\tMemory Size: 1024 MB\tMax Memory Used: 125 MB\tInit Duration: 338.35 ms"
+    },
+    {
+      "timestamp": 1787418961551,
+      "message": "START RequestId: 7960a5fa-d5db-5d1d-a917-c6f90e50d8ee Version: $LATEST"
+    },
+    {
+      "timestamp": 1787418978216,
+      "message": "END RequestId: 7960a5fa-d5db-5d1d-a917-c6f90e50d8ee"
+    },
+    {
+      "timestamp": 1787418978216,
+      "message": "REPORT RequestId: 7960a5fa-d5db-5d1d-a917-c6f90e50d8ee\tDuration: 16663.49 ms\tBilled Duration: 16664 ms\tMemory Size: 1024 MB\tMax Memory Used: 125 MB"
+    }
+  ],
   "scannerLogs": [
     {
       "timestamp": 1787417461337,
