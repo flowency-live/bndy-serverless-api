@@ -1,0 +1,85 @@
+name: Verify live Dropzone result details
+
+on:
+  push:
+    branches:
+      - dropzone-poster-diagnostic
+    paths:
+      - '.github/workflows/verify-dropzone-result-details.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dropzone-poster-diagnostic
+      - name: Verify public result payload and live UI
+        shell: bash
+        run: |
+          set -euo pipefail
+          CAPTURE_ID='0739e6ff-fe08-41f3-baf4-3e2841dd42d2'
+          curl -fsS \
+            -H 'Origin: https://chat.bndy.live' \
+            "https://capture.bndy.co.uk/v1/public/captures/$CAPTURE_ID" \
+            -o /tmp/result.json
+
+          jq -e '.state == "added"' /tmp/result.json
+          jq -e '.result.artist.name == "Walk The Dog"' /tmp/result.json
+          jq -e '.result.event.venue == "The Commercial, Swansea"' /tmp/result.json
+          jq -e '.result.event.date == "2026-08-23"' /tmp/result.json
+          jq -e '.result.event.time == "17:00"' /tmp/result.json
+          jq -e '.result.event.id == "2ea3120b-f349-4bb8-9b06-53fb750d306f"' /tmp/result.json
+          jq -e '.result.event.url == "https://bndy.live/g/2ea3120b-f349-4bb8-9b06-53fb750d306f"' /tmp/result.json
+
+          curl -fsSI 'https://bndy.live/g/2ea3120b-f349-4bb8-9b06-53fb750d306f' >/tmp/gig-head.txt
+
+          curl -fsS 'https://chat.bndy.live/' -o /tmp/chat-index.html
+          python - <<'PY'
+          import pathlib,re,urllib.request
+          html=pathlib.Path('/tmp/chat-index.html').read_text(errors='replace')
+          srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html, re.I)
+          if not srcs: raise SystemExit('no scripts')
+          body=''
+          for src in srcs:
+              url=src if src.startswith('http') else 'https://chat.bndy.live' + ('/' if not src.startswith('/') else '') + src
+              with urllib.request.urlopen(url, timeout=30) as r:
+                  body += r.read().decode('utf-8','replace')
+          if 'View gig on bndy.live' not in body: raise SystemExit('gig link CTA missing')
+          if 'capture.bndy.co.uk' not in body: raise SystemExit('Capture API missing')
+          if '/signals' in body: raise SystemExit('legacy signals reference present')
+          PY
+
+      - name: Record result
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          mkdir -p diagnostics
+          python - <<'PY'
+          import json,pathlib,datetime
+          p=pathlib.Path('/tmp/result.json')
+          result=json.loads(p.read_text()) if p.exists() else {}
+          event=(result.get('result') or {}).get('event') or {}
+          artist=(result.get('result') or {}).get('artist') or {}
+          out={
+            'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'captureId':result.get('captureId'),
+            'state':result.get('state'),
+            'artist':artist.get('name'),
+            'venue':event.get('venue'),
+            'date':event.get('date'),
+            'time':event.get('time'),
+            'eventId':event.get('id'),
+            'eventUrl':event.get('url'),
+          }
+          pathlib.Path('diagnostics/dropzone-result-details.json').write_text(json.dumps(out,indent=2))
+          PY
+          git config user.name bndy-bot
+          git config user.email actions@users.noreply.github.com
+          git add diagnostics/dropzone-result-details.json
+          git commit -m 'Record Dropzone result details verification' || true
+          git push origin HEAD:dropzone-poster-diagnostic
