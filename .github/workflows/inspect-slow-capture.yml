@@ -33,7 +33,6 @@ jobs:
           echo "::add-mask::$TOKEN"
           curl -fsS -H "Authorization: Bearer $TOKEN" "https://capture.bndy.co.uk/v1/captures/$ID" >/tmp/capture.json
 
-          # Get queue attributes if the enrichment stack is available.
           STACK=BndyEnrichmentStack
           QUEUE_URL=$(aws cloudformation describe-stacks --stack-name "$STACK" --query "Stacks[0].Outputs[?OutputKey=='CaptureQueueUrl'].OutputValue | [0]" --output text 2>/dev/null || true)
           if [ -n "$QUEUE_URL" ] && [ "$QUEUE_URL" != "None" ]; then
@@ -43,7 +42,7 @@ jobs:
           fi
 
           START_MS=$(( ($(date +%s) - 1800) * 1000 ))
-          aws logs filter-log-events --log-group-name /aws/lambda/bndy-capture-processor --start-time "$START_MS" --filter-pattern '0739e6ff-fe08-41f3-baf4-3e2841dd42d2' --limit 100 >/tmp/processor-logs.json 2>/tmp/processor-logs.err || echo '{"events":[]}' >/tmp/processor-logs.json
+          aws logs filter-log-events --log-group-name /aws/lambda/bndy-capture-processor --start-time "$START_MS" --limit 200 >/tmp/processor-logs.json 2>/tmp/processor-logs.err || echo '{"events":[]}' >/tmp/processor-logs.json
           aws logs filter-log-events --log-group-name /aws/lambda/bndy-capture-scan --start-time "$START_MS" --limit 200 >/tmp/scanner-logs.json 2>/tmp/scanner-logs.err || echo '{"events":[]}' >/tmp/scanner-logs.json
           aws lambda get-function-configuration --function-name bndy-capture-processor --query '{Timeout:Timeout,MemorySize:MemorySize,LastModified:LastModified,State:State,LastUpdateStatus:LastUpdateStatus}' --output json >/tmp/processor-config.json
           aws lambda get-function-configuration --function-name bndy-capture-scan --query '{Timeout:Timeout,MemorySize:MemorySize,LastModified:LastModified,State:State,LastUpdateStatus:LastUpdateStatus}' --output json >/tmp/scanner-config.json
@@ -62,7 +61,7 @@ jobs:
           q=read('/tmp/queue.json').get('Attributes',{})
           def clean_events(events):
               out=[]
-              for e in events[-50:]:
+              for e in events[-80:]:
                   msg=str(e.get('message') or '').strip()
                   out.append({'timestamp':e.get('timestamp'),'message':msg[:2000]})
               return out
