@@ -1,17 +1,18 @@
 {
-  "recordedAt": "2026-08-22T17:05:50.124620+00:00",
+  "recordedAt": "2026-08-22T17:29:50.423273+00:00",
   "appId": "d26nztin494lzx",
   "region": "eu-west-2",
-  "chatzoneCommit": "55d6e4848023e95e0458679e5001d3d459dfb840",
+  "chatzoneCommit": "c951f762b6c9cb8c1b3e4cc0a2b3a0f625ff8a56",
   "branch": {
     "branchName": "main",
     "stage": "PRODUCTION",
-    "activeJobIdBefore": "0000000002"
+    "activeJobIdBefore": "0000000003"
   },
-  "jobId": "3",
+  "jobId": "4",
   "jobStatus": "SUCCEED",
   "commitId": null,
   "liveUrl": "https://chat.bndy.live",
   "liveHasCaptureApi": true,
-  "liveHasSignalsApi": false
+  "liveHasSignalsApi": false,
+  "liveHasGigLink": true
 }
