@@ -4,13 +4,15 @@ const AWS = require('aws-sdk');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
-const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
-const ssm = new AWS.SSM({ region: 'eu-west-2' });
+const REGION = 'eu-west-2';
 const USERS_TABLE = 'bndy-users';
 const ACTIVITY_TABLE = 'bndy-activity-log';
 const CLOUDFLARE_SECRET_ID = 'bndy/cloudflare-analytics';
 const ANALYTICS_HOST = 'bndy.live';
 const ENTITY_TABLES = Object.freeze({ artist: 'bndy-artists', venue: 'bndy-venues', event: 'bndy-events' });
+
+const dynamodb = new AWS.DynamoDB.DocumentClient({ region: REGION });
+const ssm = new AWS.SSM({ region: REGION });
 let jwtSecret = null;
 let cloudflareCredentials = null;
 
@@ -18,10 +20,8 @@ function pathOf(event) { return event.requestContext?.http?.path || event.rawPat
 function response(statusCode, body) { return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }; }
 
 function readSessionToken(event) {
-  if (Array.isArray(event.cookies)) {
-    const found = event.cookies.find((x) => x.startsWith('bndy_session='));
-    if (found) return found.split('=')[1];
-  }
+  const eventCookie = Array.isArray(event.cookies) ? event.cookies.find((x) => x.startsWith('bndy_session=')) : null;
+  if (eventCookie) return eventCookie.split('=')[1];
   const header = event.headers?.Cookie || event.headers?.cookie || '';
   const found = header.split(';').map((x) => x.trim()).find((x) => x.startsWith('bndy_session='));
   return found ? found.split('=')[1] : null;
@@ -55,31 +55,50 @@ async function requirePlatformAdmin(event) {
   return { session: auth.session, dbUser: result.Item };
 }
 
-function normalisePostcodeToken(value) { return typeof value === 'string' ? value.trim().toUpperCase().replace(/\s+/g, '') : ''; }
+function normalisePostcodeToken(value) {
+  return typeof value === 'string' ? value.trim().toUpperCase().replace(/\s+/g, '') : '';
+}
 
 function toApiCuratorAccess(raw) {
   if (!raw || typeof raw !== 'object') return { scope: 'global', postcodePrefixes: [], ownRecordsOnly: false };
   return {
     scope: raw.scope === 'postcode' ? 'postcode' : 'global',
-    postcodePrefixes: Array.isArray(raw.postcode_prefixes) ? [...new Set(raw.postcode_prefixes.map(normalisePostcodeToken).filter(Boolean))] : [],
-    ownRecordsOnly: raw.own_records_only === true
+    postcodePrefixes: Array.isArray(raw.postcode_prefixes)
+      ? [...new Set(raw.postcode_prefixes.map(normalisePostcodeToken).filter(Boolean))]
+      : [],
+    ownRecordsOnly: raw.own_records_only === true,
   };
 }
 
 function validateCuratorAccess(input) {
   if (!input || typeof input !== 'object') return { error: 'curatorAccess is required' };
-  const scope = input.scope === 'global' || input.scope === 'postcode' ? input.scope : null;
-  if (!scope) return { error: 'scope must be global or postcode' };
+  if (input.scope !== 'global' && input.scope !== 'postcode') return { error: 'scope must be global or postcode' };
   const prefixes = [...new Set((Array.isArray(input.postcodePrefixes) ? input.postcodePrefixes : []).map(normalisePostcodeToken).filter(Boolean))];
   const invalid = prefixes.filter((x) => !/^[A-Z]{1,2}(?:\d[A-Z0-9]?)?$/.test(x));
   if (invalid.length) return { error: `Invalid postcode area/district: ${invalid.join(', ')}` };
-  if (scope === 'postcode' && prefixes.length === 0) return { error: 'At least one postcode area/district is required' };
-  return { value: { scope, postcode_prefixes: scope === 'postcode' ? prefixes : [], own_records_only: input.ownRecordsOnly === true } };
+  if (input.scope === 'postcode' && prefixes.length === 0) return { error: 'At least one postcode area/district is required' };
+  return {
+    value: {
+      scope: input.scope,
+      postcode_prefixes: input.scope === 'postcode' ? prefixes : [],
+      own_records_only: input.ownRecordsOnly === true,
+    },
+  };
 }
 
 async function findUserByPublicId(userId) {
-  const result = await dynamodb.scan({ TableName: USERS_TABLE, FilterExpression: 'user_id = :uid', ExpressionAttributeValues: { ':uid': userId }, Limit: 2 }).promise();
-  return result.Items?.[0] || null;
+  let ExclusiveStartKey;
+  do {
+    const result = await dynamodb.scan({
+      TableName: USERS_TABLE,
+      FilterExpression: 'user_id = :uid',
+      ExpressionAttributeValues: { ':uid': userId },
+      ExclusiveStartKey,
+    }).promise();
+    if (result.Items?.[0]) return result.Items[0];
+    ExclusiveStartKey = result.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  return null;
 }
 
 async function logAccessChange(admin, target, access) {
@@ -97,8 +116,8 @@ async function logAccessChange(admin, target, access) {
         entity_id: target.user_id,
         entity_name: target.display_name || target.username || target.email || null,
         detail: `${access.scope}; ${access.ownRecordsOnly ? 'own records only' : 'any records'}${access.postcodePrefixes.length ? `; ${access.postcodePrefixes.join(', ')}` : ''}`,
-        gsi_pk: 'ALL'
-      }
+        gsi_pk: 'ALL',
+      },
     }).promise();
   } catch (error) {
     console.error('[CURATOR ACCESS] activity log failed:', error.message);
@@ -108,20 +127,26 @@ async function logAccessChange(admin, target, access) {
 async function handleSetCuratorAccess(event) {
   const admin = await requirePlatformAdmin(event);
   if (admin.error) return response(admin.statusCode, { error: admin.error });
+
   let body;
-  try { body = JSON.parse(event.body || '{}'); } catch { return response(400, { error: 'Invalid JSON body' }); }
+  try { body = JSON.parse(event.body || '{}'); }
+  catch { return response(400, { error: 'Invalid JSON body' }); }
+
   const checked = validateCuratorAccess(body.curatorAccess);
   if (checked.error) return response(400, { error: checked.error });
+
   const userId = event.pathParameters?.userId || pathOf(event).split('/').pop();
   const target = await findUserByPublicId(userId);
   if (!target) return response(404, { error: 'User not found' });
   if ((target.role || 'user') !== 'curator') return response(409, { error: 'Curator access can only be configured for a curator' });
+
   await dynamodb.update({
     TableName: USERS_TABLE,
     Key: { cognito_id: target.cognito_id },
     UpdateExpression: 'SET curator_access = :access, updated_at = :now',
-    ExpressionAttributeValues: { ':access': checked.value, ':now': new Date().toISOString() }
+    ExpressionAttributeValues: { ':access': checked.value, ':now': new Date().toISOString() },
   }).promise();
+
   const access = toApiCuratorAccess(checked.value);
   await logAccessChange(admin.dbUser, target, access);
   return response(200, { userId: target.user_id, curatorAccess: access });
@@ -136,10 +161,14 @@ async function patchUserList(result) {
       try {
         const raw = await dynamodb.get({ TableName: USERS_TABLE, Key: { cognito_id: user.cognitoId }, ProjectionExpression: 'curator_access' }).promise();
         return { ...user, curatorAccess: toApiCuratorAccess(raw.Item?.curator_access) };
-      } catch { return { ...user, curatorAccess: toApiCuratorAccess(null) }; }
+      } catch {
+        return { ...user, curatorAccess: toApiCuratorAccess(null) };
+      }
     }));
     return { ...result, body: JSON.stringify({ ...body, users }) };
-  } catch { return result; }
+  } catch {
+    return result;
+  }
 }
 
 async function patchProfile(event, result) {
@@ -151,7 +180,9 @@ async function patchProfile(event, result) {
     const body = JSON.parse(result.body || '{}');
     if (body.user) body.user.curatorAccess = toApiCuratorAccess(raw.Item?.curator_access);
     return { ...result, body: JSON.stringify(body) };
-  } catch { return result; }
+  } catch {
+    return result;
+  }
 }
 
 function postcodeParts(value) {
@@ -167,11 +198,12 @@ function postcodeParts(value) {
   const area = (outward.match(/^[A-Z]{1,2}/) || [])[0];
   return outward && area ? { outward, area } : null;
 }
+
 function postcodeAllowed(access, postcode) {
   if (access.scope !== 'postcode') return true;
   const parts = postcodeParts(postcode);
   if (!parts) return false;
-  return access.postcodePrefixes.some((p) => /^[A-Z]{1,2}$/.test(p) ? p === parts.area : p === parts.outward);
+  return access.postcodePrefixes.some((token) => (/^[A-Z]{1,2}$/.test(token) ? token === parts.area : token === parts.outward));
 }
 
 async function handleRecordCuratorCreation(event) {
@@ -181,14 +213,21 @@ async function handleRecordCuratorCreation(event) {
   const user = userResult.Item;
   if (!user) return response(404, { error: 'User not found' });
   if ((user.role || 'user') !== 'curator' && !user.platformAdmin) return response(403, { error: 'Curator access required' });
+
   let body;
-  try { body = JSON.parse(event.body || '{}'); } catch { return response(400, { error: 'Invalid JSON body' }); }
+  try { body = JSON.parse(event.body || '{}'); }
+  catch { return response(400, { error: 'Invalid JSON body' }); }
+
   const created = body.curatorCreated;
-  if (!created || !ENTITY_TABLES[created.entityType] || typeof created.entityId !== 'string') return response(400, { error: 'Invalid curatorCreated payload' });
+  if (!created || !ENTITY_TABLES[created.entityType] || typeof created.entityId !== 'string') {
+    return response(400, { error: 'Invalid curatorCreated payload' });
+  }
+
   const table = ENTITY_TABLES[created.entityType];
   const itemResult = await dynamodb.get({ TableName: table, Key: { id: created.entityId } }).promise();
   const item = itemResult.Item;
   if (!item) return response(404, { error: 'Created record not found' });
+
   const access = toApiCuratorAccess(user.curator_access);
   if (!user.platformAdmin && access.scope === 'postcode' && created.entityType !== 'artist') {
     let postcode = item.postcode || item.postalCode || item.postal_code || null;
@@ -199,18 +238,20 @@ async function handleRecordCuratorCreation(event) {
     }
     if (!postcodeAllowed(access, postcode)) return response(403, { error: 'Created record is outside this curator’s postcode access' });
   }
+
   try {
     await dynamodb.update({
       TableName: table,
       Key: { id: created.entityId },
       ConditionExpression: 'attribute_not_exists(createdBy) OR createdBy = :by',
       UpdateExpression: 'SET createdBy = if_not_exists(createdBy, :by), createdByName = if_not_exists(createdByName, :name)',
-      ExpressionAttributeValues: { ':by': auth.session.userId, ':name': user.display_name || null }
+      ExpressionAttributeValues: { ':by': auth.session.userId, ':name': user.display_name || null },
     }).promise();
   } catch (error) {
     if (error.code === 'ConditionalCheckFailedException') return response(409, { error: 'Record already belongs to another creator' });
     throw error;
   }
+
   return response(200, { recorded: true, entityType: created.entityType, entityId: created.entityId });
 }
 
@@ -221,7 +262,7 @@ async function getCloudflareCredentials() {
     return cloudflareCredentials;
   }
   if (!AWS.SecretsManager) throw new Error('AWS Secrets Manager client unavailable');
-  const manager = new AWS.SecretsManager({ region: 'eu-west-2' });
+  const manager = new AWS.SecretsManager({ region: REGION });
   const secret = await manager.getSecretValue({ SecretId: CLOUDFLARE_SECRET_ID }).promise();
   const parsed = JSON.parse(secret.SecretString || '{}');
   if (!parsed.account_id || !parsed.api_token) throw new Error('Cloudflare analytics secret is incomplete');
@@ -244,29 +285,47 @@ query BndyWebAnalytics($accountTag: string!, $filter: AccountRumPageloadEventsAd
 }`;
 
 function metricRows(rows, key, fallback) {
-  return (rows || []).map((row) => ({ label: row.dimensions?.[key] || fallback, pageViews: Number(row.count || 0), visits: Number(row.sum?.visits || 0) }));
+  return (rows || []).map((row) => ({
+    label: row.dimensions?.[key] || fallback,
+    pageViews: Number(row.count || 0),
+    visits: Number(row.sum?.visits || 0),
+  }));
 }
 
 async function handleAnalytics(event) {
   const admin = await requirePlatformAdmin(event);
   if (admin.error) return response(admin.statusCode, { error: admin.error });
+
   const requested = Number(event.queryStringParameters?.days || 7);
   const days = [1, 7, 30].includes(requested) ? requested : 7;
   const to = new Date();
   const from = new Date(to.getTime() - days * 86400000);
+
   try {
     const credentials = await getCloudflareCredentials();
     const cfResponse = await fetch('https://api.cloudflare.com/client/v4/graphql', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${credentials.api_token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ query: ANALYTICS_QUERY, variables: { accountTag: credentials.account_id, filter: { datetime_geq: from.toISOString(), datetime_leq: to.toISOString(), requestHost: ANALYTICS_HOST } } })
+      headers: {
+        Authorization: `Bearer ${credentials.api_token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        query: ANALYTICS_QUERY,
+        variables: {
+          accountTag: credentials.account_id,
+          filter: { datetime_geq: from.toISOString(), datetime_leq: to.toISOString(), requestHost: ANALYTICS_HOST },
+        },
+      }),
     });
+
     if (!cfResponse.ok) throw new Error(`Cloudflare returned HTTP ${cfResponse.status}`);
     const payload = await cfResponse.json();
-    if (payload.errors?.length) throw new Error(payload.errors.map((e) => e.message).join('; '));
+    if (payload.errors?.length) throw new Error(payload.errors.map((error) => error.message).join('; '));
     const account = payload.data?.viewer?.accounts?.[0];
     if (!account) throw new Error('Cloudflare account analytics unavailable');
     const total = account.total?.[0] || {};
+
     return response(200, {
       host: ANALYTICS_HOST,
       range: { days, from: from.toISOString(), to: to.toISOString() },
@@ -279,7 +338,7 @@ async function handleAnalytics(event) {
       devices: metricRows(account.devices, 'deviceType', 'Unknown'),
       browsers: metricRows(account.browsers, 'userAgentBrowser', 'Unknown'),
       operatingSystems: metricRows(account.operatingSystems, 'userAgentOS', 'Unknown'),
-      generatedAt: new Date().toISOString()
+      generatedAt: new Date().toISOString(),
     });
   } catch (error) {
     console.error('[ANALYTICS] Cloudflare query failed:', error.message);
@@ -296,5 +355,5 @@ module.exports = {
   toApiCuratorAccess,
   validateCuratorAccess,
   postcodeParts,
-  postcodeAllowed
+  postcodeAllowed,
 };
