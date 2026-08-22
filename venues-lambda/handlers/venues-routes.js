@@ -760,6 +760,9 @@ async function handleUpdateVenue(deps, venueId, venueData, event) {
     postcode: 'postcode',
     facilities: 'facilities',
     socialMediaUrls: 'social_media_urls',
+    facebookUrl: 'facebook_url',
+    instagramUrl: 'instagram_url',
+    description: 'description',
     profileImageUrl: 'profile_image_url',
     standardTicketed: 'standard_ticketed',
     isTicketed: 'standard_ticketed',  // alias for backstage UI
