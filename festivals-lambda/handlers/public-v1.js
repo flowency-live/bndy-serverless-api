@@ -10,6 +10,7 @@
 const FESTIVALS_TABLE = process.env.FESTIVALS_TABLE || 'bndy-events';
 const EVENTS_TABLE = process.env.EVENTS_TABLE || 'bndy-events';
 const ARTISTS_TABLE = process.env.ARTISTS_TABLE || 'bndy-artists';
+const VENUES_TABLE = process.env.VENUES_TABLE || 'bndy-venues';
 const { isPublishedInEdition } = require('../lib/edition-domain');
 
 function sanitizeFestival(festival) {
@@ -59,6 +60,46 @@ async function scanFestivalSummaries(dynamodb, params) {
     console.warn('[FESTIVALS_PUBLIC] bySlug unavailable for listing; using compatibility table scan', { message: error.message });
     return scanAll(dynamodb, params);
   }
+}
+
+/**
+ * Resolve only the tiny bit of venue data festival discovery needs. This keeps
+ * /gigs and /festivals from downloading the complete public venue catalogue just
+ * to calculate proximity. One batched read covers all venues referenced by the
+ * returned festival window; hidden/non-live/invalid-coordinate venues are
+ * deliberately omitted to match the public venue list contract.
+ */
+async function loadVenuePoints(dynamodb, festivals) {
+  const ids = [...new Set(festivals.flatMap(allVenueIds))];
+  if (!ids.length) return new Map();
+
+  const venues = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const result = await dynamodb.batchGet({
+      RequestItems: {
+        [VENUES_TABLE]: {
+          Keys: ids.slice(i, i + 100).map((id) => ({ id })),
+          ProjectionExpression: 'id, city, latitude, longitude, hidden, publicationScopes'
+        }
+      }
+    }).promise();
+    venues.push(...(result.Responses?.[VENUES_TABLE] || []));
+  }
+
+  const points = new Map();
+  for (const venue of venues) {
+    if (venue.hidden === true || !isPublishedInEdition(venue, 'live')) continue;
+    const lat = Number(venue.latitude);
+    const lng = Number(venue.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) continue;
+    points.set(venue.id, {
+      id: venue.id,
+      city: venue.city || undefined,
+      lat,
+      lng
+    });
+  }
+  return points;
 }
 
 async function findFestivalBySlug(dynamodb, slug) {
@@ -123,7 +164,9 @@ async function handleGetPublicFestivals(deps, event) {
     ExpressionAttributeValues: values
   });
 
-  const festivals = allItems.filter(f => f.hidden !== true && isPublishedInEdition(f, 'live')).map((f) => {
+  const publicItems = allItems.filter(f => f.hidden !== true && isPublishedInEdition(f, 'live'));
+  const venuePointsById = await loadVenuePoints(dynamodb, publicItems);
+  const festivals = publicItems.map((f) => {
     const venueIds = allVenueIds(f);
     return {
       id: f.id,
@@ -135,6 +178,7 @@ async function handleGetPublicFestivals(deps, event) {
       // Keep town during the transition for older consumers.
       town: f.town || f.location,
       venueIds,
+      venuePoints: venueIds.map((id) => venuePointsById.get(id)).filter(Boolean),
       venueCount: venueIds.length,
       posterImageUrl: f.posterImageUrl,
       heroImageUrl: f.heroImageUrl,
@@ -216,6 +260,7 @@ module.exports = {
   handleGetPublicFestivals,
   handleGetFestivalBySlug,
   scanFestivalSummaries,
+  loadVenuePoints,
   // exported to test index-fallback behaviour directly
   findFestivalBySlug,
   findChildEvents,
