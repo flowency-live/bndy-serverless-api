@@ -1,18 +1,25 @@
 {
-  "recordedAt": "2026-08-22T16:14:15.613072+00:00",
-  "enrichmentCommit": "7c232eb94a0f30c1682c09bd9f664348669e2f74",
+  "recordedAt": "2026-08-22T16:18:50.370551+00:00",
+  "enrichmentCommit": "78cfafdb7bc7fdebc3e18d5a51a8839ec89ee3fe",
   "processor": {
-    "LastModified": "2026-08-22T16:14:04.000+0000",
-    "CodeSha256": "PZ9MGtpHdFprIhO83aiyKyTaNsHOaxR+6EhTPkL07Yg=",
+    "LastModified": "2026-08-22T16:18:17.000+0000",
+    "CodeSha256": "dktdWc74ZVrP7nLFDI5njMd+nhtSxt69k3DvYU0Mb/Y=",
+    "Runtime": "nodejs22.x",
+    "State": "Active",
+    "LastUpdateStatus": "Successful"
+  },
+  "scanner": {
+    "LastModified": "2026-08-22T16:18:20.000+0000",
+    "CodeSha256": "a3QeZh9jOonYp0M+BYUKTDVE0zrCg4+TJcOFDMmA3as=",
     "Runtime": "nodejs22.x",
     "State": "Active",
     "LastUpdateStatus": "Successful"
   },
   "capture": {
     "id": "e106ed9f-ecde-4ad5-a4ee-07ed315732e4",
-    "status": "failed",
+    "status": "processed",
     "sourceApp": "chatzone",
-    "processingAttempt": null,
+    "processingAttempt": 1,
     "media": {
       "type": "image",
       "mimeType": "image/jpeg",
@@ -21,7 +28,20 @@
     },
     "noteLines": [
       "AWS processor: failed because this image capture has no uploaded image object. Update the Android Capture app and resend.",
-      "AWS processor: failed because this image capture has no uploaded image object. Update the Android Capture app and resend."
+      "AWS processor: failed because this image capture has no uploaded image object. Update the Android Capture app and resend.",
+      "AWS processor: completed.",
+      "Capture classification: event",
+      "Artist: The Pistachio Nuts | created | 446cb007-749a-421d-a105-c77d25ec2a08",
+      "Facebook: https://www.facebook.com/thepistachionuts/",
+      "Location: South Wales (regional)",
+      "Artist type: Band; act type: Covers",
+      "Canonical capture URL: not resolved",
+      "Bio: not found",
+      "Events: 1 created, 0 existing duplicates, 0 held.",
+      "Event detail:",
+      "- 2026-08-23 18:30 | Briton Ferry Workingmen's Club, Briton Ferry | created 1daed617-969e-4b2c-904a-25d50b24dce1 | venue newly created",
+      "New venues:",
+      "- Briton Ferry Workingmen's Club, Briton Ferry (new)"
     ]
   }
 }
