@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: BNDY public Facebook source inspector - isolated companion stack
+Description: BNDY public Facebook source inspector - isolated Lambda companion stack
 
 Parameters:
   BndyHttpApiId:
@@ -26,22 +26,12 @@ Resources:
           UNIQUE_KEYS_TABLE: bndy-unique-keys
           ARTISTS_TABLE: bndy-artists
 
-  SourceInspectorIntegration:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId: !Ref BndyHttpApiId
-      IntegrationType: AWS_PROXY
-      IntegrationUri: !GetAtt SourceInspectorFunction.Arn
-      PayloadFormatVersion: '2.0'
-      TimeoutInMillis: 8000
-
-  SourceInspectorRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref BndyHttpApiId
-      RouteKey: POST /api/community/source/inspect
-      Target: !Sub integrations/${SourceInspectorIntegration}
-
+  # The main SAM stack owns the HttpApi definition and can replace its route set
+  # during an unrelated deployment. Keeping an ApiGatewayV2::Route in this
+  # companion stack therefore creates irreparable CloudFormation drift: the
+  # companion stack still believes the route exists after the main stack has
+  # removed it. The deployment workflow now reconciles the integration + route
+  # imperatively after every successful main API deployment instead.
   SourceInspectorPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -52,8 +42,5 @@ Resources:
 
 Outputs:
   SourceInspectorFunctionArn:
-    Description: Source inspector Lambda ARN
+    Description: Source inspector Lambda ARN used by the API route reconciler
     Value: !GetAtt SourceInspectorFunction.Arn
-  Route:
-    Description: Route attached to the existing BNDY HTTP API
-    Value: POST /api/community/source/inspect

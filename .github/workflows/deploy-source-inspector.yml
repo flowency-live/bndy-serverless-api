@@ -80,7 +80,7 @@ jobs:
             --template-file source-inspector-template.yaml \
             --build-dir .aws-sam-source-inspector
 
-      - name: SAM Deploy
+      - name: SAM Deploy Lambda companion
         run: |
           sam deploy \
             --template-file .aws-sam-source-inspector/template.yaml \
@@ -92,6 +92,64 @@ jobs:
             --s3-bucket bndy-deployment-artifacts-1758805276 \
             --s3-prefix bndy-source-inspector \
             --parameter-overrides BndyHttpApiId="$BNDY_HTTP_API_ID"
+
+      - name: Reconcile API Gateway integration and route
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROUTE_KEY='POST /api/community/source/inspect'
+          FUNCTION_ARN=$(aws cloudformation describe-stacks \
+            --stack-name bndy-source-inspector \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='SourceInspectorFunctionArn'].OutputValue | [0]" \
+            --output text)
+          test -n "$FUNCTION_ARN" && test "$FUNCTION_ARN" != "None"
+
+          # The main SAM stack owns the HttpApi definition and may replace its
+          # route set. Reconcile this companion integration explicitly rather
+          # than trusting CloudFormation state that can be stale after that.
+          while IFS= read -r route_id; do
+            [ -n "$route_id" ] || continue
+            aws apigatewayv2 delete-route \
+              --api-id "$BNDY_HTTP_API_ID" \
+              --route-id "$route_id" \
+              --region "$AWS_REGION" || true
+          done < <(aws apigatewayv2 get-routes \
+            --api-id "$BNDY_HTTP_API_ID" \
+            --region "$AWS_REGION" \
+            --output json | jq -r --arg key "$ROUTE_KEY" '.Items[]? | select(.RouteKey == $key) | .RouteId')
+
+          while IFS= read -r integration_id; do
+            [ -n "$integration_id" ] || continue
+            aws apigatewayv2 delete-integration \
+              --api-id "$BNDY_HTTP_API_ID" \
+              --integration-id "$integration_id" \
+              --region "$AWS_REGION" || true
+          done < <(aws apigatewayv2 get-integrations \
+            --api-id "$BNDY_HTTP_API_ID" \
+            --region "$AWS_REGION" \
+            --output json | jq -r --arg uri "$FUNCTION_ARN" '.Items[]? | select(.IntegrationUri == $uri) | .IntegrationId')
+
+          INTEGRATION_ID=$(aws apigatewayv2 create-integration \
+            --api-id "$BNDY_HTTP_API_ID" \
+            --integration-type AWS_PROXY \
+            --integration-uri "$FUNCTION_ARN" \
+            --payload-format-version '2.0' \
+            --timeout-in-millis 8000 \
+            --region "$AWS_REGION" \
+            --query IntegrationId \
+            --output text)
+          test -n "$INTEGRATION_ID" && test "$INTEGRATION_ID" != "None"
+
+          ROUTE_ID=$(aws apigatewayv2 create-route \
+            --api-id "$BNDY_HTTP_API_ID" \
+            --route-key "$ROUTE_KEY" \
+            --target "integrations/$INTEGRATION_ID" \
+            --region "$AWS_REGION" \
+            --query RouteId \
+            --output text)
+          test -n "$ROUTE_ID" && test "$ROUTE_ID" != "None"
+          echo "Reconciled $ROUTE_KEY -> integrations/$INTEGRATION_ID ($ROUTE_ID)"
 
       - name: Wait for API Gateway propagation
         run: sleep 5
@@ -138,7 +196,7 @@ jobs:
             -H 'Accept: application/vnd.github+json' \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$DEPLOY_SHA" \
-            -d '{"state":"success","context":"source-inspector/deploy","description":"Post-main companion deploy and browser CORS smoke passed"}'
+            -d '{"state":"success","context":"source-inspector/deploy","description":"Inspector route reconciled after main deploy; browser CORS smoke passed"}'
 
       - name: Mark source inspector deployment failed
         if: failure()
@@ -151,4 +209,4 @@ jobs:
             -H 'Accept: application/vnd.github+json' \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$DEPLOY_SHA" \
-            -d '{"state":"failure","context":"source-inspector/deploy","description":"Post-main source inspector deploy or browser CORS smoke failed"}'
+            -d '{"state":"failure","context":"source-inspector/deploy","description":"Inspector reconcile, deploy or browser CORS smoke failed"}'
