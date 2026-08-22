@@ -1,7 +1,14 @@
 'use strict';
 
-jest.mock('aws-sdk', () => ({
-  DynamoDB: { DocumentClient: jest.fn(() => ({ scan: jest.fn(() => ({ promise: async () => ({ Items: [] }) })) })) }
+const send = jest.fn(async () => ({ Items: [] }));
+
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn(() => ({}))
+}));
+
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: { from: jest.fn(() => ({ send })) },
+  ScanCommand: jest.fn(function ScanCommand(input) { this.input = input; })
 }));
 
 const { __test } = require('./handler');
