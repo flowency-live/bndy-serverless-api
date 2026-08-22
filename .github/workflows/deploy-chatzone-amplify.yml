@@ -15,9 +15,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout ops
+        uses: actions/checkout@v4
         with:
           ref: dropzone-poster-diagnostic
+          path: ops
+
+      - name: Checkout Chatzone
+        uses: actions/checkout@v4
+        with:
+          repository: flowency-live/bndy-chatzone
+          ref: main
+          path: chatzone
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: chatzone/package-lock.json
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -25,41 +40,51 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
 
-      - name: Resolve Amplify app region and branch
+      - name: Test and build Chatzone
+        working-directory: chatzone
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run test:run
+          npm run build
+          grep -R -q 'capture.bndy.co.uk' dist/assets
+          if grep -R -q '/signals' dist/assets; then
+            echo 'Old Signals API reference remains in built bundle' >&2
+            exit 1
+          fi
+          cd dist
+          zip -qr /tmp/chatzone.zip .
+          test -s /tmp/chatzone.zip
+
+      - name: Resolve Amplify app
         shell: bash
         run: |
           set -euo pipefail
           APP_ID=d26nztin494lzx
-          REGION=''
-          for r in eu-west-2 eu-west-1 us-east-1; do
-            if aws amplify get-app --region "$r" --app-id "$APP_ID" >/tmp/app.json 2>/tmp/app.err; then
-              REGION="$r"
-              break
-            fi
-          done
-          test -n "$REGION"
-          aws amplify get-branch --region "$REGION" --app-id "$APP_ID" --branch-name main >/tmp/branch-before.json 2>/tmp/branch.err
+          REGION=eu-west-2
+          aws amplify get-app --region "$REGION" --app-id "$APP_ID" >/tmp/app.json
+          aws amplify get-branch --region "$REGION" --app-id "$APP_ID" --branch-name main >/tmp/branch-before.json
           echo "AMPLIFY_REGION=$REGION" >> "$GITHUB_ENV"
           echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
 
-      - name: Start Amplify release
+      - name: Create and upload manual deployment
         shell: bash
         run: |
-          set +e
-          aws amplify start-job --region "$AMPLIFY_REGION" --app-id "$APP_ID" --branch-name main --job-type RELEASE >/tmp/start-job.json 2>/tmp/start-job.err
-          RC=$?
-          echo "$RC" >/tmp/start-job.rc
-          if [ "$RC" -eq 0 ]; then
-            JOB_ID=$(jq -r '.jobSummary.jobId // empty' /tmp/start-job.json)
-            if [ -n "$JOB_ID" ]; then echo "JOB_ID=$JOB_ID" >> "$GITHUB_ENV"; fi
-          fi
-          exit "$RC"
+          set -euo pipefail
+          aws amplify create-deployment --region "$AMPLIFY_REGION" --app-id "$APP_ID" --branch-name main >/tmp/create-deployment.json
+          JOB_ID=$(jq -r '.jobId // empty' /tmp/create-deployment.json)
+          UPLOAD_URL=$(jq -r '.zipUploadUrl // empty' /tmp/create-deployment.json)
+          test -n "$JOB_ID"
+          test -n "$UPLOAD_URL"
+          echo "JOB_ID=$JOB_ID" >> "$GITHUB_ENV"
+          curl -fsS -X PUT -H 'Content-Type: application/zip' --upload-file /tmp/chatzone.zip "$UPLOAD_URL"
+          aws amplify start-deployment --region "$AMPLIFY_REGION" --app-id "$APP_ID" --branch-name main --job-id "$JOB_ID" >/tmp/start-deployment.json
 
       - name: Wait for deployment
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${JOB_ID:-}"
           FINAL=''
           for i in $(seq 1 120); do
             aws amplify get-job --region "$AMPLIFY_REGION" --app-id "$APP_ID" --branch-name main --job-id "$JOB_ID" >/tmp/job.json
@@ -77,9 +102,10 @@ jobs:
         run: |
           set -euo pipefail
           rm -f /tmp/index.html /tmp/bundle.txt
+          OK=0
           for i in $(seq 1 30); do
             if curl -fsS --retry 2 'https://chat.bndy.live/' -o /tmp/index.html; then
-              python - <<'PY' && exit 0 || true
+              if python - <<'PY'
           import re, urllib.request, pathlib
           html=pathlib.Path('/tmp/index.html').read_text(errors='replace')
           srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)["\']',html,re.I)
@@ -94,20 +120,21 @@ jobs:
           if '/v1/public/captures' not in body: raise SystemExit(4)
           if '/signals' in body: raise SystemExit(5)
           PY
+              then OK=1; break; fi
             fi
             sleep 10
           done
-          echo 'Live domain did not serve consolidated Capture build' >&2
-          exit 1
+          test "$OK" = '1'
 
       - name: Record result
         if: always()
+        working-directory: ops
         shell: bash
         run: |
           set -u
           mkdir -p diagnostics
           python - <<'PY'
-          import json, pathlib, datetime, os
+          import json, pathlib, datetime, os, subprocess
           def read_json(path):
               p=pathlib.Path(path)
               if not p.exists(): return {}
@@ -115,28 +142,25 @@ jobs:
               except:return {}
           def read_text(path):
               p=pathlib.Path(path)
-              return p.read_text(errors='replace').strip() if p.exists() else None
+              return p.read_text(errors='replace') if p.exists() else ''
           job=read_json('/tmp/job.json').get('job',{})
           summary=job.get('summary',{})
-          bundle=read_text('/tmp/bundle.txt') or ''
+          bundle=read_text('/tmp/bundle.txt')
           branch=read_json('/tmp/branch-before.json').get('branch',{})
-          start=read_json('/tmp/start-job.json')
+          try: commit=subprocess.check_output(['git','-C','../chatzone','rev-parse','HEAD'],text=True).strip()
+          except Exception: commit=None
           payload={
             'recordedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'appId':os.getenv('APP_ID'),
             'region':os.getenv('AMPLIFY_REGION'),
+            'chatzoneCommit':commit,
             'branch':{
               'branchName':branch.get('branchName'),
-              'enableAutoBuild':branch.get('enableAutoBuild'),
               'stage':branch.get('stage'),
-              'activeJobId':branch.get('activeJobId'),
+              'activeJobIdBefore':branch.get('activeJobId'),
             },
-            'startJobRc':read_text('/tmp/start-job.rc'),
-            'startJobError':read_text('/tmp/start-job.err'),
-            'startJobResponse':start,
             'jobId':os.getenv('JOB_ID'),
             'jobStatus':summary.get('status'),
-            'sourceUrl':summary.get('sourceUrl'),
             'commitId':summary.get('commitId'),
             'liveUrl':'https://chat.bndy.live',
             'liveHasCaptureApi':'capture.bndy.co.uk' in bundle and '/v1/public/captures' in bundle,
