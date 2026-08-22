@@ -104,7 +104,32 @@ function isTransientFacebookKey(key) {
   return /^(?:share(?:\/|$)|shares(?:\/|$)|sharer(?:\.php|\/|$)|share\.php(?:\/|$)|story\.php(?:\/|$)|permalink\.php(?:\/|$)|posts?\/|reel\/|watch\/|events?\/|groups?\/|photo(?:\.php|\/|$)|photos\/|videos?\/)/i.test(path);
 }
 
+/**
+ * Facebook sometimes exposes a person's profile from inside a group as
+ * /groups/{group}/user/{numeric-profile-id}. The surrounding group URL is not
+ * entity identity, but the embedded numeric user id is. Extract it before the
+ * generic transient-group rule rejects the wrapper.
+ */
+function groupMemberProfileIdentity(rawUrl) {
+  const candidate = normaliseCandidate(rawUrl);
+  if (!candidate) return null;
+  try {
+    const parsed = new URL(candidate);
+    const match = parsed.pathname.match(/^\/groups\/[^/]+\/user\/(\d{6,})\/?$/i);
+    if (!match) return null;
+    return {
+      key: `facebook.com/${match[1]}`,
+      url: `https://www.facebook.com/${match[1]}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function stableFacebookIdentity(rawUrl) {
+  const groupMemberIdentity = groupMemberProfileIdentity(rawUrl);
+  if (groupMemberIdentity) return groupMemberIdentity;
+
   const key = facebookKey(rawUrl);
   if (!key || isTransientFacebookKey(key)) return null;
   const path = key.replace(/^facebook\.com\//, '');
@@ -478,9 +503,14 @@ async function inspectFacebookSource({ input, expectedType = null, client = dyna
   };
   let fetchedFinalUrl = null;
 
+  // A group-member wrapper contains a real profile id, but the group page itself
+  // is a poor metadata source. Inspect the canonical profile URL instead while
+  // preserving the original wrapper as sourceUrl for provenance/debugging.
+  const inspectionUrl = groupMemberProfileIdentity(extractedUrl)?.url || sourceUrl;
+
   try {
-    const fetched = await fetchHtml(sourceUrl);
-    fetchedFinalUrl = fetched.finalUrl || sourceUrl;
+    const fetched = await fetchHtml(inspectionUrl);
+    fetchedFinalUrl = fetched.finalUrl || inspectionUrl;
     if (fetched.statusCode >= 200 && fetched.statusCode < 300) {
       parsed = parseFacebookMetadata(fetched.html, fetchedFinalUrl);
     } else {
@@ -567,6 +597,7 @@ module.exports = {
   extractFacebookUrl,
   canonicalFacebookUrl,
   isTransientFacebookKey,
+  groupMemberProfileIdentity,
   stableFacebookIdentity,
   isSafeFetchUrl,
   toSafeFetchUrl,
