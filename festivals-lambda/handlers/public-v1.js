@@ -79,7 +79,8 @@ async function loadVenuePoints(dynamodb, festivals) {
       RequestItems: {
         [VENUES_TABLE]: {
           Keys: ids.slice(i, i + 100).map((id) => ({ id })),
-          ProjectionExpression: 'id, city, latitude, longitude, hidden, publicationScopes'
+          ProjectionExpression: 'id, city, latitude, longitude, #hidden, publicationScopes',
+          ExpressionAttributeNames: { '#hidden': 'hidden' }
         }
       }
     }).promise();
