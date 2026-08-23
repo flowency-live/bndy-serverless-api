@@ -45,7 +45,7 @@ function buildArtistUniqueKeys(name, location, facebookUrl, nameVariants) {
     const region = regionBucket(location);
     const seenVariantKeys = new Set();
     // Don't duplicate the primary name key
-    if (identity.resolvable) seenVariantKeys.add(identity.key);
+    if (identity.resolvable) seenVariantKeys.add(normaliseKey(name));
 
     for (const variant of nameVariants) {
       if (!variant || typeof variant !== 'string') continue;
@@ -65,7 +65,7 @@ function buildArtistUniqueKeys(name, location, facebookUrl, nameVariants) {
   const fbKey = facebookKey(facebookUrl);
   if (fbKey) keys.push(`artist#fb#${fbKey}`);
 
-  return { keys, variantKeys, resolvable: identity.resolvable, identity };
+  return { keys: [...new Set(keys)], variantKeys, resolvable: identity.resolvable, identity };
 }
 
 /**

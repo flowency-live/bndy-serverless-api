@@ -66,7 +66,7 @@ async function findExistingKey(dynamodb, keys) {
  */
 async function gatedPut(dynamodb, { tableName, item, keys, entityType, source }) {
   const mode = gateMode();
-  const cleanKeys = (keys || []).filter(Boolean);
+  const cleanKeys = [...new Set((keys || []).filter(Boolean))];
 
   if (mode === 'off' || cleanKeys.length === 0) {
     await dynamodb.put({ TableName: tableName, Item: item }).promise();
@@ -196,7 +196,7 @@ async function rekeyUniqueKeys(dynamodb, { oldKeys, newKeys, refId, entityType, 
  * entity's business key becomes claimable again. Never throws.
  */
 async function releaseUniqueKeys(dynamodb, keys, expectedRefId) {
-  for (const key of (keys || []).filter(Boolean)) {
+  for (const key of new Set((keys || []).filter(Boolean))) {
     try {
       const params = { TableName: UNIQUE_KEYS_TABLE, Key: { key } };
       if (expectedRefId) {

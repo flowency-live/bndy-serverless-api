@@ -565,6 +565,24 @@ describe('edition-scoped artist find-or-create', () => {
     });
   });
 
+  it('does not emit duplicate sentinel keys for canonical-equivalent aliases', async () => {
+    const body = {
+      ...scopedBody,
+      name: 'Black Dyke Band',
+      location: 'Yorkshire',
+      nameVariants: ['Black Dyke Band', 'BLACK DYKE BAND', 'Black Dyke Band']
+    };
+    const res = await handler(eventFor('/api/artists/find-or-create/mcp', body, token), {});
+    expect(res.statusCode).toBe(201);
+
+    const items = mockDynamoDB.transactWrite.mock.calls[0][0].TransactItems;
+    const sentinelKeys = items
+      .filter((item) => item.Put?.TableName === 'bndy-unique-keys')
+      .map((item) => item.Put.Item.key);
+    expect(sentinelKeys).toEqual(['artist#blackdyke#yorkshire']);
+    expect(new Set(sentinelKeys).size).toBe(sentinelKeys.length);
+  });
+
   it('returns existing scope metadata without updating a matched artist', async () => {
     mockDynamoDB.get.mockResolvedValue({ Item: { id: 'live-1', name: 'Existing', location: 'Staffordshire', publicationScopes: ['live'] } });
     const res = await handler(eventFor('/api/artists/find-or-create/mcp', { ...scopedBody, confirmNew: false, resolveTo: 'live-1' }, token), {});
