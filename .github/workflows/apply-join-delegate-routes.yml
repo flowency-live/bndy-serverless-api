@@ -1,0 +1,46 @@
+name: Apply Join delegate management routes
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Run Join delegate routes')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Add entity membership function and routes
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const p = 'template.yaml';
+          let t = fs.readFileSync(p, 'utf8');
+          const anchor = '  # Auth Lambda\n';
+          const fn = `  EntityMembershipsFunction:\n    Type: AWS::Serverless::Function\n    Properties:\n      Description: BNDY owner/admin/delegate relationships for Join-managed entities\n      CodeUri: ./entity-memberships-lambda/\n      Handler: handler.handler\n      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role\n      Layers:\n        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3\n      Environment:\n        Variables:\n          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'\n          ENTITY_MEMBERSHIPS_TABLE: !Ref EntityMembershipsTable\n      Events:\n        ListManagedEntityMembers:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/managed-entities/{id}/members\n            Method: GET\n        AddManagedEntityMember:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/managed-entities/{id}/members\n            Method: POST\n        UpdateEntityMembership:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/entity-memberships/{id}\n            Method: PATCH\n        TransferManagedEntity:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/managed-entities/{id}/transfer\n            Method: POST\n\n`;
+          if (!t.includes('EntityMembershipsFunction:')) {
+            const i = t.indexOf(anchor);
+            if (i < 0) throw new Error('Auth Lambda anchor not found');
+            t = t.slice(0, i) + fn + t.slice(i);
+          }
+          fs.writeFileSync(p, t);
+          NODE
+          node --check entity-memberships-lambda/handler.js
+          npm run validate
+          npm run verify-routes
+      - name: Commit
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add template.yaml
+          git commit -m 'Enable Join delegate and ownership transfer routes'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
