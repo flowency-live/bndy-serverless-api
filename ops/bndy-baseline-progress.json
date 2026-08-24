@@ -1,11 +1,11 @@
 {
-  "verifiedAt": "2026-08-24T07:20:04Z",
+  "verifiedAt": "2026-08-24T07:22:16Z",
   "observations": {
-    "artist": 2843,
-    "venue": 0,
+    "artist": 3229,
+    "venue": 1487,
     "event": 0,
     "festival": 0,
-    "total": 2843
+    "total": 4716
   },
-  "resolutions": 2898
+  "resolutions": 4767
 }
