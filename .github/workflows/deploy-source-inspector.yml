@@ -110,10 +110,10 @@ jobs:
             --output text)
           test -n "$API_ID" && test "$API_ID" != "None"
           echo "BNDY_HTTP_API_ID=$API_ID" >> "$GITHUB_ENV"
-          GEMINI_SECRET_ARN=$(aws cloudformation describe-stacks \\
-            --stack-name BndyEnrichmentStack \\
-            --region "$AWS_REGION" \\
-            --query "Stacks[0].Outputs[?OutputKey=='GeminiSecretArn'].OutputValue | [0]" \\
+          GEMINI_SECRET_ARN=$(aws cloudformation describe-stacks \
+            --stack-name BndyEnrichmentStack \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='GeminiSecretArn'].OutputValue | [0]" \
             --output text)
           test -n "$GEMINI_SECRET_ARN" && test "$GEMINI_SECRET_ARN" != "None"
           echo "GEMINI_SECRET_ARN=$GEMINI_SECRET_ARN" >> "$GITHUB_ENV"
