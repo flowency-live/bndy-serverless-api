@@ -10,6 +10,8 @@ const {
   nameHintFromHandle,
   unwrapGroupMemberProfileInput,
   readHtmlTitle,
+  cleanFacebookDescription,
+  isFacebookCrawlerImageUrl,
   parseEmbeddedFacebookDetails,
   enrichInspectionResult,
   inspectFacebookSourceV2,
@@ -86,6 +88,83 @@ test('embedded payload ignores generic Facebook UI and page names', () => {
     address: null,
     websiteUrl: null,
   });
+});
+
+test('Facebook engagement preamble is removed only when anchored to the page name', () => {
+  assert.equal(
+    cleanFacebookDescription(
+      'A Hundred Endings. 718 likes · 1 talking about this. A professional, experienced four-piece covers/function band available for hire across the Northwest',
+      'A Hundred Endings',
+    ),
+    'A professional, experienced four-piece covers/function band available for hire across the Northwest',
+  );
+  assert.equal(
+    cleanFacebookDescription(
+      'Example Artist · 1.2K followers · 24 talking about this. Original music from Manchester.',
+      'Example Artist',
+    ),
+    'Original music from Manchester.',
+  );
+  assert.equal(
+    cleanFacebookDescription(
+      'A Hundred Endings. Formed in 2018 with 718 shows behind them.',
+      'A Hundred Endings',
+    ),
+    'A Hundred Endings. Formed in 2018 with 718 shows behind them.',
+  );
+  assert.equal(
+    cleanFacebookDescription(
+      'Another Page. 718 likes · 1 talking about this. Keep this text.',
+      'A Hundred Endings',
+    ),
+    'Another Page. 718 likes · 1 talking about this. Keep this text.',
+  );
+});
+
+test('Facebook crawler media URLs are not treated as browser-ready images', () => {
+  assert.equal(
+    isFacebookCrawlerImageUrl('https://lookaside.fbsbx.com/lookaside/crawler/media/?media_id=123'),
+    true,
+  );
+  assert.equal(
+    isFacebookCrawlerImageUrl('https://scontent-lhr6-2.xx.fbcdn.net/artist.jpg'),
+    false,
+  );
+});
+
+test('crawler image is replaced by the direct Graph/CDN artist picture and bio is cleaned', async () => {
+  const result = await enrichInspectionResult({
+    source: 'facebook',
+    valid: true,
+    identityResolved: true,
+    facebookUrl: 'https://www.facebook.com/ahundredendings',
+    facebookKey: 'facebook.com/ahundredendings',
+    existing: null,
+    observed: {
+      name: 'A Hundred Endings',
+      imageUrl: 'https://lookaside.fbsbx.com/lookaside/crawler/media/?media_id=123',
+      description: 'A Hundred Endings. 718 likes · 1 talking about this. A professional covers band.',
+      canonicalUrl: 'https://www.facebook.com/ahundredendings',
+      location: null,
+      address: null,
+      websiteUrl: null,
+    },
+    evidence: {
+      name: 'facebook_html_meta',
+      imageUrl: 'facebook_html_meta',
+      description: 'facebook_html_meta',
+      canonicalUrl: 'facebook_resolved_identity',
+    },
+    warnings: [],
+  }, {
+    expectedType: 'artist',
+    fetchHtml: async (url) => ({ statusCode: 200, finalUrl: url, html: '<title>Facebook</title>' }),
+    fetchPicture: async () => 'https://scontent-lhr6-2.xx.fbcdn.net/a-hundred-endings.jpg',
+  });
+
+  assert.equal(result.observed.description, 'A professional covers band.');
+  assert.equal(result.observed.imageUrl, 'https://scontent-lhr6-2.xx.fbcdn.net/a-hundred-endings.jpg');
+  assert.equal(result.evidence.imageUrl, 'facebook_graph_picture');
 });
 
 test('existing artist lookup aliases DynamoDB reserved projection fields', async () => {
