@@ -6,11 +6,20 @@ const test = typeof globalThis.test === 'function' ? globalThis.test : nodeTest.
 const {
   handler,
   PREVIEW_USER_AGENT,
+  appendBoundedChunk,
   fetchFacebookPreviewHtml,
 } = require('./source-inspector-v3');
 
 test('public metadata transport uses Facebook link-preview representation', () => {
   assert.match(PREVIEW_USER_AGENT, /^facebookexternalhit\/1\.1/);
+});
+
+test('oversized Facebook HTML keeps a parseable bounded prefix', () => {
+  const chunks = [Buffer.from('abc')];
+  const result = appendBoundedChunk(chunks, Buffer.from('defgh'), 3, 5);
+
+  assert.deepEqual(result, { total: 5, truncated: true });
+  assert.equal(Buffer.concat(chunks).toString('utf8'), 'abcde');
 });
 
 test('public metadata transport preserves the Facebook-only fetch boundary', async () => {
