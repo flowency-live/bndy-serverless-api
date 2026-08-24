@@ -39,6 +39,7 @@ jobs:
           node validate-deployment.js
           node verify-routes.js
           cd ..
+          node --check ownership-lambda/handler.js
       - name: Build and deploy
         run: |
           sam build --parallel
@@ -54,19 +55,22 @@ jobs:
       - name: Verify Join endpoints
         run: |
           API='https://api.bndy.co.uk'
-          ANALYTICS=$(curl -sS -o /tmp/analytics.json -w '%{http_code}' -X POST "$API/api/join/analytics" -H 'Content-Type: application/json' --data '{"event":"join_opened","sessionId":"post-deploy-smoke","step":"deployment"}')
+          ANALYTICS=$(curl -sS -o /tmp/analytics.json -w '%{http_code}' -X POST "$API/api/join/analytics" -H 'Content-Type: application/json' --data '{"event":"ownership_relinquished","sessionId":"post-deploy-smoke","entityType":"venue","step":"deployment"}')
           ARTIST=$(curl -sS -o /tmp/artist.json -w '%{http_code}' -X POST "$API/api/join/artists" -H 'Content-Type: application/json' --data '{"name":"__smoke__","location":"Manchester"}')
           VENUE=$(curl -sS -o /tmp/venue.json -w '%{http_code}' -X POST "$API/api/join/venues" -H 'Content-Type: application/json' --data '{"name":"__smoke__","address":"__smoke__","googlePlaceId":"__smoke__"}')
+          RELINQUISH=$(curl -sS -o /tmp/relinquish.json -w '%{http_code}' -X POST "$API/api/managed-entities/venue/__smoke__/relinquish" -H 'Content-Type: application/json' --data '{}')
           PASS=true
           [[ "$ANALYTICS" == '202' ]] || PASS=false
           [[ "$ARTIST" == '401' ]] || PASS=false
           [[ "$VENUE" == '401' ]] || PASS=false
+          [[ "$RELINQUISH" == '401' ]] || PASS=false
           {
             echo "deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "pass=$PASS"
             echo "analytics_status=$ANALYTICS body=$(cat /tmp/analytics.json)"
             echo "artist_without_auth_status=$ARTIST body=$(cat /tmp/artist.json)"
             echo "venue_without_auth_status=$VENUE body=$(cat /tmp/venue.json)"
+            echo "relinquish_without_auth_status=$RELINQUISH body=$(cat /tmp/relinquish.json)"
           } > docs/JOIN-PRODUCTION-DEPLOY.txt
           [[ "$PASS" == 'true' ]]
       - name: Record production deploy
@@ -78,4 +82,4 @@ jobs:
           git pull --rebase --autostash origin master
           git push origin HEAD:master
 
-# trigger revision 1
+# trigger revision 2
