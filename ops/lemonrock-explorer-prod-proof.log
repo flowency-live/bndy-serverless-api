@@ -1,0 +1,26 @@
+source-runs-function=bndy-serverless-api-SourceRunsFunc-bUjoJCjAxPH2
+None
+None
+None
+None
+
+aws: [ERROR]: An error occurred (ValidationException) when calling the GetFunctionConfiguration operation: 1 validation error detected: Value 'bndy-serverless-api-SourceRunsFunc-bUjoJCjAxPH2
+None
+None
+None
+None' at 'functionName' failed to satisfy constraint: Member must satisfy regular expression pattern: (arn:(aws[a-zA-Z-]*)?:lambda:)?((eusc-)?[a-z]{2}((-gov)|(-iso([a-z]?)))?-[a-z]+-\d{1}:)?(\d{12}:)?(function:)?([a-zA-Z0-9-_\.]+)(:(\$LATEST(\.PUBLISHED)?|[a-zA-Z0-9-_]+))?
+source-runs-last-modified=
+
+aws: [ERROR]: An error occurred (ValidationException) when calling the Invoke operation: 1 validation error detected: Value 'bndy-serverless-api-SourceRunsFunc-bUjoJCjAxPH2
+None
+None
+None
+None' at 'functionName' failed to satisfy constraint: Member must satisfy regular expression pattern: (arn:(aws[a-zA-Z-]*)?:lambda:)?((eusc-)?[a-z]{2}((-gov)|(-iso([a-z]?)))?-[a-z]+-\d{1}:)?(\d{12}:)?(function:)?([a-zA-Z0-9-_\.]+)(:(\$LATEST(\.PUBLISHED)?|[a-zA-Z0-9-_]+))?
+cat: /tmp/explorer-response.json: No such file or directory
+jq: error: Could not open file /tmp/explorer-response.json: No such file or directory
+jq: error: Could not open file /tmp/explorer-response.json: No such file or directory
+amplify-app=bndy-backstage
+cat: /tmp/explorer-response.json: No such file or directory
+jq: invalid JSON text passed to --argjson
+Use jq --help for help with command-line options,
+or see the jq manpage, or online docs  at https://jqlang.github.io/jq
