@@ -106,6 +106,37 @@ Resources:
           Projection:
             ProjectionType: ALL
 
+  EntityClaimsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: bndy-entity-claims
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: claim_id
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: entity_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: claim_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: user_id-index
+          KeySchema:
+            - AttributeName: user_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: entity_key-index
+          KeySchema:
+            - AttributeName: entity_key
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
   # =============================================================================
   # Lambda Functions - Core
   # =============================================================================
@@ -861,6 +892,39 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/festivals/{id}
             Method: GET
+
+  ClaimsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: BNDY entity Claim Requests created by Join bndy
+      CodeUri: ./claims-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          ENTITY_CLAIMS_TABLE: !Ref EntityClaimsTable
+      Events:
+        CreateClaim:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/claims
+            Method: POST
+        GetMyClaims:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/claims/me
+            Method: GET
+        CancelClaim:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/claims/{id}
+            Method: DELETE
 
   # Auth Lambda
   AuthFunction:
