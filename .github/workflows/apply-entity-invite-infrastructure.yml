@@ -1,0 +1,46 @@
+name: Apply entity invite infrastructure
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Run entity invite infrastructure')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Add entity invite table, function and routes
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const p = 'template.yaml';
+          let t = fs.readFileSync(p, 'utf8');
+          const anchor = '  # Auth Lambda\n';
+          const block = `  EntityInvitesTable:\n    Type: AWS::DynamoDB::Table\n    DeletionPolicy: Retain\n    UpdateReplacePolicy: Retain\n    Properties:\n      TableName: bndy-entity-invites\n      BillingMode: PAY_PER_REQUEST\n      AttributeDefinitions:\n        - AttributeName: token\n          AttributeType: S\n      KeySchema:\n        - AttributeName: token\n          KeyType: HASH\n      TimeToLiveSpecification:\n        AttributeName: expires_at\n        Enabled: true\n      SSESpecification:\n        SSEEnabled: true\n\n  EntityInvitesFunction:\n    Type: AWS::Serverless::Function\n    Properties:\n      Description: BNDY expiring delegate invite links for Join-managed entities\n      CodeUri: ./entity-invites-lambda/\n      Handler: handler.handler\n      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role\n      Layers:\n        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3\n      Environment:\n        Variables:\n          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'\n          ENTITY_INVITES_TABLE: !Ref EntityInvitesTable\n          ENTITY_MEMBERSHIPS_TABLE: !Ref EntityMembershipsTable\n      Events:\n        CreateManagedEntityInvite:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/managed-entities/{id}/invites\n            Method: POST\n        GetEntityInvite:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/entity-invites/{token}\n            Method: GET\n        RevokeEntityInvite:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/entity-invites/{token}\n            Method: DELETE\n        AcceptEntityInvite:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/entity-invites/{token}/accept\n            Method: POST\n\n`;
+          if (!t.includes('EntityInvitesFunction:')) {
+            const i = t.indexOf(anchor);
+            if (i < 0) throw new Error('Auth Lambda anchor not found');
+            t = t.slice(0, i) + block + t.slice(i);
+          }
+          fs.writeFileSync(p, t);
+          NODE
+          node --check entity-invites-lambda/handler.js
+          npm run validate
+          npm run verify-routes
+      - name: Commit
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add template.yaml
+          git commit -m 'Enable Join entity invite routes'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
