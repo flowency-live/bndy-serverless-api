@@ -1,0 +1,74 @@
+name: Apply Join venue backend v1
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Run Join venue backend v1')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply owned venue Join endpoint and entity membership table
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const hp = 'venues-lambda/handler.js';
+          const tp = 'template.yaml';
+          let h = fs.readFileSync(hp, 'utf8');
+          let t = fs.readFileSync(tp, 'utf8');
+
+          const insert = (src, anchor, text, label) => {
+            if (src.includes(text.trim())) return src;
+            const i = src.indexOf(anchor);
+            if (i < 0) throw new Error(`Missing ${label} anchor`);
+            return src.slice(0, i) + text + src.slice(i);
+          };
+          const replace = (src, from, to, label) => {
+            if (src.includes(to)) return src;
+            if (!src.includes(from)) throw new Error(`Missing ${label} replacement anchor`);
+            return src.replace(from, to);
+          };
+
+          h = insert(h, "const ssm = new AWS.SSM({ region: 'eu-west-2' });\n", "const { publishUserCreatedVenueClaims } = require('./backline-user-claims');\nconst { venuePlaceKey } = require('./lib/identity');\nconst { releaseUniqueKeys } = require('./lib/unique-gate');\n\n", 'imports');
+          h = insert(h, "// Route handlers\n", "const ENTITY_MEMBERSHIPS_TABLE = process.env.ENTITY_MEMBERSHIPS_TABLE || 'bndy-entity-memberships';\n\n", 'membership constant');
+
+          const joinRoute = `    // Join bndy — authenticated new Venue + initial ownership.\n    if (method === 'POST' && path === '/api/join/venues') {\n      return await handleJoinVenue(event);\n    }\n\n`;
+          h = insert(h, "    // SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)\n", joinRoute, 'join venue route');
+
+          const joinHandler = `\nasync function handleJoinVenue(event) {\n  const auth = await requireAuth(event);\n  if (auth.error) return { statusCode: 401, headers: getCorsHeaders(event), body: JSON.stringify({ error: auth.error, code: 'AUTH_REQUIRED' }) };\n\n  let body;\n  try { body = parseBody(event.body); } catch { return { statusCode: 400, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'Invalid JSON body' }) }; }\n  const name = String(body.name || '').trim();\n  const address = String(body.address || '').trim();\n  const googlePlaceId = String(body.googlePlaceId || '').trim();\n  if (!name || !address || !googlePlaceId) return { statusCode: 400, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'Venue name, address and Google Place identity are required' }) };\n\n  // Identity preflight: exact Google Place and normal resolver rules, no writes.\n  const preflight = await handleFindOrCreateVenue(deps, { ...body, name, address, googlePlaceId, canCreate: false, source: 'join_bndy_preflight' }, event);\n  let verdict = {}; try { verdict = JSON.parse(preflight.body || '{}'); } catch {}\n  if (preflight.statusCode !== 200) return preflight;\n  if (verdict.id) {\n    return { statusCode: 409, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'This venue already exists', code: 'EXISTING_ENTITY', venue: verdict }) };\n  }\n  if (verdict.action !== 'review' || verdict.reason !== 'likely-new') {\n    return { statusCode: 422, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'Venue identity is not clear for creation', code: 'IDENTITY_NOT_CLEAR', verdict }) };\n  }\n\n  const created = await handleFindOrCreateVenue(deps, { ...body, name, address, googlePlaceId, canCreate: true, source: 'join_bndy', created_source: 'join_bndy', needs_review: false }, event);\n  let payload = {}; try { payload = JSON.parse(created.body || '{}'); } catch {}\n  if (created.statusCode === 200 && payload.id) return { statusCode: 409, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'This venue was created or resolved by another request first', code: 'EXISTING_ENTITY', venue: payload }) };\n  if (created.statusCode !== 201 || !payload.id) return created;\n\n  const venueId = payload.id;\n  const userId = auth.user.userId;\n  const membershipId = crypto.randomUUID();\n  const now = new Date().toISOString();\n  const membership = {\n    membership_id: membershipId, entity_type: 'venue', entity_id: venueId,\n    user_id: userId, role: 'owner', status: 'active', permissions: [],\n    joined_at: now, invited_at: now, invited_by_user_id: userId, created_at: now, updated_at: now\n  };\n\n  try {\n    await dynamodb.transactWrite({ TransactItems: [\n      { Put: { TableName: ENTITY_MEMBERSHIPS_TABLE, Item: membership, ConditionExpression: 'attribute_not_exists(membership_id)' } },\n      { Update: {\n        TableName: 'bndy-venues', Key: { id: venueId },\n        UpdateExpression: 'SET owner_user_id = :uid, claimedBy = :uid, claimedAt = :now, claimVerification = :verification, updated_at = :now',\n        ConditionExpression: 'attribute_exists(id) AND attribute_not_exists(owner_user_id)',\n        ExpressionAttributeValues: { ':uid': userId, ':now': now, ':verification': 'owner_created' }\n      } }\n    ] }).promise();\n  } catch (ownershipError) {\n    console.error('[JOIN_VENUE] ownership failed; compensating', ownershipError);\n    try {\n      await dynamodb.delete({ TableName: 'bndy-venues', Key: { id: venueId } }).promise();\n      await releaseUniqueKeys(dynamodb, [venuePlaceKey(googlePlaceId)], venueId);\n    } catch (cleanupError) { console.error('[JOIN_VENUE] compensation failed', cleanupError); }\n    return { statusCode: 500, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'Could not establish venue ownership', code: 'JOIN_OWNERSHIP_FAILED' }) };\n  }\n\n  try {\n    const persisted = await dynamodb.get({ TableName: 'bndy-venues', Key: { id: venueId } }).promise();\n    if (persisted.Item) await publishUserCreatedVenueClaims(persisted.Item);\n  } catch (e) { console.error('[JOIN_VENUE] Backline write failed; Join remains valid', e); }\n\n  return { statusCode: 201, headers: getCorsHeaders(event), body: JSON.stringify({ action: 'created', venue: { ...payload, ownerUserId: userId }, relationship: { id: membershipId, role: 'owner', status: 'active' } }) };\n}\n\n`;
+          h = insert(h, "exports.handler = async (event, context) => {\n", joinHandler, 'join venue handler');
+
+          t = replace(t, "          VENUE_GROUPS_TABLE: bndy-venue-groups\n", "          VENUE_GROUPS_TABLE: bndy-venue-groups\n          ENTITY_MEMBERSHIPS_TABLE: !Ref EntityMembershipsTable\n", 'venue membership env');
+          const event = `        JoinVenue:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/join/venues\n            Method: POST\n`;
+          t = insert(t, "        # SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)\n        CommunityFindOrCreateVenue:\n", event, 'join venue template event');
+
+          const table = `  # Generic user-to-entity relationships introduced by Join bndy.\n  # Artist legacy memberships remain in bndy-artist-memberships; new Venue\n  # ownership/delegation uses this table and the model can absorb other entity\n  # types without creating another relationship table.\n  EntityMembershipsTable:\n    Type: AWS::DynamoDB::Table\n    DeletionPolicy: Retain\n    UpdateReplacePolicy: Retain\n    Properties:\n      TableName: bndy-entity-memberships\n      BillingMode: PAY_PER_REQUEST\n      AttributeDefinitions:\n        - AttributeName: membership_id\n          AttributeType: S\n        - AttributeName: user_id\n          AttributeType: S\n        - AttributeName: entity_id\n          AttributeType: S\n      KeySchema:\n        - AttributeName: membership_id\n          KeyType: HASH\n      GlobalSecondaryIndexes:\n        - IndexName: user_id-index\n          KeySchema:\n            - AttributeName: user_id\n              KeyType: HASH\n          Projection:\n            ProjectionType: ALL\n        - IndexName: entity_id-index\n          KeySchema:\n            - AttributeName: entity_id\n              KeyType: HASH\n          Projection:\n            ProjectionType: ALL\n\n`;
+          t = insert(t, "  # =============================================================================\n  # Lambda Functions - Core\n", table, 'entity membership table');
+
+          fs.writeFileSync(hp, h);
+          fs.writeFileSync(tp, t);
+          NODE
+          node --check venues-lambda/handler.js
+          grep -q "path === '/api/join/venues'" venues-lambda/handler.js
+          grep -q 'Path: /api/join/venues' template.yaml
+          grep -q 'TableName: bndy-entity-memberships' template.yaml
+          npm run validate
+          npm run verify-routes
+      - name: Commit
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add venues-lambda/handler.js template.yaml
+          git commit -m 'Implement Join bndy owned venue backend'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
