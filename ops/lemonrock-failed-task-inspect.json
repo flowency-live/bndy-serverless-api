@@ -1,0 +1,56 @@
+{
+  "verifiedAt": "2026-08-24T05:15:37Z",
+  "failedTasks": [
+    {
+      "lastError": {
+        "S": "fetch failed"
+      },
+      "sk": {
+        "S": "TASK#root:artist-retry:2026-08-24T04-49-31-180Z"
+      },
+      "status": {
+        "S": "failed"
+      },
+      "updatedAt": {
+        "S": "2026-08-24T05:04:35.460Z"
+      }
+    },
+    {
+      "lastError": {
+        "S": "fetch failed"
+      },
+      "sk": {
+        "S": "TASK#root:discovery:lemonrock-artist-index:2026-08-24T04-36-38-445Z"
+      },
+      "status": {
+        "S": "failed"
+      },
+      "updatedAt": {
+        "S": "2026-08-24T05:06:49.041Z"
+      }
+    }
+  ],
+  "dlqMessages": [
+    {
+      "messageId": "780c4f71-d3bf-4b96-9909-dfcad078c029",
+      "body": {
+        "sourceId": "lemonrock-cancellations",
+        "reason": "scheduled"
+      }
+    },
+    {
+      "messageId": "780c4f71-d3bf-4b96-9909-dfcad078c029",
+      "body": {
+        "sourceId": "lemonrock-cancellations",
+        "reason": "scheduled"
+      }
+    },
+    {
+      "messageId": "780c4f71-d3bf-4b96-9909-dfcad078c029",
+      "body": {
+        "sourceId": "lemonrock-cancellations",
+        "reason": "scheduled"
+      }
+    }
+  ]
+}
