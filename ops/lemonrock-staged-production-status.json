@@ -1,0 +1,105 @@
+{
+  "verifiedAt": "2026-08-24T04:36:46Z",
+  "deployment": "success",
+  "enrichmentSha": "2a12cda0897e44926ff36d40847dc8ad2992ed12",
+  "stateTable": "BndyEnrichmentStack-StateTable9728C7E5-14HR6N3NEWGLM",
+  "indexes": [
+    {
+      "IndexName": "ObservationClaimsIndex",
+      "IndexStatus": "ACTIVE"
+    },
+    {
+      "IndexName": "SourceScheduleIndex",
+      "IndexStatus": "ACTIVE"
+    },
+    {
+      "IndexName": "SubjectClaimsIndex",
+      "IndexStatus": "ACTIVE"
+    }
+  ],
+  "sourceWorker": "BndyEnrichmentStack-SourceWorker336FEA29-ghZk2mBRjOks",
+  "sourceWorkerQueueConfigured": true,
+  "lemonrockTaskCount": 31,
+  "artistIndexObservationCount": 0,
+  "queue": {
+    "ApproximateNumberOfMessages": "0",
+    "ApproximateNumberOfMessagesNotVisible": "2"
+  },
+  "artistIndexSource": {
+    "entityType": {
+      "S": "GigSource"
+    },
+    "snapshotSemantics": {
+      "S": "incremental"
+    },
+    "adapter": {
+      "S": "lemonrock"
+    },
+    "localTime": {
+      "S": "05:00"
+    },
+    "mode": {
+      "S": "append-only"
+    },
+    "health": {
+      "S": "unknown"
+    },
+    "writerAuthority": {
+      "S": "aws"
+    },
+    "shadow": {
+      "BOOL": true
+    },
+    "url": {
+      "S": "https://www.lemonrock.com/advancedsearchbands.php?_start=0"
+    },
+    "name": {
+      "S": "Lemonrock national artist index"
+    },
+    "enabled": {
+      "BOOL": false
+    },
+    "cadence": {
+      "S": "manual"
+    },
+    "runtimeClass": {
+      "S": "standard"
+    },
+    "thresholds": {
+      "M": {
+        "artistAutoMatch": {
+          "N": "0.98"
+        },
+        "eventAutoCreate": {
+          "N": "0.995"
+        },
+        "socialAutoAttach": {
+          "N": "0.995"
+        },
+        "venueAutoMatch": {
+          "N": "0.98"
+        }
+      }
+    },
+    "timezone": {
+      "S": "Europe/London"
+    },
+    "pk": {
+      "S": "SOURCE#lemonrock-artist-index"
+    },
+    "id": {
+      "S": "lemonrock-artist-index"
+    },
+    "authorityClass": {
+      "S": "aggregator"
+    },
+    "type": {
+      "S": "AGGREGATOR"
+    },
+    "sk": {
+      "S": "CONFIG"
+    }
+  },
+  "shadowMode": true,
+  "canonicalWritesEnabled": false
+}
