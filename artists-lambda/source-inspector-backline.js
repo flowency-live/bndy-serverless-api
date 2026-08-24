@@ -76,13 +76,15 @@ const responseSchema = {
 };
 
 function promptFor(facebookUrl) {
+  const handle = new URL(facebookUrl).pathname.split('/').filter(Boolean)[0] || '';
   return `You are BNDY Backline, a careful music-data researcher. Enrich exactly this public Facebook artist page:
 
 ${facebookUrl}
 
 Use Google Search grounding to find indexed Facebook About snippets and corroborating official artist, venue,
 promoter, music platform, or press pages. The Facebook URL is the identity anchor. Never substitute a similarly
-named act. Return the artist's properly spaced/styled name, UK home town or region, concise factual bio, official
+named act. The returned name MUST normalize to the exact Facebook handle "\${handle}" after removing spaces,
+punctuation and case; otherwise return all fields empty. Return the artist's properly spaced/styled name, UK home town or region, concise factual bio, official
 non-Facebook website, and controlled classifications. Every non-empty field must have at least one supporting URL
 in its matching evidence array. If a fact cannot be verified, return an empty string/array. Use at most three genres.
 Set confidence below 0.75 if identity is not strongly corroborated. Do not infer location from a gig venue alone.`;
@@ -117,9 +119,26 @@ function hasEvidence(value, urls) {
   return !!(typeof value === 'string' ? value.trim() : value) && Array.isArray(urls) && urls.length > 0;
 }
 
+function normaliseIdentity(value) {
+  return String(value || '').normalize('NFKD').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function identityMatchesFacebookHandle(facebookUrl, name) {
+  try {
+    const handle = new URL(facebookUrl).pathname.split('/').filter(Boolean)[0] || '';
+    return !!handle && normaliseIdentity(handle) === normaliseIdentity(name);
+  } catch {
+    return false;
+  }
+}
+
 function mergeBacklineEnrichment(result, found) {
   const observed = { ...(result.observed || {}) };
   const evidence = { ...(result.evidence || {}) };
+  if (!identityMatchesFacebookHandle(result.facebookUrl, found.name)) {
+    return { ...result, backlineAssist: { status: 'identity_mismatch', confidence: Number(found.confidence) || 0, evidenceUrls: [] } };
+  }
+
   const allUrls = [...new Set([
     ...(found.nameEvidenceUrls || []), ...(found.locationEvidenceUrls || []),
     ...(found.bioEvidenceUrls || []), ...(found.websiteEvidenceUrls || []),
@@ -188,6 +207,7 @@ module.exports = {
   GENRES,
   discoverFacebookArtist,
   enrichSparseFacebookResult,
+  identityMatchesFacebookHandle,
   mergeBacklineEnrichment,
   shouldUseBacklineAssist,
 };
