@@ -939,6 +939,45 @@ Resources:
             Path: /api/admin/claims/{id}
             Method: PATCH
 
+  EntityMembershipsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: BNDY owner/admin/delegate relationships for Join-managed entities
+      CodeUri: ./entity-memberships-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          ENTITY_MEMBERSHIPS_TABLE: !Ref EntityMembershipsTable
+      Events:
+        ListManagedEntityMembers:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/managed-entities/{id}/members
+            Method: GET
+        AddManagedEntityMember:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/managed-entities/{id}/members
+            Method: POST
+        UpdateEntityMembership:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/entity-memberships/{id}
+            Method: PATCH
+        TransferManagedEntity:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/managed-entities/{id}/transfer
+            Method: POST
+
   # Auth Lambda
   AuthFunction:
     Type: AWS::Serverless::Function
