@@ -1,0 +1,65 @@
+name: Verify Backline Explorer production surfaces
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: contains(github.event.head_commit.message, 'Verify Backline Explorer production surfaces')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - name: Verify API route and Backstage bundle
+        run: |
+          set -euo pipefail
+          mkdir -p ops /tmp/backstage-assets
+          API_CODE=$(curl -sS -o /tmp/backline-api.json -w '%{http_code}' 'https://api.bndy.co.uk/api/source-runs/backline/summary')
+          API_BODY=$(cat /tmp/backline-api.json)
+
+          BACKSTAGE_CODE=$(curl -sS -L -o /tmp/backstage-index.html -w '%{http_code}' 'https://backstage.bndy.co.uk/')
+          python3 - <<'PY'
+          import re, pathlib, urllib.request, urllib.parse
+          html=pathlib.Path('/tmp/backstage-index.html').read_text(errors='ignore')
+          urls=[]
+          for p in re.findall(r'(?:src|href)=["\']([^"\']+\.(?:js|css)(?:\?[^"\']*)?)["\']', html):
+              urls.append(urllib.parse.urljoin('https://backstage.bndy.co.uk/', p))
+          out=[]
+          for u in dict.fromkeys(urls):
+              try:
+                  req=urllib.request.Request(u, headers={'User-Agent':'BNDY-prod-verifier/1.0'})
+                  with urllib.request.urlopen(req, timeout=20) as r:
+                      out.append(r.read().decode('utf-8','ignore'))
+              except Exception as e:
+                  out.append(f'FETCH_ERROR {u} {e}')
+          pathlib.Path('/tmp/backstage-assets/combined.txt').write_text('\n'.join(out))
+          PY
+          if grep -Fq 'Backline Explorer' /tmp/backstage-assets/combined.txt; then BACKLINE_BUNDLE=true; else BACKLINE_BUNDLE=false; fi
+          if grep -Fq 'Entity Enrichment' /tmp/backstage-assets/combined.txt; then ENRICHMENT_BUNDLE=true; else ENRICHMENT_BUNDLE=false; fi
+          API_AUTH_EXPECTED=false
+          if [ "$API_CODE" = 401 ] && echo "$API_BODY" | grep -qi 'Not authenticated'; then API_AUTH_EXPECTED=true; fi
+          jq -n \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg apiCode "$API_CODE" \
+            --arg apiBody "$API_BODY" \
+            --arg backstageCode "$BACKSTAGE_CODE" \
+            --argjson apiAuthExpected "$API_AUTH_EXPECTED" \
+            --argjson backlineBundle "$BACKLINE_BUNDLE" \
+            --argjson enrichmentBundle "$ENRICHMENT_BUNDLE" \
+            '{verifiedAt:$verifiedAt,api:{httpStatus:($apiCode|tonumber),body:$apiBody,platformAdminAuthBoundaryPresent:$apiAuthExpected},backstage:{httpStatus:($backstageCode|tonumber),backlineExplorerBundlePresent:$backlineBundle,entityEnrichmentBundlePresent:$enrichmentBundle}}' \
+            > ops/backline-production-surfaces.json
+          cat ops/backline-production-surfaces.json
+          test "$API_AUTH_EXPECTED" = true
+          test "$BACKSTAGE_CODE" = 200
+          test "$BACKLINE_BUNDLE" = true
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/backline-production-surfaces.json
+          git commit -m 'Record Backline production surface verification'
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
