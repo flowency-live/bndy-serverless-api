@@ -24,39 +24,28 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ops
-          TABLES=$(aws dynamodb list-tables --output json)
-          echo "$TABLES" > /tmp/tables.json
-          jq '[.TableNames[] | select(test("bndy|Bndy"))]' /tmp/tables.json > /tmp/bndy-tables.json
-          find_table() {
-            local pattern="$1"
-            jq -r --arg re "$pattern" '[.[] | select(test($re; "i"))] | first // empty' /tmp/bndy-tables.json
-          }
-          ARTISTS=$(find_table '(^|[-_])artists?($|[-_])')
-          VENUES=$(find_table '(^|[-_])venues?($|[-_])')
-          EVENTS=$(find_table '(^|[-_])events?($|[-_])')
-          FESTIVALS=$(find_table '(^|[-_])festivals?($|[-_])')
           inspect_table() {
             local name="$1"
-            if [ -z "$name" ]; then echo 'null'; return; fi
             DESC=$(aws dynamodb describe-table --table-name "$name" --output json)
-            SAMPLE=$(aws dynamodb scan --table-name "$name" --limit 3 --output json)
-            jq -n --arg name "$name" --argjson desc "$DESC" --argjson sample "$SAMPLE" '{name:$name,itemCountApprox:$desc.Table.ItemCount,keySchema:$desc.Table.KeySchema,attributeDefinitions:$desc.Table.AttributeDefinitions,sampleItems:$sample.Items}'
+            SAMPLE=$(aws dynamodb scan --table-name "$name" --max-items 3 --output json)
+            COUNT=$(aws dynamodb scan --table-name "$name" --select COUNT --query Count --output text)
+            jq -n --arg name "$name" --arg count "$COUNT" --argjson desc "$DESC" --argjson sample "$SAMPLE" '{name:$name,itemCountApprox:$desc.Table.ItemCount,exactCount:($count|tonumber),keySchema:$desc.Table.KeySchema,attributeDefinitions:$desc.Table.AttributeDefinitions,sampleItems:$sample.Items}'
           }
-          A=$(inspect_table "$ARTISTS")
-          V=$(inspect_table "$VENUES")
-          E=$(inspect_table "$EVENTS")
-          F=$(inspect_table "$FESTIVALS")
-          jq -n \
-            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --argjson allTables "$(cat /tmp/bndy-tables.json)" \
-            --argjson artists "$A" --argjson venues "$V" --argjson events "$E" --argjson festivals "$F" \
-            '{verifiedAt:$verifiedAt,allBndyTables:$allTables,artists:$artists,venues:$venues,events:$events,festivals:$festivals}' \
-            > ops/canonical-bndy-corpus-inspection.json
+          A=$(inspect_table bndy-artists)
+          V=$(inspect_table bndy-venues)
+          E_DESC=$(aws dynamodb describe-table --table-name bndy-events --output json)
+          E_SAMPLE=$(aws dynamodb scan --table-name bndy-events --filter-expression 'attribute_not_exists(#et) OR #et <> :festival' --expression-attribute-names '{"#et":"entityType"}' --expression-attribute-values '{":festival":{"S":"festival"}}' --max-items 3 --output json)
+          F_SAMPLE=$(aws dynamodb scan --table-name bndy-events --filter-expression '#et = :festival' --expression-attribute-names '{"#et":"entityType"}' --expression-attribute-values '{":festival":{"S":"festival"}}' --max-items 3 --output json)
+          E_COUNT=$(aws dynamodb scan --table-name bndy-events --select COUNT --filter-expression 'attribute_not_exists(#et) OR #et <> :festival' --expression-attribute-names '{"#et":"entityType"}' --expression-attribute-values '{":festival":{"S":"festival"}}' --query Count --output text)
+          F_COUNT=$(aws dynamodb scan --table-name bndy-events --select COUNT --filter-expression '#et = :festival' --expression-attribute-names '{"#et":"entityType"}' --expression-attribute-values '{":festival":{"S":"festival"}}' --query Count --output text)
+          E=$(jq -n --arg count "$E_COUNT" --argjson desc "$E_DESC" --argjson sample "$E_SAMPLE" '{name:"bndy-events",logicalType:"event",itemCountApprox:$desc.Table.ItemCount,exactCount:($count|tonumber),sampleItems:$sample.Items}')
+          F=$(jq -n --arg count "$F_COUNT" --argjson sample "$F_SAMPLE" '{name:"bndy-events",logicalType:"festival",exactCount:($count|tonumber),sampleItems:$sample.Items}')
+          jq -n --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson artists "$A" --argjson venues "$V" --argjson events "$E" --argjson festivals "$F" '{verifiedAt:$verifiedAt,artists:$artists,venues:$venues,events:$events,festivals:$festivals,totalLogicalEntities:($artists.exactCount+$venues.exactCount+$events.exactCount+$festivals.exactCount)}' > ops/canonical-bndy-corpus-inspection.json
       - name: Publish inspection
         run: |
           git config user.name 'bndy-backline-bot'
           git config user.email 'actions@users.noreply.github.com'
           git add ops/canonical-bndy-corpus-inspection.json
-          git commit -m 'Record canonical BNDY corpus inspection'
+          git commit -m 'Record exact canonical BNDY corpus inspection'
           git pull --rebase --autostash origin ops/lemonrock-prod-deploy
           git push origin HEAD:ops/lemonrock-prod-deploy
