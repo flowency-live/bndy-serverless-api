@@ -1,0 +1,59 @@
+{
+  "verifiedAt": "2026-08-24T04:43:41Z",
+  "sources": [
+    {
+      "id": "lemonrock-new-gigs",
+      "enabled": true,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-full-reconcile",
+      "enabled": true,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-cancellations",
+      "enabled": true,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-artist-index",
+      "enabled": true,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-artist-hydration",
+      "enabled": true,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-future-reconcile",
+      "enabled": true,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-gig-hydration",
+      "enabled": true,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-venue-index",
+      "enabled": true,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-venue-hydration",
+      "enabled": true,
+      "shadow": true,
+      "health": "unknown"
+    }
+  ]
+}
