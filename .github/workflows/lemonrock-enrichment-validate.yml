@@ -20,14 +20,17 @@ jobs:
           node-version: 22
       - name: Validate current enrichment main
         run: |
-          set -euo pipefail
+          set -o pipefail
           git clone --depth 1 --branch main https://github.com/flowency-live/bndy-enrichment.git /tmp/bndy-enrichment
           cd /tmp/bndy-enrichment
           SHA=$(git rev-parse HEAD)
-          npm install
-          npm run check
-          npx cdk synth >/tmp/cdk-synth.log
-          printf '{"status":"success","validatedAt":"%s","enrichmentSha":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SHA" > "$GITHUB_WORKSPACE/ops/lemonrock-enrichment-validation.json"
+          STATUS=success
+          {
+            npm install && npm run check && npx cdk synth >/tmp/cdk-synth.log
+          } > /tmp/enrichment-validation.log 2>&1 || STATUS=failure
+          cp /tmp/enrichment-validation.log "$GITHUB_WORKSPACE/ops/lemonrock-enrichment-validation.log"
+          printf '{"status":"%s","validatedAt":"%s","enrichmentSha":"%s"}\n' "$STATUS" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SHA" > "$GITHUB_WORKSPACE/ops/lemonrock-enrichment-validation.json"
+          test "$STATUS" = success
       - name: Publish validation
         if: always()
         run: |
@@ -38,6 +41,7 @@ jobs:
           git config user.name "bndy-backline-bot"
           git config user.email "actions@users.noreply.github.com"
           git add ops/lemonrock-enrichment-validation.json
+          [ ! -f ops/lemonrock-enrichment-validation.log ] || git add ops/lemonrock-enrichment-validation.log
           git commit -m 'Record Lemonrock enrichment validation' || true
           git pull --rebase --autostash origin ops/lemonrock-prod-deploy
           git push origin HEAD:ops/lemonrock-prod-deploy
