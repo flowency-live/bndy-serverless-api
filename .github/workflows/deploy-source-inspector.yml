@@ -233,6 +233,7 @@ jobs:
           test "$status" = "200"
           jq -e '.valid == true and .identityResolved == true' /tmp/source-inspector-ahundredendings.json
           jq -e '.facebookUrl == "https://www.facebook.com/ahundredendings"' /tmp/source-inspector-ahundredendings.json
+          jq -e '.observed.name == "A Hundred Endings" or .observed.name == "Ahundredendings"' /tmp/source-inspector-ahundredendings.json
           jq -e '.observed.imageUrl | type == "string" and length > 0' /tmp/source-inspector-ahundredendings.json
           jq -e 'has("backlineAssist") | not' /tmp/source-inspector-ahundredendings.json
 

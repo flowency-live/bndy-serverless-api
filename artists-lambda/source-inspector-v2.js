@@ -269,7 +269,6 @@ function parseEmbeddedFacebookDetails(html) {
   const name = jsonLd.name || findJsonString(html, [
     'profile_name',
     'page_name',
-    'display_name',
   ]);
 
   const description = jsonLd.description || findJsonString(html, [
