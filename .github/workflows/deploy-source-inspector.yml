@@ -182,7 +182,7 @@ jobs:
             --integration-method POST \
             --integration-uri "$FUNCTION_ARN" \
             --payload-format-version '2.0' \
-            --timeout-in-millis 25000 \
+            --timeout-in-millis 29000 \
             --region "$AWS_REGION" \
             --query IntegrationId \
             --output text)
