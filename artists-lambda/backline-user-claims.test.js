@@ -29,7 +29,7 @@ describe('user-created artist Backline claims', () => {
     }, '2026-08-24T12:00:00.000Z');
 
     expect(SOURCE_ID).toBe('frontstage-user-created-artist');
-    expect(claims).toHaveLength(8);
+    expect(claims).toHaveLength(9);
     expect(claims.every((claim) => claim.confidence === 0.99)).toBe(true);
     expect(claims.every((claim) => claim.subject.type === 'artist')).toBe(true);
     expect(claims.every((claim) => claim.subject.key === 'artist-123')).toBe(true);
