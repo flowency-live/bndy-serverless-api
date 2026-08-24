@@ -1,0 +1,84 @@
+name: Probe Lemonrock production health
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    if: contains(github.event.head_commit.message, 'Probe Lemonrock production health')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Reconcile Lemonrock registry and capture live health
+        run: |
+          set -euo pipefail
+          STACK=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query 'Stacks[0]')
+          TABLE=$(echo "$STACK" | jq -r '.Outputs[] | select(.OutputKey=="StateTableName") | .OutputValue')
+          QUEUE_URL=$(echo "$STACK" | jq -r '.Outputs[] | select(.OutputKey=="SourceScanQueueUrl") | .OutputValue')
+          WORKER=$(echo "$STACK" | jq -r '.Outputs[] | select(.OutputKey=="SourceWorkerFunctionName") | .OutputValue')
+          SOURCE_IDS=(lemonrock-new-gigs lemonrock-cancellations lemonrock-artist-index lemonrock-venue-index lemonrock-artist-hydration lemonrock-venue-hydration lemonrock-gig-hydration lemonrock-future-reconcile lemonrock-full-reconcile)
+          for ID in "${SOURCE_IDS[@]}"; do
+            aws dynamodb update-item --table-name "$TABLE" \
+              --key "{\"pk\":{\"S\":\"SOURCE#$ID\"},\"sk\":{\"S\":\"CONFIG\"}}" \
+              --update-expression 'SET enabled = :e' \
+              --expression-attribute-values '{":e":{"BOOL":true}}' >/dev/null
+          done
+          TASKS=$(aws dynamodb query --table-name "$TABLE" --key-condition-expression 'pk = :pk' --expression-attribute-values '{":pk":{"S":"BOOTSTRAP#lemonrock"}}')
+          TASK_TOTAL=$(echo "$TASKS" | jq '.Count')
+          TASK_STATUS=$(echo "$TASKS" | jq '[.Items[].status.S // "unknown"] | group_by(.) | map({(.[0]): length}) | add // {}')
+          OBS='{}'
+          for ID in "${SOURCE_IDS[@]}"; do
+            C=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex \
+              --key-condition-expression 'GSI1PK = :pk AND begins_with(GSI1SK, :p)' \
+              --expression-attribute-values "{\":pk\":{\"S\":\"SOURCE#$ID\"},\":p\":{\"S\":\"OBS#\"}}" \
+              --select COUNT --query Count --output text)
+            OBS=$(echo "$OBS" | jq --arg id "$ID" --argjson c "$C" '. + {($id):$c}')
+          done
+          QUEUE=$(aws sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible ApproximateNumberOfMessagesDelayed)
+          DLQ_URL=$(aws sqs list-queues --queue-name-prefix BndyEnrichmentStack-SourceScanDLQ --query 'QueueUrls[0]' --output text)
+          if [ "$DLQ_URL" != "None" ]; then
+            DLQ=$(aws sqs get-queue-attributes --queue-url "$DLQ_URL" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible)
+          else
+            DLQ='{"Attributes":{}}'
+          fi
+          START=$(date -u -d '60 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+          END=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          ERRORS=$(aws cloudwatch get-metric-statistics --namespace AWS/Lambda --metric-name Errors --dimensions Name=FunctionName,Value="$WORKER" --start-time "$START" --end-time "$END" --period 3600 --statistics Sum)
+          SOURCES='{}'
+          for ID in "${SOURCE_IDS[@]}"; do
+            ITEM=$(aws dynamodb get-item --table-name "$TABLE" --key "{\"pk\":{\"S\":\"SOURCE#$ID\"},\"sk\":{\"S\":\"CONFIG\"}}" --projection-expression 'id,enabled,shadow,health')
+            SOURCES=$(echo "$SOURCES" | jq --arg id "$ID" --argjson item "$ITEM" '. + {($id):$item.Item}')
+          done
+          mkdir -p ops
+          jq -n \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg table "$TABLE" \
+            --arg worker "$WORKER" \
+            --argjson taskTotal "$TASK_TOTAL" \
+            --argjson taskStatus "$TASK_STATUS" \
+            --argjson observations "$OBS" \
+            --argjson queue "$QUEUE" \
+            --argjson dlq "$DLQ" \
+            --argjson errors "$ERRORS" \
+            --argjson sources "$SOURCES" \
+            '{verifiedAt:$verifiedAt,stateTable:$table,sourceWorker:$worker,lemonrockTaskTotal:$taskTotal,taskStatus:$taskStatus,observations:$observations,queue:$queue.Attributes,dlq:$dlq.Attributes,lambdaErrorsLastHour:([ $errors.Datapoints[].Sum ] | add // 0),sources:$sources}' \
+            > ops/lemonrock-live-health.json
+          cat ops/lemonrock-live-health.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-live-health.json
+          git commit -m 'Record Lemonrock live production health'
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
