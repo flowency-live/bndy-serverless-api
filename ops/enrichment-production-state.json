@@ -1,13 +1,23 @@
 {
-  "verifiedAt": "2026-08-24T04:13:37Z",
+  "verifiedAt": "2026-08-24T04:32:48Z",
   "stackStatus": "UPDATE_COMPLETE",
   "table": {
     "TableName": "BndyEnrichmentStack-StateTable9728C7E5-14HR6N3NEWGLM",
     "TableStatus": "ACTIVE",
     "GSIs": [
       {
-        "IndexName": "SourceScheduleIndex",
+        "IndexName": "ObservationClaimsIndex",
+        "IndexStatus": "ACTIVE",
+        "ItemCount": 0
+      },
+      {
+        "IndexName": "SubjectClaimsIndex",
         "IndexStatus": "CREATING",
+        "ItemCount": 0
+      },
+      {
+        "IndexName": "SourceScheduleIndex",
+        "IndexStatus": "ACTIVE",
         "ItemCount": 0
       }
     ]
