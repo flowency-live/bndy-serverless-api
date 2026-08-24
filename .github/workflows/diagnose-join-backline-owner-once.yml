@@ -1,0 +1,51 @@
+name: Diagnose Join Backline owner protection once
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    if: contains(github.event.head_commit.message, 'Run Join Backline diagnostics')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/checkout@v4
+        with:
+          repository: flowency-live/bndy-enrichment
+          ref: main
+          path: enrichment
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: enrichment/package-lock.json
+      - name: Run Backline check without hiding failures
+        run: |
+          cd enrichment
+          npm ci
+          set +e
+          npm run check > /tmp/backline-check.log 2>&1
+          CODE=$?
+          set -e
+          cd ..
+          {
+            echo "exit_code=$CODE"
+            echo "checked_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "enrichment_sha=$(git -C enrichment rev-parse HEAD)"
+            echo '--- tail ---'
+            tail -n 220 /tmp/backline-check.log
+          } > docs/JOIN-BACKLINE-DIAGNOSTICS.txt
+      - name: Commit diagnostics even when check failed
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/JOIN-BACKLINE-DIAGNOSTICS.txt
+          git commit -m 'Record Join Backline diagnostics'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
