@@ -1,0 +1,32 @@
+{
+  "verifiedAt": "2026-08-24T04:51:46Z",
+  "curlNoFollow": {
+    "status": "301",
+    "location": "searchbands.php",
+    "bytes": 0
+  },
+  "curlFollow": {
+    "status": "200",
+    "bytes": 27286
+  },
+  "node": {
+    "error": {
+      "error": "fetch failed",
+      "cause": "unexpected redirect"
+    },
+    "manual": {
+      "ok": false,
+      "status": 301,
+      "url": "https://www.lemonrock.com/advancedsearchbands.php?_start=0",
+      "location": "searchbands.php",
+      "bytes": 0
+    },
+    "follow": {
+      "ok": true,
+      "status": 200,
+      "url": "https://www.lemonrock.com/searchbands.php",
+      "location": null,
+      "bytes": 27286
+    }
+  }
+}
