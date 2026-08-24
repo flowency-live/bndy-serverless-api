@@ -1,0 +1,117 @@
+{
+  "verifiedAt": "2026-08-24T04:41:57Z",
+  "stateTable": "BndyEnrichmentStack-StateTable9728C7E5-14HR6N3NEWGLM",
+  "sourceWorker": "BndyEnrichmentStack-SourceWorker336FEA29-ghZk2mBRjOks",
+  "indexes": [
+    {
+      "IndexName": "ObservationClaimsIndex",
+      "IndexStatus": "ACTIVE"
+    },
+    {
+      "IndexName": "SourceScheduleIndex",
+      "IndexStatus": "ACTIVE"
+    },
+    {
+      "IndexName": "SubjectClaimsIndex",
+      "IndexStatus": "ACTIVE"
+    }
+  ],
+  "taskCount": 2649,
+  "taskStatusCounts": {
+    "completed": 797,
+    "failed": 1,
+    "queued": 1850,
+    "running": 1
+  },
+  "sources": [
+    {
+      "id": "lemonrock-new-gigs",
+      "enabled": false,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-full-reconcile",
+      "enabled": false,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-cancellations",
+      "enabled": false,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-artist-index",
+      "enabled": false,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-artist-hydration",
+      "enabled": false,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-future-reconcile",
+      "enabled": false,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-gig-hydration",
+      "enabled": false,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-venue-index",
+      "enabled": false,
+      "shadow": true,
+      "health": "unknown"
+    },
+    {
+      "id": "lemonrock-venue-hydration",
+      "enabled": false,
+      "shadow": true,
+      "health": "unknown"
+    }
+  ],
+  "observations": {
+    "lemonrock-artist-index": 0,
+    "lemonrock-venue-index": 29,
+    "lemonrock-artist-hydration": 0,
+    "lemonrock-venue-hydration": 711,
+    "lemonrock-gig-hydration": 87,
+    "lemonrock-future-reconcile": 1,
+    "lemonrock-new-gigs": 1,
+    "lemonrock-cancellations": 1,
+    "lemonrock-full-reconcile": 0
+  },
+  "queue": {
+    "ApproximateNumberOfMessages": "1860",
+    "ApproximateNumberOfMessagesNotVisible": "4",
+    "ApproximateNumberOfMessagesDelayed": "0"
+  },
+  "eventRules": [
+    {
+      "Name": "BndyEnrichmentStack-LemonrockDailyReconcile4F5BB31C-AyGx0HYWfVp0",
+      "State": "ENABLED",
+      "ScheduleExpression": "cron(10 2 * * ? *)"
+    },
+    {
+      "Name": "BndyEnrichmentStack-LemonrockFastGigTickB23E8683-mMAx5VCnclWZ",
+      "State": "ENABLED",
+      "ScheduleExpression": "rate(15 minutes)"
+    },
+    {
+      "Name": "BndyEnrichmentStack-LemonrockWeeklyDirectoryReconci-nyhx4EbwH4CI",
+      "State": "ENABLED",
+      "ScheduleExpression": "cron(20 2 ? * SUN *)"
+    }
+  ],
+  "workerInvocations15m": 691.0,
+  "workerErrors15m": 0.0
+}
