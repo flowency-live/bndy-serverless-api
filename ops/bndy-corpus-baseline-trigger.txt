@@ -1,3 +1,3 @@
 snapshot=bndy-baseline-2026-08-24-v1
 snapshotAt=2026-08-24T07:15:00.000Z
-progressProbe=2026-08-24T07:18:00Z
+progressProbe=2026-08-24T07:22:00Z
