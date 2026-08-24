@@ -93,7 +93,7 @@ Set confidence below 0.75 if identity is not strongly corroborated. Do not infer
 async function discoverFacebookArtist(facebookUrl, options = {}) {
   const apiKey = options.apiKey || await getApiKey();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), options.timeoutMs || 14000);
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs || 21000);
   try {
     const res = await (options.fetch || fetch)(ENDPOINT, {
       method: 'POST',
