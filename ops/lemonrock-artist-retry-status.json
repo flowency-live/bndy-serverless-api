@@ -1,0 +1,13 @@
+{
+  "verifiedAt": "2026-08-24T04:49:41Z",
+  "taskKey": "root:artist-retry:2026-08-24T04-49-31-180Z",
+  "status": "failed",
+  "lastError": "fetch failed",
+  "httpProbe": {
+    "status": 200,
+    "bytes": 27286
+  },
+  "artistIndexObservations": 0,
+  "artistHydrationObservations": 7,
+  "artistTaskCount": 52
+}
