@@ -1,0 +1,78 @@
+name: Redrive Lemonrock production DLQ
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  redrive:
+    if: contains(github.event.head_commit.message, 'Redrive Lemonrock production DLQ')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - name: Publish start
+        run: |
+          mkdir -p ops
+          printf '{"phase":"started","runId":"%s","startedAt":"%s"}\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-dlq-redrive-run.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-dlq-redrive-run.json
+          git commit -m 'Record Lemonrock DLQ redrive start'
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Redrive and verify
+        run: |
+          set -euo pipefail
+          STACK=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query 'Stacks[0]')
+          TABLE=$(echo "$STACK" | jq -r '.Outputs[] | select(.OutputKey=="StateTableName") | .OutputValue')
+          DLQ_URL=$(aws sqs list-queues --queue-name-prefix BndyEnrichmentStack-SourceScanDLQ --query 'QueueUrls[0]' --output text)
+          DLQ_ARN=$(aws sqs get-queue-attributes --queue-url "$DLQ_URL" --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+          BEFORE=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex --key-condition-expression 'GSI1PK = :pk AND begins_with(GSI1SK, :p)' --expression-attribute-values '{":pk":{"S":"SOURCE#lemonrock-cancellations"},":p":{"S":"OBS#"}}' --projection-expression pk --output json | jq '.Items|length')
+          START=$(aws sqs start-message-move-task --source-arn "$DLQ_ARN" --max-number-of-messages-per-second 10)
+          HANDLE=$(echo "$START" | jq -r '.TaskHandle')
+          STATUS=RUNNING
+          for i in $(seq 1 60); do
+            TASK=$(aws sqs list-message-move-tasks --source-arn "$DLQ_ARN" --max-results 10)
+            STATUS=$(echo "$TASK" | jq -r --arg h "$HANDLE" '.Results[]? | select(.TaskHandle==$h) | .Status // "RUNNING"')
+            [ "$STATUS" = COMPLETED ] && break
+            [ "$STATUS" = FAILED ] && break
+            sleep 5
+          done
+          AFTER=$BEFORE
+          for i in $(seq 1 60); do
+            AFTER=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex --key-condition-expression 'GSI1PK = :pk AND begins_with(GSI1SK, :p)' --expression-attribute-values '{":pk":{"S":"SOURCE#lemonrock-cancellations"},":p":{"S":"OBS#"}}' --projection-expression pk --output json | jq '.Items|length')
+            [ "$AFTER" -gt "$BEFORE" ] && break
+            sleep 5
+          done
+          ATTR=$(aws sqs get-queue-attributes --queue-url "$DLQ_URL" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible)
+          VISIBLE=$(echo "$ATTR" | jq -r '.Attributes.ApproximateNumberOfMessages|tonumber')
+          INFLIGHT=$(echo "$ATTR" | jq -r '.Attributes.ApproximateNumberOfMessagesNotVisible|tonumber')
+          jq -n --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg status "$STATUS" --arg handle "$HANDLE" --argjson before "$BEFORE" --argjson after "$AFTER" --argjson attrs "$ATTR" '{verifiedAt:$verifiedAt,moveStatus:$status,taskHandle:$handle,cancellationObservationsBefore:$before,cancellationObservationsAfter:$after,dlq:$attrs.Attributes}' > ops/lemonrock-dlq-redrive-status.json
+          cat ops/lemonrock-dlq-redrive-status.json
+          test "$STATUS" = COMPLETED
+          test "$VISIBLE" -eq 0
+          test "$INFLIGHT" -eq 0
+          test "$AFTER" -gt "$BEFORE"
+      - name: Publish result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          printf '{"phase":"finished","status":"%s","runId":"%s","finishedAt":"%s"}\n' "$JOB_STATUS" "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-dlq-redrive-run.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-dlq-redrive-run.json
+          [ ! -f ops/lemonrock-dlq-redrive-status.json ] || git add ops/lemonrock-dlq-redrive-status.json
+          git commit -m 'Record Lemonrock DLQ redrive result' || true
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
