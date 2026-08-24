@@ -1,0 +1,1043 @@
+{
+  "verifiedAt": "2026-08-24T07:00:38Z",
+  "allBndyTables": [
+    "BndyEnrichmentStack-StateTable9728C7E5-14HR6N3NEWGLM",
+    "bndy-activity-log",
+    "bndy-artist-memberships",
+    "bndy-artist-songs",
+    "bndy-artist-venue-contacts",
+    "bndy-artist-venues",
+    "bndy-artists",
+    "bndy-builder-venues",
+    "bndy-builders",
+    "bndy-calendar-cancellations",
+    "bndy-calendar-tokens",
+    "bndy-capture-CapturesTable-7YKTGU5HDPA4",
+    "bndy-claims",
+    "bndy-events",
+    "bndy-expenses",
+    "bndy-flags",
+    "bndy-income",
+    "bndy-ingest-queue",
+    "bndy-invites",
+    "bndy-issues",
+    "bndy-magic-tokens",
+    "bndy-notifications",
+    "bndy-oauth-states",
+    "bndy-otp-codes",
+    "bndy-setlists",
+    "bndy-signals-dev",
+    "bndy-signals-prod",
+    "bndy-songs",
+    "bndy-source-review-dev",
+    "bndy-source-review-prod",
+    "bndy-source-state-dev",
+    "bndy-source-state-prod",
+    "bndy-unique-keys",
+    "bndy-user-bands",
+    "bndy-users",
+    "bndy-venue-groups",
+    "bndy-venue-notes",
+    "bndy-venues"
+  ],
+  "artists": {
+    "name": "bndy-artist-memberships",
+    "itemCountApprox": 20,
+    "keySchema": [
+      {
+        "AttributeName": "membership_id",
+        "KeyType": "HASH"
+      }
+    ],
+    "attributeDefinitions": [
+      {
+        "AttributeName": "artist_id",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "membership_id",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "user_id",
+        "AttributeType": "S"
+      }
+    ],
+    "sampleItems": [
+      {
+        "invited_by_user_id": {
+          "S": "phone_fc310af6-5774-4183-b7cb-daa79979d0be"
+        },
+        "membership_id": {
+          "S": "ef804057-dfe9-4119-bc23-6a1fcf5787bb"
+        },
+        "created_at": {
+          "S": "2026-07-28T11:53:56.502Z"
+        },
+        "icon": {
+          "S": "fa-music"
+        },
+        "bio": {
+          "NULL": true
+        },
+        "status": {
+          "S": "active"
+        },
+        "permissions": {
+          "L": []
+        },
+        "avatar_url": {
+          "NULL": true
+        },
+        "joined_at": {
+          "S": "2026-07-28T11:53:56.502Z"
+        },
+        "membership_type": {
+          "S": "performer"
+        },
+        "invited_at": {
+          "S": "2026-07-28T11:49:51.715Z"
+        },
+        "display_name": {
+          "NULL": true
+        },
+        "updated_at": {
+          "S": "2026-07-28T11:53:56.502Z"
+        },
+        "user_id": {
+          "S": "phone_3305a380-6c6a-4f23-8037-afd47e30a421"
+        },
+        "role": {
+          "S": "member"
+        },
+        "artist_id": {
+          "S": "5e2046ac-75c8-4458-bd7f-eec426149503"
+        },
+        "instrument": {
+          "NULL": true
+        },
+        "color": {
+          "S": "#708090"
+        }
+      },
+      {
+        "updated_at": {
+          "S": "2026-05-01T10:44:19.197Z"
+        },
+        "user_id": {
+          "S": "0682c2c4-80a1-7012-baa4-3dea14948ee3"
+        },
+        "membership_id": {
+          "S": "17276584-ca62-4b17-a4eb-e158a239fe45"
+        },
+        "created_at": {
+          "S": "2026-05-01T10:44:19.197Z"
+        },
+        "role": {
+          "S": "owner"
+        },
+        "artist_id": {
+          "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+        },
+        "status": {
+          "S": "active"
+        },
+        "recovered_from_owner_user_id": {
+          "BOOL": true
+        },
+        "artist_name": {
+          "S": "Killin Scarlet"
+        }
+      },
+      {
+        "updated_at": {
+          "S": "2026-05-01T11:11:15.274Z"
+        },
+        "user_id": {
+          "S": "phone_cb09da9e-f058-488a-8972-c3f6c01110f9"
+        },
+        "membership_id": {
+          "S": "11a50f0c-95e9-4d80-8f4c-3cb5ba8b8044"
+        },
+        "created_at": {
+          "S": "2026-05-01T11:11:15.274Z"
+        },
+        "role": {
+          "S": "member"
+        },
+        "artist_id": {
+          "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+        },
+        "status": {
+          "S": "active"
+        },
+        "recovered_manually": {
+          "BOOL": true
+        },
+        "artist_name": {
+          "S": "The Torrists"
+        }
+      }
+    ]
+  },
+  "venues": {
+    "name": "bndy-artist-venue-contacts",
+    "itemCountApprox": 9,
+    "keySchema": [
+      {
+        "AttributeName": "id",
+        "KeyType": "HASH"
+      }
+    ],
+    "attributeDefinitions": [
+      {
+        "AttributeName": "artist_id",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "artist_venue_id",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "id",
+        "AttributeType": "S"
+      }
+    ],
+    "sampleItems": [
+      {
+        "artist_venue_id": {
+          "S": "1afe09b7-19dc-420f-81ef-b904abff7ff4"
+        },
+        "updated_at": {
+          "S": "2026-01-13T06:46:20.782Z"
+        },
+        "created_at": {
+          "S": "2025-11-17T16:25:54.676Z"
+        },
+        "mobile": {
+          "S": "07855 801544"
+        },
+        "contact_type": {
+          "S": "artist_added"
+        },
+        "artist_id": {
+          "S": "13944bfd-89ab-402e-95dc-a371fd78fd2f"
+        },
+        "venue_id": {
+          "S": "lwlZ1VKJskevDmYlc8V6"
+        },
+        "landline": {
+          "S": ""
+        },
+        "email": {
+          "S": "joannefarrell68@hotmail.co.uk"
+        },
+        "id": {
+          "S": "ba151fae-05e7-432d-a64b-dffcc9ee0298"
+        },
+        "source_venue_contact_id": {
+          "NULL": true
+        },
+        "name": {
+          "S": "Joanne"
+        }
+      },
+      {
+        "artist_venue_id": {
+          "S": "98f44f3d-b8ae-4f99-8893-83e09e7c3ccc"
+        },
+        "updated_at": {
+          "S": "2025-11-22T20:15:41.137Z"
+        },
+        "mobile": {
+          "NULL": true
+        },
+        "created_at": {
+          "S": "2025-11-22T20:15:41.137Z"
+        },
+        "contact_type": {
+          "S": "artist_added"
+        },
+        "artist_id": {
+          "S": "5e55a762-3dad-4a5c-9e27-018f718f794d"
+        },
+        "venue_id": {
+          "S": "HDfCfgFwyafaVHhzYA5z"
+        },
+        "landline": {
+          "NULL": true
+        },
+        "source_venue_contact_id": {
+          "NULL": true
+        },
+        "id": {
+          "S": "be632640-b4f8-4f21-a7be-7b3374f5b09e"
+        },
+        "email": {
+          "S": "grumpy.bands@gmail.com"
+        },
+        "name": {
+          "S": "Grumpy Bands"
+        }
+      },
+      {
+        "artist_venue_id": {
+          "S": "70c70b8e-52b0-436a-ae1a-d0d41ffc7988"
+        },
+        "updated_at": {
+          "S": "2026-05-09T13:42:41.725Z"
+        },
+        "mobile": {
+          "NULL": true
+        },
+        "created_at": {
+          "S": "2026-05-09T13:42:41.725Z"
+        },
+        "contact_type": {
+          "S": "artist_added"
+        },
+        "artist_id": {
+          "S": "a191f35d-6dc6-440f-9038-666deb04f533"
+        },
+        "venue_id": {
+          "S": "S4OJgiii3JAGHVRd0iQq"
+        },
+        "landline": {
+          "S": "01782 461127"
+        },
+        "source_venue_contact_id": {
+          "NULL": true
+        },
+        "id": {
+          "S": "4170c331-074e-4f08-8470-797fe17106aa"
+        },
+        "email": {
+          "NULL": true
+        },
+        "name": {
+          "S": "David Rushton"
+        }
+      }
+    ]
+  },
+  "events": {
+    "name": "bndy-events",
+    "itemCountApprox": 8860,
+    "keySchema": [
+      {
+        "AttributeName": "id",
+        "KeyType": "HASH"
+      }
+    ],
+    "attributeDefinitions": [
+      {
+        "AttributeName": "artistId",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "date",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "festivalId",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "geohash4",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "geohash6",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "id",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "ownerUserId",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "slug",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "venueId",
+        "AttributeType": "S"
+      }
+    ],
+    "sampleItems": [
+      {
+        "entityType": {
+          "S": "festival"
+        },
+        "primaryVenueId": {
+          "S": "5f8919cd-aaec-444f-8fbe-8c42352d6ca5"
+        },
+        "endDate": {
+          "S": "2026-11-15"
+        },
+        "stages": {
+          "L": [
+            {
+              "M": {
+                "id": {
+                  "S": "01a91b9f-27a1-488f-964c-64528d671812"
+                },
+                "name": {
+                  "S": "Main Stage - De Valence Pavilion"
+                },
+                "venueId": {
+                  "S": "5f8919cd-aaec-444f-8fbe-8c42352d6ca5"
+                }
+              }
+            },
+            {
+              "M": {
+                "id": {
+                  "S": "b37d6f02-3216-44a5-8a76-05df280fd185"
+                },
+                "venueId": {
+                  "S": "5f8919cd-aaec-444f-8fbe-8c42352d6ca5"
+                },
+                "name": {
+                  "S": "Fringe Stage - De Valence Pavilion Balcony"
+                }
+              }
+            },
+            {
+              "M": {
+                "name": {
+                  "S": "Acoustic Afternoon Stage"
+                },
+                "id": {
+                  "S": "cbf074e9-2059-4abf-b907-bf3ed583c07e"
+                }
+              }
+            }
+          ]
+        },
+        "slug": {
+          "S": "tenby-blues-festival-2026"
+        },
+        "createdAt": {
+          "S": "2026-08-19T23:15:26.460Z"
+        },
+        "ticketUrl": {
+          "S": "https://tenbyblues.co.uk/tickets/"
+        },
+        "source": {
+          "S": "mcp_ai_import"
+        },
+        "name": {
+          "S": "Tenby Blues Festival 2026"
+        },
+        "lineupUrl": {
+          "S": "https://tenbyblues.co.uk/programme/"
+        },
+        "ticketed": {
+          "BOOL": true
+        },
+        "venueIds": {
+          "L": [
+            {
+              "S": "5f8919cd-aaec-444f-8fbe-8c42352d6ca5"
+            },
+            {
+              "S": "63a07084-1cc5-480a-8146-8605f48e1c9d"
+            }
+          ]
+        },
+        "websiteUrl": {
+          "S": "https://tenbyblues.co.uk/"
+        },
+        "updatedAt": {
+          "S": "2026-08-19T23:16:44.860Z"
+        },
+        "startDate": {
+          "S": "2026-11-13"
+        },
+        "SK": {
+          "S": "META"
+        },
+        "externalIds": {
+          "L": [
+            {
+              "M": {
+                "id": {
+                  "S": "tenbyblues-2026"
+                },
+                "source": {
+                  "S": "tenbyblues"
+                }
+              }
+            }
+          ]
+        },
+        "isPublic": {
+          "BOOL": true
+        },
+        "PK": {
+          "S": "FESTIVAL#ac915ee1-7801-463d-8db3-8a839860e0a9"
+        },
+        "description": {
+          "S": "20th anniversary edition. Three days of blues with around 50 acts in over 20 venues across Tenby, most with free admission. Ticketed main-stage sessions at the De Valence Pavilion; the free weekend Blues Trail through the town's cafes, clubs, bars and hotels is announced nearer the festival."
+        },
+        "id": {
+          "S": "ac915ee1-7801-463d-8db3-8a839860e0a9"
+        },
+        "lineup": {
+          "L": [
+            {
+              "M": {
+                "billing": {
+                  "S": "headline"
+                },
+                "id": {
+                  "S": "ffc5d0ee-292f-439e-a8a0-74cad2a66a57"
+                },
+                "day": {
+                  "S": "2026-11-13"
+                },
+                "stageId": {
+                  "S": "01a91b9f-27a1-488f-964c-64528d671812"
+                },
+                "startTime": {
+                  "S": "19:30"
+                },
+                "artistId": {
+                  "S": "ebad34ec-0fcc-48ef-a132-2bba6e8f2fed"
+                },
+                "displayName": {
+                  "S": "The Cinelli Brothers"
+                }
+              }
+            },
+            {
+              "M": {
+                "id": {
+                  "S": "f9bf5321-a12d-45a8-b7f5-1dbf5ac94c53"
+                },
+                "displayName": {
+                  "S": "Mystery Band"
+                },
+                "startTime": {
+                  "S": "19:30"
+                },
+                "billing": {
+                  "S": "special_guest"
+                },
+                "day": {
+                  "S": "2026-11-13"
+                },
+                "stageId": {
+                  "S": "01a91b9f-27a1-488f-964c-64528d671812"
+                }
+              }
+            },
+            {
+              "M": {
+                "artistId": {
+                  "S": "e97ce3fb-8ccd-4425-8071-8b98088fdfdf"
+                },
+                "displayName": {
+                  "S": "Kaspar 'Berry' Rapkin & Lucy Piper"
+                },
+                "id": {
+                  "S": "cc7235fe-61b0-4457-8e19-5e00a4fbc63e"
+                },
+                "stageId": {
+                  "S": "01a91b9f-27a1-488f-964c-64528d671812"
+                },
+                "billing": {
+                  "S": "general"
+                },
+                "startTime": {
+                  "S": "19:30"
+                },
+                "day": {
+                  "S": "2026-11-13"
+                }
+              }
+            },
+            {
+              "M": {
+                "displayName": {
+                  "S": "Erin Harpe & Jim Countryman"
+                },
+                "billing": {
+                  "S": "general"
+                },
+                "id": {
+                  "S": "a26da478-a025-4f7a-89d4-22d8bc1d3e65"
+                },
+                "artistId": {
+                  "S": "ce60a931-1fe3-4ce6-a725-cc7768ddf0b3"
+                },
+                "day": {
+                  "S": "2026-11-13"
+                },
+                "startTime": {
+                  "S": "19:30"
+                },
+                "stageId": {
+                  "S": "01a91b9f-27a1-488f-964c-64528d671812"
+                }
+              }
+            },
+            {
+              "M": {
+                "stageId": {
+                  "S": "01a91b9f-27a1-488f-964c-64528d671812"
+                },
+                "startTime": {
+                  "S": "19:30"
+                },
+                "artistId": {
+                  "S": "17606fff-a13f-491d-b499-59b09c394537"
+                },
+                "day": {
+                  "S": "2026-11-14"
+                },
+                "billing": {
+                  "S": "headline"
+                },
+                "id": {
+                  "S": "8ab9a5a8-c003-44d4-ac55-74a543a2c35d"
+                },
+                "displayName": {
+                  "S": "The Errol Linton Band"
+                }
+              }
+            },
+            {
+              "M": {
+                "artistId": {
+                  "S": "9b9ca773-7cfa-4e5b-a7a5-5422159e65ab"
+                },
+                "startTime": {
+                  "S": "19:30"
+                },
+                "id": {
+                  "S": "8808cce1-ebc2-496d-9990-738b57adda8f"
+                },
+                "displayName": {
+                  "S": "The Jesse Garwood Band"
+                },
+                "stageId": {
+                  "S": "01a91b9f-27a1-488f-964c-64528d671812"
+                },
+                "billing": {
+                  "S": "general"
+                },
+                "day": {
+                  "S": "2026-11-14"
+                }
+              }
+            },
+            {
+              "M": {
+                "id": {
+                  "S": "979bd4b6-241b-4837-8c3b-08d08852fa73"
+                },
+                "day": {
+                  "S": "2026-11-14"
+                },
+                "displayName": {
+                  "S": "Liz Jones & Broken Windows"
+                },
+                "stageId": {
+                  "S": "01a91b9f-27a1-488f-964c-64528d671812"
+                },
+                "startTime": {
+                  "S": "19:30"
+                },
+                "artistId": {
+                  "S": "d5ab76a2-99eb-4cd3-9e10-b0ac56abedb2"
+                },
+                "billing": {
+                  "S": "general"
+                }
+              }
+            },
+            {
+              "M": {
+                "day": {
+                  "S": "2026-11-15"
+                },
+                "displayName": {
+                  "S": "Laura B & Her Band"
+                },
+                "stageId": {
+                  "S": "01a91b9f-27a1-488f-964c-64528d671812"
+                },
+                "billing": {
+                  "S": "headline"
+                },
+                "id": {
+                  "S": "11da99d8-f44f-49f3-92d0-1b9ea2966c04"
+                },
+                "startTime": {
+                  "S": "19:30"
+                },
+                "artistId": {
+                  "S": "47acbf3f-b4ab-473d-9dfa-33c2f6288d16"
+                }
+              }
+            },
+            {
+              "M": {
+                "stageId": {
+                  "S": "01a91b9f-27a1-488f-964c-64528d671812"
+                },
+                "displayName": {
+                  "S": "The James Oliver Revue"
+                },
+                "billing": {
+                  "S": "general"
+                },
+                "artistId": {
+                  "S": "2ba4d578-239b-4ebc-8116-a6d6060c8ea0"
+                },
+                "day": {
+                  "S": "2026-11-15"
+                },
+                "startTime": {
+                  "S": "19:30"
+                },
+                "id": {
+                  "S": "83c6fc93-a2eb-4a6d-9a78-6deafbf8d7e4"
+                }
+              }
+            },
+            {
+              "M": {
+                "startTime": {
+                  "S": "19:30"
+                },
+                "day": {
+                  "S": "2026-11-15"
+                },
+                "billing": {
+                  "S": "general"
+                },
+                "displayName": {
+                  "S": "The Too Bad Jims"
+                },
+                "artistId": {
+                  "S": "37af49cb-a7c8-4cc9-a2fc-a4db10a627ab"
+                },
+                "stageId": {
+                  "S": "01a91b9f-27a1-488f-964c-64528d671812"
+                },
+                "id": {
+                  "S": "3dd18d04-d12b-4ed1-b814-a2a237bd750e"
+                }
+              }
+            },
+            {
+              "M": {
+                "displayName": {
+                  "S": "Tom Davies & The Bluebirds"
+                },
+                "id": {
+                  "S": "23d8bacf-9578-49ba-a9c7-50042ad94645"
+                },
+                "artistId": {
+                  "S": "2c8fe242-bf37-4cb2-b3d0-c511a19d1d96"
+                },
+                "day": {
+                  "S": "2026-11-14"
+                },
+                "stageId": {
+                  "S": "b37d6f02-3216-44a5-8a76-05df280fd185"
+                },
+                "startTime": {
+                  "S": "13:00"
+                },
+                "billing": {
+                  "S": "general"
+                }
+              }
+            },
+            {
+              "M": {
+                "id": {
+                  "S": "de3b52fb-b1e3-40a1-9196-25152e233a02"
+                },
+                "billing": {
+                  "S": "general"
+                },
+                "day": {
+                  "S": "2026-11-14"
+                },
+                "displayName": {
+                  "S": "Erin Harpe & Jim Countryman (Acoustic)"
+                },
+                "stageId": {
+                  "S": "cbf074e9-2059-4abf-b907-bf3ed583c07e"
+                },
+                "startTime": {
+                  "S": "13:00"
+                },
+                "artistId": {
+                  "S": "ce60a931-1fe3-4ce6-a725-cc7768ddf0b3"
+                }
+              }
+            },
+            {
+              "M": {
+                "displayName": {
+                  "S": "Mark Harrison"
+                },
+                "stageId": {
+                  "S": "cbf074e9-2059-4abf-b907-bf3ed583c07e"
+                },
+                "day": {
+                  "S": "2026-11-14"
+                },
+                "artistId": {
+                  "S": "9ddf959a-faee-4a45-8a7a-79aa3a8f2b1f"
+                },
+                "id": {
+                  "S": "9ca81b2e-d836-4dcc-87da-eddb1dc4b2c9"
+                },
+                "startTime": {
+                  "S": "16:00"
+                },
+                "billing": {
+                  "S": "general"
+                }
+              }
+            },
+            {
+              "M": {
+                "id": {
+                  "S": "b88958e3-3e4a-4c83-bae2-f4e2bcbfbfcb"
+                },
+                "artistId": {
+                  "S": "32b25b13-3e19-4f78-81a3-3ad426ddf841"
+                },
+                "displayName": {
+                  "S": "Bella Collins & The Flaming Alligators"
+                },
+                "startTime": {
+                  "S": "23:45"
+                },
+                "billing": {
+                  "S": "general"
+                },
+                "day": {
+                  "S": "2026-11-13"
+                }
+              }
+            },
+            {
+              "M": {
+                "billing": {
+                  "S": "general"
+                },
+                "artistId": {
+                  "S": "32b25b13-3e19-4f78-81a3-3ad426ddf841"
+                },
+                "day": {
+                  "S": "2026-11-14"
+                },
+                "displayName": {
+                  "S": "Bella Collins & The Flaming Alligators"
+                },
+                "startTime": {
+                  "S": "23:45"
+                },
+                "id": {
+                  "S": "59723272-c22b-406c-94ba-4c3f87f8f337"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "membershipId": {
+          "NULL": true
+        },
+        "artistId": {
+          "S": "ba1a508a-7558-405c-ae67-84270a6bf8cd"
+        },
+        "createdByUserId": {
+          "NULL": true
+        },
+        "date": {
+          "S": "2026-08-01"
+        },
+        "venueId": {
+          "S": "a1d31424-4293-4187-83b0-5b940b853053"
+        },
+        "isPublic": {
+          "BOOL": true
+        },
+        "id": {
+          "S": "6451e3c2-d144-42f1-b09c-33502e259c0b"
+        },
+        "isAllDay": {
+          "BOOL": false
+        },
+        "geoLat": {
+          "N": "55.0265452"
+        },
+        "aiCreated": {
+          "BOOL": true
+        },
+        "createdAt": {
+          "S": "2026-07-29T16:40:11.091Z"
+        },
+        "external_ids": {
+          "L": [
+            {
+              "M": {
+                "id": {
+                  "S": "2026-08-01-charlotte-forman-clousden-hill-forest-hall"
+                },
+                "source": {
+                  "S": "onthecasemusic"
+                }
+              }
+            }
+          ]
+        },
+        "source": {
+          "S": "mcp_ai_import"
+        },
+        "verifiedByArtist": {
+          "BOOL": false
+        },
+        "verifiedByVenue": {
+          "BOOL": false
+        },
+        "startTime": {
+          "S": "21:00"
+        },
+        "needsReview": {
+          "BOOL": true
+        },
+        "geohash4": {
+          "S": "gcyc"
+        },
+        "endTime": {
+          "S": "00:00"
+        },
+        "updatedAt": {
+          "S": "2026-07-29T16:40:11.091Z"
+        },
+        "collaboratingArtistIds": {
+          "L": []
+        },
+        "geoLng": {
+          "N": "-1.559726"
+        },
+        "price": {
+          "S": "FREE"
+        },
+        "geohash6": {
+          "S": "gcych9"
+        },
+        "type": {
+          "S": "gig"
+        },
+        "title": {
+          "S": "Charlotte Forman @ Clousden Hill"
+        }
+      },
+      {
+        "membershipId": {
+          "NULL": true
+        },
+        "artistId": {
+          "S": "fa7d1a05-63a5-45c6-9f67-9c7e0fd61c9e"
+        },
+        "createdByUserId": {
+          "NULL": true
+        },
+        "date": {
+          "S": "2026-08-15"
+        },
+        "venueId": {
+          "S": "SzE46SL9phccWWNprHhb"
+        },
+        "isPublic": {
+          "BOOL": true
+        },
+        "id": {
+          "S": "e58c0e31-0e0f-48a4-8292-5b8e6e3ec05b"
+        },
+        "isAllDay": {
+          "BOOL": false
+        },
+        "geoLat": {
+          "N": "53.3751411"
+        },
+        "aiCreated": {
+          "BOOL": true
+        },
+        "createdAt": {
+          "S": "2026-08-14T04:19:14.701Z"
+        },
+        "external_ids": {
+          "L": [
+            {
+              "M": {
+                "source": {
+                  "S": "gigs-news"
+                },
+                "id": {
+                  "S": "2026-08-15-jackie-dijon-the-rising-sun"
+                }
+              }
+            }
+          ]
+        },
+        "source": {
+          "S": "mcp_ai_import"
+        },
+        "verifiedByArtist": {
+          "BOOL": false
+        },
+        "verifiedByVenue": {
+          "BOOL": false
+        },
+        "startTime": {
+          "S": "21:00"
+        },
+        "needsReview": {
+          "BOOL": true
+        },
+        "geohash4": {
+          "S": "gcqr"
+        },
+        "endTime": {
+          "S": "00:00"
+        },
+        "updatedAt": {
+          "S": "2026-08-14T04:19:14.701Z"
+        },
+        "collaboratingArtistIds": {
+          "L": []
+        },
+        "geoLng": {
+          "N": "-2.113334800000001"
+        },
+        "geohash6": {
+          "S": "gcqrxu"
+        },
+        "type": {
+          "S": "gig"
+        },
+        "title": {
+          "S": "Jackie Dijon @ The Rising Sun"
+        }
+      }
+    ]
+  },
+  "festivals": null
+}
