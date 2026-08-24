@@ -1,0 +1,116 @@
+name: Bootstrap canonical BNDY corpus into Backline
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: contains(github.event.head_commit.message, 'Run BNDY corpus Backline production bootstrap')
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Publish start marker
+        run: |
+          mkdir -p ops
+          printf '{"phase":"started","runId":"%s","snapshotId":"bndy-baseline-2026-08-24-v1","startedAt":"%s"}\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/bndy-corpus-baseline-run.json
+          git config user.name 'bndy-backline-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add ops/bndy-corpus-baseline-run.json
+          git commit -m 'Record BNDY corpus baseline start'
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
+      - name: Resolve Backline resources
+        id: resources
+        run: |
+          set -euo pipefail
+          RES=$(aws cloudformation describe-stack-resources --stack-name BndyEnrichmentStack --output json)
+          STATE_TABLE=$(echo "$RES" | jq -r '.StackResources[] | select(.ResourceType=="AWS::DynamoDB::Table" and (.LogicalResourceId|test("StateTable"))) | .PhysicalResourceId' | head -1)
+          EVIDENCE_BUCKET=$(echo "$RES" | jq -r '.StackResources[] | select(.ResourceType=="AWS::S3::Bucket" and (.LogicalResourceId|test("EvidenceBucket"))) | .PhysicalResourceId' | head -1)
+          test -n "$STATE_TABLE" && test "$STATE_TABLE" != null
+          test -n "$EVIDENCE_BUCKET" && test "$EVIDENCE_BUCKET" != null
+          echo "state_table=$STATE_TABLE" >> "$GITHUB_OUTPUT"
+          echo "evidence_bucket=$EVIDENCE_BUCKET" >> "$GITHUB_OUTPUT"
+          echo "state-table=$STATE_TABLE"
+          echo "evidence-bucket=$EVIDENCE_BUCKET"
+      - name: Clone exact enrichment main and validate
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch main https://github.com/flowency-live/bndy-enrichment.git /tmp/bndy-enrichment
+          cd /tmp/bndy-enrichment
+          echo "enrichment-sha=$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "e63ba6c1291d2d0281c847efae0e8446c315168d"
+          npm install
+          npm run build
+          npm run test
+      - name: Run production canonical baseline
+        env:
+          STATE_TABLE: ${{ steps.resources.outputs.state_table }}
+          EVIDENCE_BUCKET: ${{ steps.resources.outputs.evidence_bucket }}
+          BNDY_ARTISTS_TABLE: bndy-artists
+          BNDY_VENUES_TABLE: bndy-venues
+          BNDY_EVENTS_TABLE: bndy-events
+        run: |
+          set -euo pipefail
+          cd /tmp/bndy-enrichment
+          npm run bndy:baseline -- --snapshot-id=bndy-baseline-2026-08-24-v1 --snapshot-at=2026-08-24T07:15:00.000Z | tee /tmp/bndy-baseline.log
+          tail -1 /tmp/bndy-baseline.log | jq . > "$GITHUB_WORKSPACE/ops/bndy-corpus-baseline-status.json"
+      - name: Verify parity and no canonical projection work
+        env:
+          STATE_TABLE: ${{ steps.resources.outputs.state_table }}
+        run: |
+          set -euo pipefail
+          count_scan() { aws dynamodb scan "$@" --select COUNT --query Count --output text | awk '{for(i=1;i<=NF;i++) s+=$i} END{print s+0}'; }
+          ARTISTS=$(count_scan --table-name bndy-artists)
+          VENUES=$(count_scan --table-name bndy-venues)
+          EVENTS=$(count_scan --table-name bndy-events --filter-expression 'attribute_not_exists(#et) OR #et <> :festival' --expression-attribute-names '{"#et":"entityType"}' --expression-attribute-values '{":festival":{"S":"festival"}}')
+          FESTIVALS=$(count_scan --table-name bndy-events --filter-expression '#et = :festival' --expression-attribute-names '{"#et":"entityType"}' --expression-attribute-values '{":festival":{"S":"festival"}}')
+          BASE=$(cat ops/bndy-corpus-baseline-status.json)
+          test "$(echo "$BASE" | jq -r '.status')" = complete
+          test "$(echo "$BASE" | jq -r '.shadow')" = true
+          test "$(echo "$BASE" | jq -r '.canonicalWritesEnabled')" = false
+          test "$(echo "$BASE" | jq -r '.skippedWithoutId')" = 0
+          test "$(echo "$BASE" | jq -r '.counts.artist.entities')" = "$ARTISTS"
+          test "$(echo "$BASE" | jq -r '.counts.venue.entities')" = "$VENUES"
+          test "$(echo "$BASE" | jq -r '.counts.event.entities')" = "$EVENTS"
+          test "$(echo "$BASE" | jq -r '.counts.festival.entities')" = "$FESTIVALS"
+          PROJECTION_ITEMS=$(aws dynamodb scan --table-name "$STATE_TABLE" --filter-expression '#et = :work AND begins_with(#sid, :prefix)' --expression-attribute-names '{"#et":"entityType","#sid":"sourceId"}' --expression-attribute-values '{":work":{"S":"ProjectionWorkItem"},":prefix":{"S":"bndy-canonical-"}}' --select COUNT --query Count --output text | awk '{for(i=1;i<=NF;i++) s+=$i} END{print s+0}')
+          test "$PROJECTION_ITEMS" = 0
+          jq -n \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg enrichmentSha "e63ba6c1291d2d0281c847efae0e8446c315168d" \
+            --argjson baseline "$BASE" \
+            --argjson canonicalArtists "$ARTISTS" --argjson canonicalVenues "$VENUES" --argjson canonicalEvents "$EVENTS" --argjson canonicalFestivals "$FESTIVALS" \
+            --argjson canonicalProjectionWorkItems "$PROJECTION_ITEMS" \
+            '{verifiedAt:$verifiedAt,enrichmentSha:$enrichmentSha,baseline:$baseline,canonicalCounts:{artist:$canonicalArtists,venue:$canonicalVenues,event:$canonicalEvents,festival:$canonicalFestivals,total:($canonicalArtists+$canonicalVenues+$canonicalEvents+$canonicalFestivals)},parity:{artist:($baseline.counts.artist.entities==$canonicalArtists),venue:($baseline.counts.venue.entities==$canonicalVenues),event:($baseline.counts.event.entities==$canonicalEvents),festival:($baseline.counts.festival.entities==$canonicalFestivals)},canonicalProjectionWorkItems:$canonicalProjectionWorkItems}' \
+            > ops/bndy-corpus-baseline-proof.json
+      - name: Publish result
+        if: always()
+        run: |
+          set -euo pipefail
+          STATUS=success
+          [ -f ops/bndy-corpus-baseline-proof.json ] || STATUS=failure
+          printf '{"phase":"finished","status":"%s","runId":"%s","snapshotId":"bndy-baseline-2026-08-24-v1","finishedAt":"%s"}\n' "$STATUS" "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/bndy-corpus-baseline-run.json
+          git config user.name 'bndy-backline-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add ops/bndy-corpus-baseline-run.json
+          [ ! -f ops/bndy-corpus-baseline-status.json ] || git add ops/bndy-corpus-baseline-status.json
+          [ ! -f ops/bndy-corpus-baseline-proof.json ] || git add ops/bndy-corpus-baseline-proof.json
+          git commit -m 'Record BNDY corpus Backline baseline result' || true
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
+          test "$STATUS" = success
