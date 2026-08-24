@@ -1,0 +1,62 @@
+name: Inspect canonical BNDY corpus
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    if: contains(github.event.head_commit.message, 'Inspect canonical BNDY corpus')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Inspect production canonical tables
+        run: |
+          set -euo pipefail
+          mkdir -p ops
+          TABLES=$(aws dynamodb list-tables --output json)
+          echo "$TABLES" > /tmp/tables.json
+          jq '[.TableNames[] | select(test("bndy|Bndy"))]' /tmp/tables.json > /tmp/bndy-tables.json
+          find_table() {
+            local pattern="$1"
+            jq -r --arg re "$pattern" '[.[] | select(test($re; "i"))] | first // empty' /tmp/bndy-tables.json
+          }
+          ARTISTS=$(find_table '(^|[-_])artists?($|[-_])')
+          VENUES=$(find_table '(^|[-_])venues?($|[-_])')
+          EVENTS=$(find_table '(^|[-_])events?($|[-_])')
+          FESTIVALS=$(find_table '(^|[-_])festivals?($|[-_])')
+          inspect_table() {
+            local name="$1"
+            if [ -z "$name" ]; then echo 'null'; return; fi
+            DESC=$(aws dynamodb describe-table --table-name "$name" --output json)
+            SAMPLE=$(aws dynamodb scan --table-name "$name" --limit 3 --output json)
+            jq -n --arg name "$name" --argjson desc "$DESC" --argjson sample "$SAMPLE" '{name:$name,itemCountApprox:$desc.Table.ItemCount,keySchema:$desc.Table.KeySchema,attributeDefinitions:$desc.Table.AttributeDefinitions,sampleItems:$sample.Items}'
+          }
+          A=$(inspect_table "$ARTISTS")
+          V=$(inspect_table "$VENUES")
+          E=$(inspect_table "$EVENTS")
+          F=$(inspect_table "$FESTIVALS")
+          jq -n \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson allTables "$(cat /tmp/bndy-tables.json)" \
+            --argjson artists "$A" --argjson venues "$V" --argjson events "$E" --argjson festivals "$F" \
+            '{verifiedAt:$verifiedAt,allBndyTables:$allTables,artists:$artists,venues:$venues,events:$events,festivals:$festivals}' \
+            > ops/canonical-bndy-corpus-inspection.json
+      - name: Publish inspection
+        run: |
+          git config user.name 'bndy-backline-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add ops/canonical-bndy-corpus-inspection.json
+          git commit -m 'Record canonical BNDY corpus inspection'
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
