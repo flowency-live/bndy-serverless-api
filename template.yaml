@@ -1078,6 +1078,28 @@ Resources:
             Path: /api/join/analytics
             Method: POST
 
+  OwnershipFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Explicit owner-only relinquish/disown actions for Join-managed Artists and Venues
+      CodeUri: ./ownership-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          ARTIST_MEMBERSHIPS_TABLE: bndy-artist-memberships
+          ENTITY_MEMBERSHIPS_TABLE: !Ref EntityMembershipsTable
+      Events:
+        RelinquishManagedEntity:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/managed-entities/{entityType}/{id}/relinquish
+            Method: POST
+
   # Auth Lambda
   AuthFunction:
     Type: AWS::Serverless::Function
