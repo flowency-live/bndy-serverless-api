@@ -75,7 +75,7 @@ jobs:
       - name: Test source inspector
         if: steps.changes.outputs.code_changed == 'true'
         working-directory: artists-lambda
-        run: node --test source-inspector.test.js source-inspector-v2.test.js source-inspector-v3.test.js source-inspector-backline.test.js
+        run: node --test source-inspector.test.js source-inspector-v2.test.js source-inspector-v3.test.js
 
       - name: Verify shared identity copies
         if: steps.changes.outputs.code_changed == 'true'
@@ -110,13 +110,6 @@ jobs:
             --output text)
           test -n "$API_ID" && test "$API_ID" != "None"
           echo "BNDY_HTTP_API_ID=$API_ID" >> "$GITHUB_ENV"
-          GEMINI_SECRET_ARN=$(aws cloudformation describe-stacks \
-            --stack-name BndyEnrichmentStack \
-            --region "$AWS_REGION" \
-            --query "Stacks[0].Outputs[?OutputKey=='GeminiSecretArn'].OutputValue | [0]" \
-            --output text)
-          test -n "$GEMINI_SECRET_ARN" && test "$GEMINI_SECRET_ARN" != "None"
-          echo "GEMINI_SECRET_ARN=$GEMINI_SECRET_ARN" >> "$GITHUB_ENV"
 
       - name: SAM Build
         id: sam_build
@@ -139,7 +132,7 @@ jobs:
             --capabilities CAPABILITY_IAM \
             --s3-bucket bndy-deployment-artifacts-1758805276 \
             --s3-prefix bndy-source-inspector \
-            --parameter-overrides BndyHttpApiId="$BNDY_HTTP_API_ID" GeminiSecretArn="$GEMINI_SECRET_ARN"
+            --parameter-overrides BndyHttpApiId="$BNDY_HTTP_API_ID"
 
       - name: Reconcile API Gateway integration and route
         id: reconcile
@@ -182,7 +175,7 @@ jobs:
             --integration-method POST \
             --integration-uri "$FUNCTION_ARN" \
             --payload-format-version '2.0' \
-            --timeout-in-millis 29000 \
+            --timeout-in-millis 8000 \
             --region "$AWS_REGION" \
             --query IntegrationId \
             --output text)
@@ -233,14 +226,15 @@ jobs:
           test "$status" = "422"
           grep -q 'NOT_FACEBOOK_URL' /tmp/source-inspector-host.json
 
-          status=$(curl -sS -o /tmp/source-inspector-ahundredendings.json -w '%{http_code}' \
+          status=$(curl -sS --max-time 10 -o /tmp/source-inspector-ahundredendings.json -w '%{http_code}' \
             -X POST "$URL" \
             -H 'content-type: application/json' \
             --data '{"input":"https://www.facebook.com/ahundredendings","expectedType":"artist"}')
           test "$status" = "200"
-          jq -e '.observed.name == "A Hundred Endings"' /tmp/source-inspector-ahundredendings.json
-          jq -e '.evidence.name == "backline_grounded_search"' /tmp/source-inspector-ahundredendings.json
-          jq -e '.backlineAssist.status == "enriched"' /tmp/source-inspector-ahundredendings.json
+          jq -e '.valid == true and .identityResolved == true' /tmp/source-inspector-ahundredendings.json
+          jq -e '.facebookUrl == "https://www.facebook.com/ahundredendings"' /tmp/source-inspector-ahundredendings.json
+          jq -e '.observed.imageUrl | type == "string" and length > 0' /tmp/source-inspector-ahundredendings.json
+          jq -e 'has("backlineAssist") | not' /tmp/source-inspector-ahundredendings.json
 
       - name: Mark source inspector deployment successful
         if: success()
