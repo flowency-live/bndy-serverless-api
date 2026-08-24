@@ -52,3 +52,5 @@ jobs:
           git commit -m 'Enable Join funnel analytics route'
           git pull --rebase --autostash origin master
           git push origin HEAD:master
+
+# trigger revision 1
