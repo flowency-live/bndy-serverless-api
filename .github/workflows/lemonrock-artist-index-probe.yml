@@ -1,0 +1,63 @@
+name: Probe Lemonrock live artist index
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    if: contains(github.event.head_commit.message, 'Probe Lemonrock live artist index')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - name: Inspect live directory shape
+        run: |
+          set -euo pipefail
+          curl -fsSL -A 'BNDY-Backline/1.0 (+https://bndy.live; source-reconciliation)' 'https://www.lemonrock.com/advancedsearchbands.php?_start=0' -o /tmp/artists.html
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, html, json
+          s=Path('/tmp/artists.html').read_text(errors='ignore')
+          text=html.unescape(re.sub(r'<[^>]+>', '\n', s))
+          snippets=[]
+          for m in re.finditer(r'.{0,100}(?:found|results?|bands?|artists?).{0,140}', text, re.I|re.S):
+              x=' '.join(m.group(0).split())
+              if x not in snippets: snippets.append(x)
+              if len(snippets)>=30: break
+          hrefs=re.findall(r'href\s*=\s*["\']([^"\']+)["\']', s, re.I)
+          starts=sorted(set(re.findall(r'(?:[?&]_start=)(\d+)', ' '.join(hrefs))), key=int)
+          pagination=sorted(set(h for h in hrefs if 'advancedsearchbands.php' in h))[:100]
+          # profile-like hrefs: root single-segment slugs, excluding php/static/nav
+          slugs=[]
+          for h in hrefs:
+              h=h.split('#')[0]
+              if h.startswith('http'):
+                  mm=re.search(r'lemonrock\.com/([^/?]+)', h, re.I)
+              else:
+                  mm=re.match(r'/?([^/?]+)(?:[?].*)?$', h)
+              if not mm: continue
+              slug=mm.group(1)
+              if '.' in slug or slug.lower() in {'bands','venues','gigs','login','join','about','help','contact','home'}: continue
+              slugs.append(slug)
+          out={
+            'bytes':len(s.encode()),
+            'snippets':snippets,
+            'startOffsets':starts,
+            'paginationHrefs':pagination,
+            'profileLikeUnique':len(set(slugs)),
+            'sampleSlugs':sorted(set(slugs))[:80],
+          }
+          Path('ops/lemonrock-artist-index-probe.json').write_text(json.dumps(out,indent=2))
+          print(json.dumps(out,indent=2))
+          PY
+          git config user.name bndy-backline-bot
+          git config user.email actions@users.noreply.github.com
+          git add ops/lemonrock-artist-index-probe.json
+          git commit -m 'Record Lemonrock artist index shape'
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
