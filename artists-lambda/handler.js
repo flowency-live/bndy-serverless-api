@@ -517,6 +517,11 @@ exports.handler = async (event, context) => {
       return await handleCreateArtist(event);
     }
 
+    // Join bndy — authenticated new Artist + initial ownership.
+    if (method === 'POST' && path === '/api/join/artists') {
+      return await handleJoinArtist(event);
+    }
+
     // Community artist creation endpoint (public, no auth required)
     if (method === 'POST' && path === '/api/artists/community') {
       return await handleCreateCommunityArtist(event);
@@ -2046,6 +2051,84 @@ async function handleMCPDeleteArtist(artistId) {
       body: JSON.stringify({ error: 'Internal server error' })
     };
   }
+}
+
+// ============================================================================
+// JOIN BNDY — AUTHENTICATED NEW ARTIST + INITIAL OWNERSHIP
+// ============================================================================
+async function handleJoinArtist(event) {
+  const auth = await requireAuth(event);
+  if (auth.error) return { statusCode: 401, headers: getCommunityHeaders(), body: JSON.stringify({ error: auth.error, code: 'AUTH_REQUIRED' }) };
+
+  let body;
+  try { body = JSON.parse(event.body || '{}'); } catch { return { statusCode: 400, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Invalid JSON body' }) }; }
+  const name = String(body.name || '').trim();
+  const location = String(body.location || '').trim();
+  if (!name || !location) return { statusCode: 400, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Artist name and location are required' }) };
+
+  // Re-resolve immediately before mutation to close the search/create race.
+  const preflight = await handleFindOrCreateArtist({ ...event, body: JSON.stringify({ ...body, name, location, dryRun: true, canCreate: true, source: 'join_bndy' }) });
+  let verdict = {};
+  try { verdict = JSON.parse(preflight.body || '{}'); } catch {}
+  if (preflight.statusCode !== 200) return preflight;
+  if (verdict.action === 'matched' || verdict.action === 'review') {
+    return { statusCode: 409, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'An existing artist may match this identity', code: 'EXISTING_ENTITY', action: verdict.action, artist: verdict.artist || null, candidates: verdict.candidates || [], matchedBy: verdict.matchedBy || null, variant: verdict.variant || null }) };
+  }
+  if (verdict.action !== 'clear') return { statusCode: 422, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Artist identity is not clear for creation', code: 'IDENTITY_NOT_CLEAR' }) };
+
+  // Reuse the canonical guarded create path. A hard uniqueness collision is
+  // still possible here and is converted back into the existing-entity branch.
+  const created = await handleCreateCommunityArtist({ ...event, body: JSON.stringify({ ...body, name, location, source: 'join_bndy' }) });
+  if (created.statusCode !== 201) {
+    if (created.statusCode === 409) {
+      let duplicate = {}; try { duplicate = JSON.parse(created.body || '{}'); } catch {}
+      return { statusCode: 409, headers: getCommunityHeaders(), body: JSON.stringify({ ...duplicate, code: 'EXISTING_ENTITY' }) };
+    }
+    return created;
+  }
+
+  let payload = {}; try { payload = JSON.parse(created.body || '{}'); } catch {}
+  const artistId = payload.artist && payload.artist.id;
+  if (!artistId) return { statusCode: 500, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Created artist id missing', code: 'JOIN_CREATE_INCOMPLETE' }) };
+
+  const userId = auth.user.userId;
+  const membershipId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const membership = {
+    membership_id: membershipId, user_id: userId, artist_id: artistId,
+    membership_type: 'owner', role: 'owner', status: 'active', permissions: [],
+    display_name: null, avatar_url: null, instrument: null, bio: null,
+    icon: 'fa-music', color: '#708090', joined_at: now, invited_at: now,
+    invited_by_user_id: userId, created_at: now, updated_at: now
+  };
+
+  try {
+    await dynamodb.transactWrite({ TransactItems: [
+      { Put: { TableName: MEMBERSHIPS_TABLE, Item: membership, ConditionExpression: 'attribute_not_exists(membership_id)' } },
+      { Update: {
+        TableName: 'bndy-artists', Key: { id: artistId },
+        UpdateExpression: 'SET owner_user_id = :uid, claimedByUserId = :uid, updated_at = :now',
+        ConditionExpression: 'attribute_exists(id) AND (attribute_not_exists(owner_user_id) OR owner_user_id = :none)',
+        ExpressionAttributeValues: { ':uid': userId, ':now': now, ':none': null }
+      } }
+    ] }).promise();
+  } catch (ownershipError) {
+    console.error('[JOIN_ARTIST] ownership failed; compensating', ownershipError);
+    try {
+      await dynamodb.delete({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();
+      const { keys } = buildArtistUniqueKeys(name, location, body.facebookUrl, body.nameVariants || []);
+      await releaseUniqueKeys(dynamodb, keys, artistId);
+    } catch (cleanupError) { console.error('[JOIN_ARTIST] compensation failed', cleanupError); }
+    return { statusCode: 500, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Could not establish artist ownership', code: 'JOIN_OWNERSHIP_FAILED' }) };
+  }
+
+  // Owner-supplied facts become Backline claims only once ownership is durable.
+  try {
+    const persisted = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();
+    if (persisted.Item) await publishUserCreatedArtistClaims(persisted.Item);
+  } catch (e) { console.error('[JOIN_ARTIST] Backline write failed; Join remains valid', e); }
+
+  return { statusCode: 201, headers: getCommunityHeaders(), body: JSON.stringify({ action: 'created', artist: { ...payload.artist, ownerUserId: userId }, relationship: { id: membershipId, role: 'owner', status: 'active' } }) };
 }
 
 // ============================================================================

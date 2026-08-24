@@ -137,6 +137,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/find-or-create/mcp
             Method: POST
+        JoinArtist:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/join/artists
+            Method: POST
         # SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)
         CommunityFindOrCreateArtist:
           Type: HttpApi
