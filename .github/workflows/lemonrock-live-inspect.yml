@@ -20,7 +20,7 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
-      - name: Inspect live Backline ingestion
+      - name: Publish live state
         run: |
           set -euo pipefail
           TABLE=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query "Stacks[0].Outputs[?OutputKey=='StateTableName'].OutputValue | [0]" --output text)
@@ -28,40 +28,14 @@ jobs:
           WORKER=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query "Stacks[0].Outputs[?OutputKey=='SourceWorkerFunctionName'].OutputValue | [0]" --output text)
           aws dynamodb query --table-name "$TABLE" --key-condition-expression "pk = :pk AND begins_with(sk, :prefix)" --expression-attribute-values '{":pk":{"S":"BOOTSTRAP#lemonrock"},":prefix":{"S":"TASK#"}}' --output json > /tmp/tasks.json
           aws dynamodb scan --table-name "$TABLE" --filter-expression "begins_with(pk, :p) AND sk = :sk" --expression-attribute-values '{":p":{"S":"SOURCE#lemonrock"},":sk":{"S":"CONFIG"}}' --output json > /tmp/sources.json
-          node - <<'NODE' > /tmp/observations.json
-          const { execFileSync } = require('child_process');
-          const table = process.env.TABLE;
-          const sources = [
-            'lemonrock-artist-index','lemonrock-venue-index','lemonrock-artist-hydration','lemonrock-venue-hydration',
-            'lemonrock-gig-hydration','lemonrock-future-reconcile','lemonrock-new-gigs','lemonrock-cancellations','lemonrock-full-reconcile'
-          ];
-          const out = {};
-          for (const source of sources) {
-            const values = JSON.stringify({':pk':{S:`SOURCE#${source}`}});
-            try {
-              const raw = execFileSync('aws',['dynamodb','query','--table-name',table,'--index-name','ObservationClaimsIndex','--key-condition-expression','GSI1PK = :pk','--expression-attribute-values',values,'--select','COUNT','--output','json'],{encoding:'utf8'});
-              out[source] = JSON.parse(raw).Count || 0;
-            } catch (e) { out[source] = -1; }
-          }
-          console.log(JSON.stringify(out,null,2));
-          NODE
-        env:
-          TABLE: ${{ env.TABLE }}
-      - name: Publish live state
-        run: |
-          set -euo pipefail
-          TABLE=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query "Stacks[0].Outputs[?OutputKey=='StateTableName'].OutputValue | [0]" --output text)
-          QUEUE_URL=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query "Stacks[0].Outputs[?OutputKey=='SourceScanQueueUrl'].OutputValue | [0]" --output text)
-          WORKER=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query "Stacks[0].Outputs[?OutputKey=='SourceWorkerFunctionName'].OutputValue | [0]" --output text)
           export TABLE
           node - <<'NODE' > /tmp/observations.json
           const { execFileSync } = require('child_process');
-          const table = process.env.TABLE;
           const sources = ['lemonrock-artist-index','lemonrock-venue-index','lemonrock-artist-hydration','lemonrock-venue-hydration','lemonrock-gig-hydration','lemonrock-future-reconcile','lemonrock-new-gigs','lemonrock-cancellations','lemonrock-full-reconcile'];
           const out = {};
           for (const source of sources) {
             const values = JSON.stringify({':pk':{S:`SOURCE#${source}`}});
-            const raw = execFileSync('aws',['dynamodb','query','--table-name',table,'--index-name','ObservationClaimsIndex','--key-condition-expression','GSI1PK = :pk','--expression-attribute-values',values,'--select','COUNT','--output','json'],{encoding:'utf8'});
+            const raw = execFileSync('aws',['dynamodb','query','--table-name',process.env.TABLE,'--index-name','ObservationClaimsIndex','--key-condition-expression','GSI1PK = :pk','--expression-attribute-values',values,'--select','COUNT','--output','json'],{encoding:'utf8'});
             out[source] = JSON.parse(raw).Count || 0;
           }
           console.log(JSON.stringify(out));
