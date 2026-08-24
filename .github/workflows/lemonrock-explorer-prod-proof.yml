@@ -34,14 +34,19 @@ jobs:
         id: prove
         continue-on-error: true
         run: |
-          set -o pipefail
           mkdir -p ops
           STATUS=success
-          {
-            SRC=$(aws cloudformation describe-stack-resources --stack-name bndy-serverless-api --output json | jq -r '.StackResources[] | select(.ResourceType=="AWS::Lambda::Function" and (.LogicalResourceId|test("SourceRuns";"i"))) | .PhysicalResourceId' | head -1)
-            if [ -z "$SRC" ]; then SRC=$(aws lambda list-functions --query "Functions[?contains(FunctionName, 'SourceRuns') || contains(FunctionName, 'source-runs')].FunctionName | [0]" --output text); fi
+          (
+            set -euo pipefail
+            SRC=$(aws cloudformation describe-stack-resources --stack-name bndy-serverless-api --output json \
+              | jq -r '.StackResources[] | select(.ResourceType=="AWS::Lambda::Function" and (.LogicalResourceId|test("SourceRuns";"i"))) | .PhysicalResourceId' \
+              | awk 'NF && $0 != "None" {print; exit}')
+            if [ -z "$SRC" ]; then
+              SRC=$(aws lambda list-functions --query "Functions[?contains(FunctionName, 'SourceRuns') || contains(FunctionName, 'source-runs')].FunctionName" --output text \
+                | tr '\t' '\n' | awk 'NF && $0 != "None" {print; exit}')
+            fi
             echo "source-runs-function=$SRC"
-            test -n "$SRC" && test "$SRC" != "None"
+            test -n "$SRC"
             CFG=$(aws lambda get-function-configuration --function-name "$SRC")
             echo "source-runs-last-modified=$(echo "$CFG" | jq -r .LastModified)"
             aws lambda invoke --function-name "$SRC" --cli-binary-format raw-in-base64-out \
@@ -57,16 +62,17 @@ jobs:
             APP=$(echo "$APPS" | jq -c '[.apps[] | select((.name|ascii_downcase|contains("backstage")) or ((.repository // "")|ascii_downcase|contains("bndy-backstage")))] | first // {}')
             echo "amplify-app=$(echo "$APP" | jq -r '.name // "none"')"
             APP_ID=$(echo "$APP" | jq -r '.appId // empty')
-            if [ -n "$APP_ID" ]; then
-              BRANCHES=$(aws amplify list-branches --app-id "$APP_ID" --output json)
-              BRANCH=$(echo "$BRANCHES" | jq -r '[.branches[] | select(.branchName=="main")] | first | .branchName // empty')
-              if [ -n "$BRANCH" ]; then JOBS=$(aws amplify list-jobs --app-id "$APP_ID" --branch-name "$BRANCH" --max-results 5 --output json); else JOBS='{"jobSummaries":[]}'; fi
-            else
-              BRANCHES='{"branches":[]}'
-              JOBS='{"jobSummaries":[]}'
-            fi
+            test -n "$APP_ID"
+            BRANCHES=$(aws amplify list-branches --app-id "$APP_ID" --output json)
+            BRANCH=$(echo "$BRANCHES" | jq -r '[.branches[] | select(.branchName=="main")] | first | .branchName // empty')
+            test -n "$BRANCH"
+            JOBS=$(aws amplify list-jobs --app-id "$APP_ID" --branch-name "$BRANCH" --max-results 5 --output json)
+            LATEST_STATUS=$(echo "$JOBS" | jq -r '.jobSummaries[0].status // empty')
+            echo "amplify-latest-status=$LATEST_STATUS"
+            test "$LATEST_STATUS" = "SUCCEED"
+
             jq -n --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg sourceRunsFunction "$SRC" --argjson cfg "$CFG" --argjson response "$(cat /tmp/explorer-response.json)" --argjson amplifyApp "$APP" --argjson amplifyBranches "$BRANCHES" --argjson amplifyJobs "$JOBS" '{verifiedAt:$verifiedAt,sourceRunsFunction:$sourceRunsFunction,sourceRunsLastModified:$cfg.LastModified,explorerUnauthenticatedProbe:{statusCode:$response.statusCode,body:($response.body|fromjson? // $response.body)},amplifyApp:$amplifyApp,amplifyBranches:$amplifyBranches.branches,amplifyRecentJobs:$amplifyJobs.jobSummaries}' > ops/lemonrock-explorer-prod-proof.json
-          } > /tmp/explorer-proof.log 2>&1 || STATUS=failure
+          ) > /tmp/explorer-proof.log 2>&1 || STATUS=failure
           cp /tmp/explorer-proof.log ops/lemonrock-explorer-prod-proof.log
           test "$STATUS" = success
       - name: Publish proof result
