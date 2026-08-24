@@ -1,0 +1,8 @@
+{
+  "name": "bndy-join-analytics-lambda",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "aws-sdk": "^2.1692.0"
+  }
+}
