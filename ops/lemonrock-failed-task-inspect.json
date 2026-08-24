@@ -1,20 +1,6 @@
 {
-  "verifiedAt": "2026-08-24T05:15:37Z",
+  "verifiedAt": "2026-08-24T05:23:41Z",
   "failedTasks": [
-    {
-      "lastError": {
-        "S": "fetch failed"
-      },
-      "sk": {
-        "S": "TASK#root:artist-retry:2026-08-24T04-49-31-180Z"
-      },
-      "status": {
-        "S": "failed"
-      },
-      "updatedAt": {
-        "S": "2026-08-24T05:04:35.460Z"
-      }
-    },
     {
       "lastError": {
         "S": "fetch failed"
@@ -32,24 +18,48 @@
   ],
   "dlqMessages": [
     {
-      "messageId": "780c4f71-d3bf-4b96-9909-dfcad078c029",
+      "messageId": "3592fd37-fc95-4371-ae80-8b85decbb3ad",
       "body": {
-        "sourceId": "lemonrock-cancellations",
-        "reason": "scheduled"
+        "sourceId": "lemonrock-artist-index",
+        "reason": "manual",
+        "requestedAt": "2026-08-24T04:36:38.445Z",
+        "taskKey": "root:discovery:lemonrock-artist-index:2026-08-24T04-36-38-445Z",
+        "task": {
+          "kind": "artist-index",
+          "url": "https://www.lemonrock.com/advancedsearchbands.php?_start=0",
+          "bootstrapMode": "discovery",
+          "bootstrapToken": "2026-08-24T04-36-38-445Z"
+        }
       }
     },
     {
-      "messageId": "780c4f71-d3bf-4b96-9909-dfcad078c029",
+      "messageId": "3592fd37-fc95-4371-ae80-8b85decbb3ad",
       "body": {
-        "sourceId": "lemonrock-cancellations",
-        "reason": "scheduled"
+        "sourceId": "lemonrock-artist-index",
+        "reason": "manual",
+        "requestedAt": "2026-08-24T04:36:38.445Z",
+        "taskKey": "root:discovery:lemonrock-artist-index:2026-08-24T04-36-38-445Z",
+        "task": {
+          "kind": "artist-index",
+          "url": "https://www.lemonrock.com/advancedsearchbands.php?_start=0",
+          "bootstrapMode": "discovery",
+          "bootstrapToken": "2026-08-24T04-36-38-445Z"
+        }
       }
     },
     {
-      "messageId": "780c4f71-d3bf-4b96-9909-dfcad078c029",
+      "messageId": "3592fd37-fc95-4371-ae80-8b85decbb3ad",
       "body": {
-        "sourceId": "lemonrock-cancellations",
-        "reason": "scheduled"
+        "sourceId": "lemonrock-artist-index",
+        "reason": "manual",
+        "requestedAt": "2026-08-24T04:36:38.445Z",
+        "taskKey": "root:discovery:lemonrock-artist-index:2026-08-24T04-36-38-445Z",
+        "task": {
+          "kind": "artist-index",
+          "url": "https://www.lemonrock.com/advancedsearchbands.php?_start=0",
+          "bootstrapMode": "discovery",
+          "bootstrapToken": "2026-08-24T04-36-38-445Z"
+        }
       }
     }
   ]
