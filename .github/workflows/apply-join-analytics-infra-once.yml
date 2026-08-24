@@ -1,0 +1,54 @@
+name: Apply Join analytics infrastructure once
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Run Join analytics infrastructure')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Add Join analytics table and route
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const p = 'template.yaml';
+          let t = fs.readFileSync(p, 'utf8');
+          const resourceAnchor = '  EntityClaimsTable:\n';
+          if (!t.includes('JoinAnalyticsTable:')) {
+            const i = t.indexOf(resourceAnchor);
+            if (i < 0) throw new Error('EntityClaimsTable anchor missing');
+            const table = `  JoinAnalyticsTable:\n    Type: AWS::DynamoDB::Table\n    DeletionPolicy: Retain\n    UpdateReplacePolicy: Retain\n    Properties:\n      TableName: bndy-join-analytics\n      BillingMode: PAY_PER_REQUEST\n      AttributeDefinitions:\n        - AttributeName: id\n          AttributeType: S\n      KeySchema:\n        - AttributeName: id\n          KeyType: HASH\n      TimeToLiveSpecification:\n        AttributeName: expires_at\n        Enabled: true\n\n`;
+            t = t.slice(0, i) + table + t.slice(i);
+          }
+
+          const functionAnchor = '  # Auth Lambda\n';
+          if (!t.includes('JoinAnalyticsFunction:')) {
+            const i = t.indexOf(functionAnchor);
+            if (i < 0) throw new Error('Auth Lambda anchor missing');
+            const fn = `  JoinAnalyticsFunction:\n    Type: AWS::Serverless::Function\n    Properties:\n      Description: Privacy-minimised Join bndy funnel telemetry\n      CodeUri: ./join-analytics-lambda/\n      Handler: handler.handler\n      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role\n      Environment:\n        Variables:\n          JOIN_ANALYTICS_TABLE: !Ref JoinAnalyticsTable\n      Events:\n        RecordJoinAnalytics:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/join/analytics\n            Method: POST\n\n`;
+            t = t.slice(0, i) + fn + t.slice(i);
+          }
+          fs.writeFileSync(p, t);
+          NODE
+          node --check join-analytics-lambda/handler.js
+          npm run validate
+          npm run verify-routes
+      - name: Commit infrastructure
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add template.yaml
+          git commit -m 'Enable Join funnel analytics route'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
