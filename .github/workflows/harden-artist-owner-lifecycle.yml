@@ -1,0 +1,58 @@
+name: Harden Artist owner lifecycle
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Run Artist owner lifecycle hardening')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Protect owner membership lifecycle
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const p = 'memberships-lambda/handler.js';
+          let s = fs.readFileSync(p, 'utf8');
+
+          s = s.replaceAll("if (!userMembership || userMembership.role !== 'admin') {", "if (!userMembership || !['admin', 'owner'].includes(userMembership.role)) {");
+          s = s.replaceAll("return createResponse(403, { error: 'Only artist admins can change roles' });", "return createResponse(403, { error: 'Only artist admins or owners can change roles' });");
+
+          const updateAnchor = `    const existingMembership = existingResult.Item;\n    const isOwnMembership = existingMembership.user_id === user.userId;\n    const isRoleChange = role !== undefined && role !== existingMembership.role;\n`;
+          const updateReplacement = `${updateAnchor}\n    // Ownership is a separate lifecycle. It cannot be demoted through generic\n    // membership editing; use the explicit transfer/relinquish operation.\n    if (existingMembership.role === 'owner' && isRoleChange && !user.platformAdmin) {\n      return createResponse(409, { error: 'Owner role must be changed through ownership transfer', code: 'OWNER_LIFECYCLE_REQUIRED' });\n    }\n`;
+          if (!s.includes('Owner role must be changed through ownership transfer')) {
+            if (!s.includes(updateAnchor)) throw new Error('Update membership anchor missing');
+            s = s.replace(updateAnchor, updateReplacement);
+          }
+
+          const deleteAnchor = `    const existingMembership = membershipResult.Item;\n    const isOwnMembership = existingMembership.user_id === user.userId;\n`;
+          const deleteReplacement = `${deleteAnchor}\n    // Never let an Artist owner accidentally orphan the entity by leaving like a\n    // normal member. Ownership must be transferred or deliberately relinquished.\n    if (existingMembership.role === 'owner' && !user.platformAdmin) {\n      return createResponse(409, { error: 'Transfer or relinquish ownership before removing the owner membership', code: 'OWNER_LIFECYCLE_REQUIRED' });\n    }\n`;
+          if (!s.includes('Transfer or relinquish ownership before removing the owner membership')) {
+            const idx = s.indexOf(deleteAnchor, s.indexOf('// Delete membership'));
+            if (idx < 0) throw new Error('Delete membership anchor missing');
+            s = s.slice(0, idx) + s.slice(idx).replace(deleteAnchor, deleteReplacement);
+          }
+
+          fs.writeFileSync(p, s);
+          NODE
+          node --check memberships-lambda/handler.js
+          npm run validate
+          npm run verify-routes
+      - name: Commit
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add memberships-lambda/handler.js
+          git commit -m 'Protect Artist owner lifecycle from delegate mutations'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
