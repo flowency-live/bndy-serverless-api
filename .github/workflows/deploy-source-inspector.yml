@@ -233,9 +233,9 @@ jobs:
           test "$status" = "422"
           grep -q 'NOT_FACEBOOK_URL' /tmp/source-inspector-host.json
 
-          status=$(curl -sS -o /tmp/source-inspector-ahundredendings.json -w '%{http_code}' \\
-            -X POST "$URL" \\
-            -H 'content-type: application/json' \\
+          status=$(curl -sS -o /tmp/source-inspector-ahundredendings.json -w '%{http_code}' \
+            -X POST "$URL" \
+            -H 'content-type: application/json' \
             --data '{"input":"https://www.facebook.com/ahundredendings","expectedType":"artist"}')
           test "$status" = "200"
           jq -e '.observed.name == "A Hundred Endings"' /tmp/source-inspector-ahundredendings.json
