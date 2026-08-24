@@ -53,6 +53,7 @@ jobs:
           NODE
           TASK_COUNT=$(jq '.Count // 0' /tmp/tasks.json)
           TASK_STATUS=$(jq -c '[.Items[]?.status.S] | sort | group_by(.) | map({(.[0]):length}) | add // {}' /tmp/tasks.json)
+          FAILED=$(jq -c '[.Items[] | select(.status.S=="failed") | {sk:.sk.S,sourceId:(.sourceId.S//null),lastError:(.lastError.S//null),sourceUrl:(.sourceUrl.S//null),taskKind:(.taskKind.S//null),logicalTaskKey:(.logicalTaskKey.S//null),updatedAt:(.updatedAt.S//null)}][0:10]' /tmp/tasks.json)
           SOURCE_SUMMARY=$(jq -c '[.Items[] | {id:.id.S,enabled:(.enabled.BOOL//false),shadow:(.shadow.BOOL//false),health:(.health.S//"unknown")}]' /tmp/sources.json)
           OBS=$(cat /tmp/observations.json)
           QUEUE=$(aws sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible ApproximateNumberOfMessagesDelayed)
@@ -68,11 +69,11 @@ jobs:
           jq -n \
             --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg table "$TABLE" --arg worker "$WORKER" \
-            --argjson taskCount "$TASK_COUNT" --argjson taskStatus "$TASK_STATUS" \
+            --argjson taskCount "$TASK_COUNT" --argjson taskStatus "$TASK_STATUS" --argjson failed "$FAILED" \
             --argjson sources "$SOURCE_SUMMARY" --argjson observations "$OBS" \
             --argjson queue "$QUEUE" --argjson indexes "$INDEXES" --argjson rules "$RULES" \
             --arg inv "$INV" --arg err "$ERR" \
-            '{verifiedAt:$verifiedAt,stateTable:$table,sourceWorker:$worker,indexes:$indexes,taskCount:$taskCount,taskStatusCounts:$taskStatus,sources:$sources,observations:$observations,queue:$queue.Attributes,eventRules:$rules,workerInvocations15m:($inv|tonumber),workerErrors15m:($err|tonumber)}' > ops/lemonrock-live-state.json
+            '{verifiedAt:$verifiedAt,stateTable:$table,sourceWorker:$worker,indexes:$indexes,taskCount:$taskCount,taskStatusCounts:$taskStatus,failedTasks:$failed,sources:$sources,observations:$observations,queue:$queue.Attributes,eventRules:$rules,workerInvocations15m:($inv|tonumber),workerErrors15m:($err|tonumber)}' > ops/lemonrock-live-state.json
           cat ops/lemonrock-live-state.json
           printf '{"phase":"finished","status":"success","runId":"%s","finishedAt":"%s"}\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-live-inspect-run.json
           git config user.name "bndy-backline-bot"
