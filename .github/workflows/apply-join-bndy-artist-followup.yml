@@ -1,0 +1,70 @@
+name: Apply Join artist ownership follow-up
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Run Join artist followup')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Expose aliases and authorise owners
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const artistPath = 'artists-lambda/handler.js';
+          const membershipPath = 'memberships-lambda/handler.js';
+          let a = fs.readFileSync(artistPath, 'utf8');
+          let m = fs.readFileSync(membershipPath, 'utf8');
+
+          function replace(src, from, to, label, all = false) {
+            if (src.includes(to)) return src;
+            if (!src.includes(from)) throw new Error(`Missing ${label}`);
+            return all ? src.split(from).join(to) : src.replace(from, to);
+          }
+
+          m = replace(m, "if (!membership || membership.role !== 'admin') {", "if (!membership || !['admin', 'owner'].includes(membership.role)) {", 'owner auth');
+          m = replace(m, "return { error: 'Artist admin access required', statusCode: 403 };", "return { error: 'Artist admin or owner access required', statusCode: 403 };", 'owner auth message');
+
+          a = replace(a,
+            "return { id: a.id, name: a.name, location: a.location || '', sim, sharedToken, slugEqual, region: candidateRegion, sameRegion };",
+            "return { id: a.id, name: a.name, location: a.location || '', nameVariants: a.name_variants || [], sim, sharedToken, slugEqual, region: candidateRegion, sameRegion };",
+            'scored aliases');
+          a = replace(a,
+            "artist: { id: candidate.id, name: candidate.name, location: candidate.location, ...editionMetadata(candidate) },",
+            "artist: { id: candidate.id, name: candidate.name, location: candidate.location, nameVariants: variants, ...editionMetadata(candidate) },",
+            'variant aliases');
+          a = replace(a,
+            "artist: { id: best.id, name: best.name, location: best.location, ...editionMetadata(best) },",
+            "artist: { id: best.id, name: best.name, location: best.location, nameVariants: best.nameVariants || [], ...editionMetadata(best) },",
+            'matched aliases');
+          a = replace(a,
+            "id: s.id, name: s.name, location: s.location,\n              confidence:",
+            "id: s.id, name: s.name, location: s.location, nameVariants: s.nameVariants || [],\n              confidence:",
+            'review aliases', true);
+
+          fs.writeFileSync(artistPath, a);
+          fs.writeFileSync(membershipPath, m);
+          NODE
+          node --check artists-lambda/handler.js
+          node --check memberships-lambda/handler.js
+          npm run validate
+          npm run verify-routes
+      - name: Commit
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add artists-lambda/handler.js memberships-lambda/handler.js
+          git commit -m 'Finish Join artist ownership semantics and aliases'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
