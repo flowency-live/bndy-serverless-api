@@ -120,7 +120,7 @@ function hasEvidence(value, urls) {
 }
 
 function normaliseIdentity(value) {
-  return String(value || '').normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return String(value || '').normalize('NFKD').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 function identityMatchesFacebookHandle(facebookUrl, name) {
