@@ -1,0 +1,6 @@
+checked_at=2026-08-24T20:17:12Z
+pass=false
+analytics_status=404 body={"message":"Not Found"}
+artist_without_auth_status=401 body={"error":"Not authenticated","code":"AUTH_REQUIRED"}
+venue_without_auth_status=401 body={"error":"Not authenticated","code":"AUTH_REQUIRED"}
+unknown_invite_status=404 body={"error":"Invite not found","code":"INVITE_NOT_FOUND"}
