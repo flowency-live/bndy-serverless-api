@@ -1,0 +1,263 @@
+{
+  "verifiedAt": "2026-08-24T06:26:46Z",
+  "sourceWorker": "BndyEnrichmentStack-SourceWorker336FEA29-ghZk2mBRjOks",
+  "dlq": {
+    "ApproximateNumberOfMessages": "11",
+    "ApproximateNumberOfMessagesNotVisible": "0"
+  },
+  "messages": [
+    {
+      "messageId": "57c8f58c-9e1b-435c-aa44-46596238cdf3",
+      "body": {
+        "sourceId": "lemonrock-new-gigs",
+        "reason": "scheduled"
+      },
+      "approxReceiveCount": "4",
+      "sentTimestamp": "1787546522341"
+    },
+    {
+      "messageId": "b6666f27-cb29-473d-9f28-5b275e97b30e",
+      "body": {
+        "sourceId": "lemonrock-cancellations",
+        "reason": "scheduled"
+      },
+      "approxReceiveCount": "4",
+      "sentTimestamp": "1787548322343"
+    },
+    {
+      "messageId": "d3e418f1-be02-4d98-82f5-50e2398a68e1",
+      "body": {
+        "sourceId": "lemonrock-new-gigs",
+        "reason": "scheduled"
+      },
+      "approxReceiveCount": "4",
+      "sentTimestamp": "1787547422323"
+    }
+  ],
+  "recentFailureLogs": [
+    {
+      "timestamp": 1787545622828,
+      "message": "2026-08-24T04:27:02.828Z\t68701059-534a-5691-9ca3-735c990879dc\tERROR\tSourceWorker failed Error: Unknown source: lemonrock-cancellations\n    at Runtime.Pi [as handler] (/var/task/index.js:9:19963)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787545622862,
+      "message": "2026-08-24T04:27:02.862Z\tbfc9cfe6-bd95-50c0-9235-ace377d7b490\tERROR\tSourceWorker failed Error: Unknown source: lemonrock-new-gigs\n    at Runtime.Pi [as handler] (/var/task/index.js:9:19963)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787546200730,
+      "message": "2026-08-24T04:36:40.730Z\te9701240-8fcd-52b0-ac71-71454345afbc\tERROR\tSourceWorker failed Error: fetch failed\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787546522770,
+      "message": "2026-08-24T04:42:02.770Z\ta6e380fd-d3aa-5fc9-83a3-e3f81e706138\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787546523499,
+      "message": "2026-08-24T04:42:03.499Z\tcf28a893-4920-57a2-8827-cb9684fa7953\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787546975229,
+      "message": "2026-08-24T04:49:35.229Z\tcaa870cc-cbe9-5c59-9ecc-13c90476ed73\tERROR\tSourceWorker failed Error: fetch failed\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787547051734,
+      "message": "2026-08-24T04:50:51.734Z\t611d119f-3d32-50fd-8914-729af2d9faae\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787547083631,
+      "message": "2026-08-24T04:51:23.631Z\tec3323e3-b3f9-5610-85cc-40e663f3ae86\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787547100441,
+      "message": "2026-08-24T04:51:40.441Z\t6a4774ca-3bfd-509a-acfa-17cfebebb0f7\tERROR\tSourceWorker failed Error: fetch failed\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787547423451,
+      "message": "2026-08-24T04:57:03.451Z\t4656a525-cbe7-5a98-9bd8-c6201aac9cf5\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787547423918,
+      "message": "2026-08-24T04:57:03.918Z\tf6f23f8b-48fb-54c8-96a1-5c8e99a71dc6\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787547424331,
+      "message": "2026-08-24T04:57:04.331Z\tfcbb7521-bb0f-5f7b-b14d-16246a411f72\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787547424333,
+      "message": "2026-08-24T04:57:04.333Z\t5f076b49-7068-5206-9458-084ca133d3f5\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787547875460,
+      "message": "2026-08-24T05:04:35.460Z\t97973fce-1be1-55aa-b08a-5ccbc8ff5f59\tERROR\tSourceWorker failed Error: fetch failed\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787547951882,
+      "message": "2026-08-24T05:05:51.882Z\tcb9e1cdd-ee99-5b22-be3a-7fd83df2a83a\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787547984457,
+      "message": "2026-08-24T05:06:24.457Z\tb078f286-786e-514a-84fc-9183abea7252\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787548009041,
+      "message": "2026-08-24T05:06:49.041Z\t14b29779-42ea-55c8-92ea-f47c914286d0\tERROR\tSourceWorker failed Error: fetch failed\n    at Runtime.Pi [as handler] (/var/task/index.js:9:20244)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787548323188,
+      "message": "2026-08-24T05:12:03.188Z\t844da589-ff35-59e3-9014-c68c2bd7fc94\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787548323264,
+      "message": "2026-08-24T05:12:03.264Z\t2528592c-4598-5f8b-b89d-3a29917a9198\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787548323988,
+      "message": "2026-08-24T05:12:03.988Z\tba088f0a-ebf6-58b7-b1b8-ec0f3f1546a4\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787548324323,
+      "message": "2026-08-24T05:12:04.323Z\t90cc4287-d591-573d-82c3-21820172324a\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787548613900,
+      "message": "2026-08-24T05:16:53.900Z\t989fb727-bae0-5a86-b216-d4226ce1eb4a\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787548614405,
+      "message": "2026-08-24T05:16:54.405Z\tae4fa634-aff9-5e70-9279-c5317a045f83\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787548851779,
+      "message": "2026-08-24T05:20:51.779Z\t8b27d282-de32-54f9-94ca-b18708d69df7\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787548883531,
+      "message": "2026-08-24T05:21:23.531Z\t089ad945-e2fb-500e-8046-ba4035f0525b\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787549223480,
+      "message": "2026-08-24T05:27:03.480Z\t0702d2ad-621a-5060-b66e-b1a8ba4ff0f4\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787549223857,
+      "message": "2026-08-24T05:27:03.857Z\t5949aebf-9f5a-5217-bdde-cdba4706fbd9\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787549224092,
+      "message": "2026-08-24T05:27:04.092Z\tce12c1bb-9d70-579e-9ece-a2be4517670a\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787549224534,
+      "message": "2026-08-24T05:27:04.534Z\t78d2f7f0-b473-5812-891d-94f56c1bc886\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787549225555,
+      "message": "2026-08-24T05:27:05.555Z\t8dd3aa44-4191-565e-8031-c94199f9a6ca\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787549226357,
+      "message": "2026-08-24T05:27:06.357Z\t44731065-10dc-5efc-8f8d-7360c8b55732\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787549413197,
+      "message": "2026-08-24T05:30:13.197Z\tc0e06c55-64a6-5db5-a694-0f50bdb90f60\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787549513971,
+      "message": "2026-08-24T05:31:53.971Z\t6d2bbf58-119e-5f01-882c-dc5dc8eb9dd4\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787549514394,
+      "message": "2026-08-24T05:31:54.394Z\tb032769d-8e23-5fe1-9e7d-159857a65f88\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787550122799,
+      "message": "2026-08-24T05:42:02.799Z\t31ee5cfd-327b-57bf-82de-3ff8e99867ad\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787550123788,
+      "message": "2026-08-24T05:42:03.788Z\t4ae6e2ef-2d8c-52ff-9aa4-81eaf66fa2ad\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787550123982,
+      "message": "2026-08-24T05:42:03.982Z\t969e91a0-ddea-5c6d-a635-f2a50601ac7f\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787550124793,
+      "message": "2026-08-24T05:42:04.793Z\t7400385e-16f0-537c-993a-5b5bcd1c136e\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787550125705,
+      "message": "2026-08-24T05:42:05.705Z\t33f34da2-48fc-5f0a-8be7-2ea79311ef18\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787550126342,
+      "message": "2026-08-24T05:42:06.342Z\t35c83de2-fa40-57a5-83b3-5ee721ad67f7\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787550313255,
+      "message": "2026-08-24T05:45:13.255Z\tdf5efcab-90b4-582b-8b1f-9fae4c16a105\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787550413920,
+      "message": "2026-08-24T05:46:53.920Z\t201961fb-f1cc-5112-a4dd-02fe2d35283c\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787550414411,
+      "message": "2026-08-24T05:46:54.411Z\td4f2e3de-58d2-51e6-ae9f-80db85db73d5\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551022638,
+      "message": "2026-08-24T05:57:02.638Z\t32aab592-8f5f-53b1-865b-d69750382bb8\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551023147,
+      "message": "2026-08-24T05:57:03.147Z\t3f8b1b05-063f-5166-b0ff-7800d951796f\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551023940,
+      "message": "2026-08-24T05:57:03.940Z\te557afe5-bed4-5c63-a7a2-cce061b3abcc\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551024160,
+      "message": "2026-08-24T05:57:04.160Z\t8f76242a-bb76-554f-957f-472f64196d46\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551025755,
+      "message": "2026-08-24T05:57:05.755Z\t35d346da-3c7a-5b41-b739-25dfe30a6348\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551025799,
+      "message": "2026-08-24T05:57:05.799Z\t76727a1d-bd08-5284-8571-19186279352b\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551213257,
+      "message": "2026-08-24T06:00:13.257Z\t678a4a36-ab74-595b-953f-29334b5317ae\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551923404,
+      "message": "2026-08-24T06:12:03.404Z\tc3b10aa1-4515-58b6-b115-69a4a7fce11a\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551924937,
+      "message": "2026-08-24T06:12:04.937Z\td3f50f40-583f-5b30-80c1-6c45badcf324\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551925613,
+      "message": "2026-08-24T06:12:05.613Z\ta7eead5b-1b40-5bb7-ba4e-ce5ef9b4621b\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551926632,
+      "message": "2026-08-24T06:12:06.632Z\tbf15628a-b440-5c0a-8caf-018f56b6c41e\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551927029,
+      "message": "2026-08-24T06:12:07.029Z\tdc7cef23-3b89-530f-9c22-8c26d97fcb1b\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    },
+    {
+      "timestamp": 1787551931898,
+      "message": "2026-08-24T06:12:11.898Z\t22038ea2-beef-50f5-b61a-eda75c1418e1\tERROR\tSourceWorker failed Error: Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.\n    at Runtime.ji [as handler] (/var/task/index.js:9:20321)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n"
+    }
+  ]
+}
