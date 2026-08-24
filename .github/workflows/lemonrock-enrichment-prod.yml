@@ -1,0 +1,101 @@
+name: Deploy Lemonrock enrichment to production
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    if: contains(github.event.head_commit.message, 'Deploy Lemonrock enrichment production')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - name: Publish run start
+        run: |
+          set -euo pipefail
+          mkdir -p ops
+          printf '{"phase":"started","runId":"%s","sha":"%s","startedAt":"%s"}\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-enrichment-production-run.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-enrichment-production-run.json
+          git commit -m "Record Lemonrock AWS deployment start"
+          git push origin HEAD:ops/lemonrock-prod-deploy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Check out enrichment main
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch main https://github.com/flowency-live/bndy-enrichment.git /tmp/bndy-enrichment
+      - name: Install enrichment dependencies
+        working-directory: /tmp/bndy-enrichment
+        run: npm install
+      - name: Deploy Backline enrichment stack
+        working-directory: /tmp/bndy-enrichment
+        run: |
+          set -euo pipefail
+          npx cdk bootstrap
+          npx cdk deploy --all --require-approval never --outputs-file cdk-outputs.json
+      - name: Seed and start Lemonrock national discovery
+        working-directory: /tmp/bndy-enrichment
+        run: |
+          set -euo pipefail
+          export STATE_TABLE=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.StateTableName)")
+          export SOURCE_SCAN_QUEUE_URL=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.SourceScanQueueUrl)")
+          npm run lemonrock:bootstrap -- --mode=discovery | tee /tmp/lemonrock-bootstrap-output.txt
+      - name: Confirm production activity
+        working-directory: /tmp/bndy-enrichment
+        run: |
+          set -euo pipefail
+          STATE_TABLE=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.StateTableName)")
+          QUEUE_URL=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.SourceScanQueueUrl)")
+          SOURCE_WORKER=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.SourceWorkerFunctionName)")
+          TASK_COUNT=0
+          OBS_COUNT=0
+          for i in $(seq 1 36); do
+            TASK_COUNT=$(aws dynamodb query --table-name "$STATE_TABLE" --key-condition-expression "pk = :pk AND begins_with(sk, :prefix)" --expression-attribute-values '{":pk":{"S":"BOOTSTRAP#lemonrock"},":prefix":{"S":"TASK#"}}' --select COUNT --query Count --output text)
+            OBS_COUNT=$(aws dynamodb query --table-name "$STATE_TABLE" --index-name ObservationClaimsIndex --key-condition-expression "GSI1PK = :pk AND begins_with(GSI1SK, :prefix)" --expression-attribute-values '{":pk":{"S":"SOURCE#lemonrock-artist-index"},":prefix":{"S":"OBS#"}}' --select COUNT --query Count --output text)
+            if [ "$TASK_COUNT" -gt 0 ] || [ "$OBS_COUNT" -gt 0 ]; then break; fi
+            sleep 5
+          done
+          QUEUE=$(aws sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible)
+          WORKER_ENV=$(aws lambda get-function-configuration --function-name "$SOURCE_WORKER" --query 'Environment.Variables.SOURCE_SCAN_QUEUE_URL' --output text)
+          SOURCE=$(aws dynamodb get-item --table-name "$STATE_TABLE" --key '{"pk":{"S":"SOURCE#lemonrock-artist-index"},"sk":{"S":"CONFIG"}}')
+          jq -n \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg enrichmentSha "$(git rev-parse HEAD)" \
+            --arg stateTable "$STATE_TABLE" \
+            --arg sourceWorker "$SOURCE_WORKER" \
+            --arg workerQueueEnv "$WORKER_ENV" \
+            --argjson taskCount "$TASK_COUNT" \
+            --argjson observationCount "$OBS_COUNT" \
+            --argjson queue "$QUEUE" \
+            --argjson source "$SOURCE" \
+            '{verifiedAt:$verifiedAt,deployment:"success",enrichmentSha:$enrichmentSha,stateTable:$stateTable,sourceWorker:$sourceWorker,sourceWorkerQueueConfigured:($workerQueueEnv != "None" and $workerQueueEnv != ""),lemonrockTaskCount:$taskCount,artistIndexObservationCount:$observationCount,queue:$queue.Attributes,artistIndexSource:$source.Item,shadowMode:true,canonicalWritesEnabled:false}' \
+            > /tmp/lemonrock-enrichment-production-status.json
+          cat /tmp/lemonrock-enrichment-production-status.json
+          test "$WORKER_ENV" != "None"
+          test "$TASK_COUNT" -gt 0 -o "$OBS_COUNT" -gt 0
+      - name: Publish production result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          printf '{"phase":"finished","status":"%s","runId":"%s","sha":"%s","finishedAt":"%s"}\n' "$JOB_STATUS" "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-enrichment-production-run.json
+          if [ -f /tmp/lemonrock-enrichment-production-status.json ]; then cp /tmp/lemonrock-enrichment-production-status.json ops/lemonrock-enrichment-production-status.json; fi
+          git add ops/lemonrock-enrichment-production-run.json ops/lemonrock-enrichment-production-status.json 2>/dev/null || git add ops/lemonrock-enrichment-production-run.json
+          git commit -m "Record Lemonrock AWS deployment result" || true
+          git pull --rebase origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
