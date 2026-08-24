@@ -76,6 +76,18 @@ test('embedded Facebook payload extracts only semantic artist/page fields', () =
   });
 });
 
+test('embedded payload ignores generic Facebook UI display names', () => {
+  const html = '<script>{"display_name":"Afrikaans"}</script>';
+
+  assert.deepEqual(parseEmbeddedFacebookDetails(html), {
+    name: null,
+    description: null,
+    location: null,
+    address: null,
+    websiteUrl: null,
+  });
+});
+
 test('existing artist lookup aliases DynamoDB reserved projection fields', async () => {
   let artistGetParams = null;
   const client = {
