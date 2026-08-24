@@ -1,9 +1,15 @@
 {
-  "verifiedAt": "2026-08-24T04:06:08Z",
-  "stackStatus": "UPDATE_ROLLBACK_COMPLETE",
+  "verifiedAt": "2026-08-24T04:11:30Z",
+  "stackStatus": "UPDATE_IN_PROGRESS",
   "table": {
     "TableName": "BndyEnrichmentStack-StateTable9728C7E5-14HR6N3NEWGLM",
     "TableStatus": "ACTIVE",
-    "GSIs": null
+    "GSIs": [
+      {
+        "IndexName": "SourceScheduleIndex",
+        "IndexStatus": "CREATING",
+        "ItemCount": 0
+      }
+    ]
   }
 }
