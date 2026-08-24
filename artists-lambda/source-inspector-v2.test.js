@@ -76,8 +76,8 @@ test('embedded Facebook payload extracts only semantic artist/page fields', () =
   });
 });
 
-test('embedded payload ignores generic Facebook UI display names', () => {
-  const html = '<script>{"display_name":"Afrikaans"}</script>';
+test('embedded payload ignores generic Facebook UI and page names', () => {
+  const html = '<script>{"page_name":"Afrikaans","display_name":"English (UK)"}</script>';
 
   assert.deepEqual(parseEmbeddedFacebookDetails(html), {
     name: null,
