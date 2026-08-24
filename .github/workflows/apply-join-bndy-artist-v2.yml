@@ -1,0 +1,61 @@
+name: Apply Join artist backend v2
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Run Join artist backend v2')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply Join artist endpoint
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const hp = 'artists-lambda/handler.js';
+          const tp = 'template.yaml';
+          let h = fs.readFileSync(hp, 'utf8');
+          let t = fs.readFileSync(tp, 'utf8');
+
+          const insert = (src, anchor, text, label) => {
+            if (src.includes(text.trim())) return src;
+            const i = src.indexOf(anchor);
+            if (i < 0) throw new Error(`Missing ${label} anchor`);
+            return src.slice(0, i) + text + src.slice(i);
+          };
+
+          const route = `    // Join bndy — authenticated new Artist + initial ownership.\n    if (method === 'POST' && path === '/api/join/artists') {\n      return await handleJoinArtist(event);\n    }\n\n`;
+          h = insert(h, "    // Community artist creation endpoint (public, no auth required)\n", route, 'router');
+
+          const fn = `// ============================================================================\n// JOIN BNDY — AUTHENTICATED NEW ARTIST + INITIAL OWNERSHIP\n// ============================================================================\nasync function handleJoinArtist(event) {\n  const auth = await requireAuth(event);\n  if (auth.error) return { statusCode: 401, headers: getCommunityHeaders(), body: JSON.stringify({ error: auth.error, code: 'AUTH_REQUIRED' }) };\n\n  let body;\n  try { body = JSON.parse(event.body || '{}'); } catch { return { statusCode: 400, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Invalid JSON body' }) }; }\n  const name = String(body.name || '').trim();\n  const location = String(body.location || '').trim();\n  if (!name || !location) return { statusCode: 400, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Artist name and location are required' }) };\n\n  // Re-resolve immediately before mutation to close the search/create race.\n  const preflight = await handleFindOrCreateArtist({ ...event, body: JSON.stringify({ ...body, name, location, dryRun: true, canCreate: true, source: 'join_bndy' }) });\n  let verdict = {};\n  try { verdict = JSON.parse(preflight.body || '{}'); } catch {}\n  if (preflight.statusCode !== 200) return preflight;\n  if (verdict.action === 'matched' || verdict.action === 'review') {\n    return { statusCode: 409, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'An existing artist may match this identity', code: 'EXISTING_ENTITY', action: verdict.action, artist: verdict.artist || null, candidates: verdict.candidates || [], matchedBy: verdict.matchedBy || null, variant: verdict.variant || null }) };\n  }\n  if (verdict.action !== 'clear') return { statusCode: 422, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Artist identity is not clear for creation', code: 'IDENTITY_NOT_CLEAR' }) };\n\n  // Reuse the canonical guarded create path. A hard uniqueness collision is\n  // still possible here and is converted back into the existing-entity branch.\n  const created = await handleCreateCommunityArtist({ ...event, body: JSON.stringify({ ...body, name, location, source: 'join_bndy' }) });\n  if (created.statusCode !== 201) {\n    if (created.statusCode === 409) {\n      let duplicate = {}; try { duplicate = JSON.parse(created.body || '{}'); } catch {}\n      return { statusCode: 409, headers: getCommunityHeaders(), body: JSON.stringify({ ...duplicate, code: 'EXISTING_ENTITY' }) };\n    }\n    return created;\n  }\n\n  let payload = {}; try { payload = JSON.parse(created.body || '{}'); } catch {}\n  const artistId = payload.artist && payload.artist.id;\n  if (!artistId) return { statusCode: 500, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Created artist id missing', code: 'JOIN_CREATE_INCOMPLETE' }) };\n\n  const userId = auth.user.userId;\n  const membershipId = crypto.randomUUID();\n  const now = new Date().toISOString();\n  const membership = {\n    membership_id: membershipId, user_id: userId, artist_id: artistId,\n    membership_type: 'owner', role: 'owner', status: 'active', permissions: [],\n    display_name: null, avatar_url: null, instrument: null, bio: null,\n    icon: 'fa-music', color: '#708090', joined_at: now, invited_at: now,\n    invited_by_user_id: userId, created_at: now, updated_at: now\n  };\n\n  try {\n    await dynamodb.transactWrite({ TransactItems: [\n      { Put: { TableName: MEMBERSHIPS_TABLE, Item: membership, ConditionExpression: 'attribute_not_exists(membership_id)' } },\n      { Update: {\n        TableName: 'bndy-artists', Key: { id: artistId },\n        UpdateExpression: 'SET owner_user_id = :uid, claimedByUserId = :uid, updated_at = :now',\n        ConditionExpression: 'attribute_exists(id) AND (attribute_not_exists(owner_user_id) OR owner_user_id = :none)',\n        ExpressionAttributeValues: { ':uid': userId, ':now': now, ':none': null }\n      } }\n    ] }).promise();\n  } catch (ownershipError) {\n    console.error('[JOIN_ARTIST] ownership failed; compensating', ownershipError);\n    try {\n      await dynamodb.delete({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();\n      const { keys } = buildArtistUniqueKeys(name, location, body.facebookUrl, body.nameVariants || []);\n      await releaseUniqueKeys(dynamodb, keys, artistId);\n    } catch (cleanupError) { console.error('[JOIN_ARTIST] compensation failed', cleanupError); }\n    return { statusCode: 500, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Could not establish artist ownership', code: 'JOIN_OWNERSHIP_FAILED' }) };\n  }\n\n  // Owner-supplied facts become Backline claims only once ownership is durable.\n  try {\n    const persisted = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();\n    if (persisted.Item) await publishUserCreatedArtistClaims(persisted.Item);\n  } catch (e) { console.error('[JOIN_ARTIST] Backline write failed; Join remains valid', e); }\n\n  return { statusCode: 201, headers: getCommunityHeaders(), body: JSON.stringify({ action: 'created', artist: { ...payload.artist, ownerUserId: userId }, relationship: { id: membershipId, role: 'owner', status: 'active' } }) };\n}\n\n`;
+          h = insert(h, "// ============================================================================\n// COMMUNITY WIZARD ENDPOINTS (Public, No Auth Required)\n// ============================================================================\n", fn, 'handler');
+
+          const event = `        JoinArtist:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/join/artists\n            Method: POST\n`;
+          t = insert(t, "        # SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)\n", event, 'template');
+
+          fs.writeFileSync(hp, h);
+          fs.writeFileSync(tp, t);
+          NODE
+          node --check artists-lambda/handler.js
+          grep -q "path === '/api/join/artists'" artists-lambda/handler.js
+          grep -q 'Path: /api/join/artists' template.yaml
+          npm run validate
+          npm run verify-routes
+      - name: Commit
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add artists-lambda/handler.js template.yaml
+          git commit -m 'Implement Join bndy owned artist backend'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
