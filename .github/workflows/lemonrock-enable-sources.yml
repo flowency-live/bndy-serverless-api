@@ -1,0 +1,52 @@
+name: Enable Lemonrock production sources
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  enable:
+    if: contains(github.event.head_commit.message, 'Enable Lemonrock source registry')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - name: Publish run start
+        run: |
+          mkdir -p ops
+          printf '{"phase":"started","runId":"%s","startedAt":"%s"}\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-enable-run.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-enable-run.json
+          git commit -m "Record Lemonrock enable run start"
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Seed enabled shadow source configs
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch main https://github.com/flowency-live/bndy-enrichment.git /tmp/bndy-enrichment
+          cd /tmp/bndy-enrichment
+          npm install
+          export STATE_TABLE=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query "Stacks[0].Outputs[?OutputKey=='StateTableName'].OutputValue | [0]" --output text)
+          npx tsx -e "import { SourceRegistryStore } from './src/knowledge/stores/source-registry-store.ts'; import { LEMONROCK_SOURCES } from './src/sources/adapters/lemonrock/sources.ts'; (async()=>{const store=new SourceRegistryStore(process.env.STATE_TABLE); for(const source of LEMONROCK_SOURCES) await store.put(source);})().catch(e=>{console.error(e);process.exit(1)})"
+          aws dynamodb scan --table-name "$STATE_TABLE" --filter-expression "begins_with(pk, :p) AND sk = :sk" --expression-attribute-values '{":p":{"S":"SOURCE#lemonrock"},":sk":{"S":"CONFIG"}}' --projection-expression "id, enabled, shadow, health" --output json > /tmp/enabled.json
+          jq '{verifiedAt:now|todateiso8601,sources:[.Items[]|{id:.id.S,enabled:.enabled.BOOL,shadow:.shadow.BOOL,health:(.health.S//"unknown")}]}' /tmp/enabled.json > "$GITHUB_WORKSPACE/ops/lemonrock-enabled-state.json"
+      - name: Publish result
+        run: |
+          printf '{"phase":"finished","status":"success","runId":"%s","finishedAt":"%s"}\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-enable-run.json
+          git add ops/lemonrock-enable-run.json ops/lemonrock-enabled-state.json
+          git commit -m "Record Lemonrock enabled source registry"
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
