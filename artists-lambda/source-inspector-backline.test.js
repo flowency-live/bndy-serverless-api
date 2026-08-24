@@ -1,7 +1,8 @@
 'use strict';
 
-const test = require('node:test');
+const nodeTest = require('node:test');
 const assert = require('node:assert/strict');
+const test = typeof globalThis.test === 'function' ? globalThis.test : nodeTest.test;
 const {
   enrichSparseFacebookResult,
   mergeBacklineEnrichment,
