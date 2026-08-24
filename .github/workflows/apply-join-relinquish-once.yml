@@ -1,0 +1,46 @@
+name: Apply Join relinquish routes once
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Run Join relinquish routes')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Add ownership relinquish function
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const p = 'template.yaml';
+          let t = fs.readFileSync(p, 'utf8');
+          if (!t.includes('OwnershipFunction:')) {
+            const anchor = '  # Auth Lambda\n';
+            const i = t.indexOf(anchor);
+            if (i < 0) throw new Error('Auth Lambda anchor missing');
+            const fn = `  OwnershipFunction:\n    Type: AWS::Serverless::Function\n    Properties:\n      Description: Explicit owner-only relinquish/disown actions for Join-managed Artists and Venues\n      CodeUri: ./ownership-lambda/\n      Handler: handler.handler\n      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role\n      Layers:\n        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3\n      Environment:\n        Variables:\n          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'\n          ARTIST_MEMBERSHIPS_TABLE: bndy-artist-memberships\n          ENTITY_MEMBERSHIPS_TABLE: !Ref EntityMembershipsTable\n      Events:\n        RelinquishManagedEntity:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/managed-entities/{entityType}/{id}/relinquish\n            Method: POST\n\n`;
+            t = t.slice(0, i) + fn + t.slice(i);
+          }
+          fs.writeFileSync(p, t);
+          NODE
+          node --check ownership-lambda/handler.js
+          npm run validate
+          npm run verify-routes
+      - name: Commit
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add template.yaml
+          git commit -m 'Enable Join ownership relinquish routes'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
