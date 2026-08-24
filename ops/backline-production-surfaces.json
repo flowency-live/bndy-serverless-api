@@ -1,0 +1,13 @@
+{
+  "verifiedAt": "2026-08-24T05:22:30Z",
+  "api": {
+    "httpStatus": 401,
+    "body": "{\"error\":\"Not authenticated\"}",
+    "platformAdminAuthBoundaryPresent": true
+  },
+  "backstage": {
+    "httpStatus": 200,
+    "backlineExplorerBundlePresent": true,
+    "entityEnrichmentBundlePresent": true
+  }
+}
