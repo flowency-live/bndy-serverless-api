@@ -1,0 +1,58 @@
+name: Clean obsolete Lemonrock DLQ artist root
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  clean:
+    if: contains(github.event.head_commit.message, 'Clean obsolete Lemonrock DLQ artist root')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Remove only superseded pre-fix artist root message
+        run: |
+          set -euo pipefail
+          DLQ_URL=$(aws sqs list-queues --queue-name-prefix BndyEnrichmentStack-SourceScanDLQ --query 'QueueUrls[0]' --output text)
+          DELETED=0
+          for i in $(seq 1 10); do
+            R=$(aws sqs receive-message --queue-url "$DLQ_URL" --max-number-of-messages 10 --visibility-timeout 30 --wait-time-seconds 1)
+            COUNT=$(echo "$R" | jq '.Messages // [] | length')
+            [ "$COUNT" -eq 0 ] && break
+            while IFS= read -r row; do
+              BODY=$(echo "$row" | jq -r '.Body')
+              RECEIPT=$(echo "$row" | jq -r '.ReceiptHandle')
+              SOURCE=$(echo "$BODY" | jq -r '.sourceId // ""' 2>/dev/null || true)
+              KEY=$(echo "$BODY" | jq -r '.taskKey // ""' 2>/dev/null || true)
+              if [ "$SOURCE" = 'lemonrock-artist-index' ] && [ "$KEY" = 'root:discovery:lemonrock-artist-index:2026-08-24T04-36-38-445Z' ]; then
+                aws sqs delete-message --queue-url "$DLQ_URL" --receipt-handle "$RECEIPT"
+                DELETED=$((DELETED+1))
+              fi
+            done < <(echo "$R" | jq -c '.Messages[]?')
+          done
+          sleep 3
+          ATTR=$(aws sqs get-queue-attributes --queue-url "$DLQ_URL" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible)
+          VISIBLE=$(echo "$ATTR" | jq -r '.Attributes.ApproximateNumberOfMessages|tonumber')
+          INFLIGHT=$(echo "$ATTR" | jq -r '.Attributes.ApproximateNumberOfMessagesNotVisible|tonumber')
+          mkdir -p ops
+          jq -n --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson deleted "$DELETED" --argjson attrs "$ATTR" '{verifiedAt:$verifiedAt,obsoleteMessagesDeleted:$deleted,dlq:$attrs.Attributes}' > ops/lemonrock-dlq-clean-status.json
+          cat ops/lemonrock-dlq-clean-status.json
+          test "$DELETED" -gt 0
+          test "$VISIBLE" -eq 0
+          test "$INFLIGHT" -eq 0
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-dlq-clean-status.json
+          git commit -m 'Record clean Lemonrock production DLQ'
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
