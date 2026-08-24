@@ -1,0 +1,52 @@
+name: Probe BNDY canonical baseline progress
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    if: contains(github.event.head_commit.message, 'Probe BNDY baseline progress')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Probe StateTable
+        run: |
+          set -euo pipefail
+          mkdir -p ops
+          RES=$(aws cloudformation describe-stack-resources --stack-name BndyEnrichmentStack --output json)
+          TABLE=$(echo "$RES" | jq -r '.StackResources[] | select(.ResourceType=="AWS::DynamoDB::Table" and (.LogicalResourceId|test("StateTable"))) | .PhysicalResourceId' | head -1)
+          count_source() {
+            local source="$1"
+            aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex \
+              --key-condition-expression 'GSI1PK = :pk AND begins_with(GSI1SK, :prefix)' \
+              --expression-attribute-values "{\":pk\":{\"S\":\"SOURCE#$source\"},\":prefix\":{\"S\":\"OBS#\"}}" \
+              --select COUNT --query Count --output text | awk '{for(i=1;i<=NF;i++) s+=$i} END{print s+0}'
+          }
+          A=$(count_source bndy-canonical-artists)
+          V=$(count_source bndy-canonical-venues)
+          E=$(count_source bndy-canonical-events)
+          F=$(count_source bndy-canonical-festivals)
+          R=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex \
+              --key-condition-expression 'GSI1PK = :pk' \
+              --expression-attribute-values '{":pk":{"S":"BASELINE#bndy-baseline-2026-08-24-v1"}}' \
+              --select COUNT --query Count --output text | awk '{for(i=1;i<=NF;i++) s+=$i} END{print s+0}')
+          jq -n --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson artist "$A" --argjson venue "$V" --argjson event "$E" --argjson festival "$F" --argjson resolutions "$R" '{verifiedAt:$verifiedAt,observations:{artist:$artist,venue:$venue,event:$event,festival:$festival,total:($artist+$venue+$event+$festival)},resolutions:$resolutions}' > ops/bndy-baseline-progress.json
+      - name: Publish probe
+        run: |
+          git config user.name 'bndy-backline-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add ops/bndy-baseline-progress.json
+          git commit -m 'Record BNDY baseline progress'
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
