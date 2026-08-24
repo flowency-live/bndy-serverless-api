@@ -1,0 +1,84 @@
+name: Verify Lemonrock production surfaces
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: contains(github.event.head_commit.message, 'Verify Lemonrock production surfaces')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - name: Publish run start
+        run: |
+          mkdir -p ops
+          printf '{"phase":"started","runId":"%s","startedAt":"%s"}\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-surface-verify-run.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-surface-verify-run.json
+          git commit -m "Record Lemonrock surface verify start"
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Verify deployed Backline API Lambda
+        run: |
+          set -euo pipefail
+          FN=$(aws cloudformation describe-stack-resource --stack-name bndy-serverless-api --logical-resource-id SourceRunsFunc --query 'StackResourceDetail.PhysicalResourceId' --output text)
+          LOC=$(aws lambda get-function --function-name "$FN" --query 'Code.Location' --output text)
+          LAST=$(aws lambda get-function-configuration --function-name "$FN" --query 'LastModified' --output text)
+          SHA=$(aws lambda get-function-configuration --function-name "$FN" --query 'CodeSha256' --output text)
+          rm -rf /tmp/source-runs-code /tmp/source-runs.zip
+          mkdir -p /tmp/source-runs-code
+          curl -fsSL "$LOC" -o /tmp/source-runs.zip
+          unzip -q /tmp/source-runs.zip -d /tmp/source-runs-code
+          if grep -R -q 'backline/summary\|/backline' /tmp/source-runs-code; then API_CODE=true; else API_CODE=false; fi
+          cat >/tmp/invoke-event.json <<'JSON'
+          {"version":"2.0","routeKey":"GET /api/source-runs/{proxy+}","rawPath":"/api/source-runs/backline/summary","rawQueryString":"","headers":{},"requestContext":{"http":{"method":"GET","path":"/api/source-runs/backline/summary","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"prod-verify"}},"isBase64Encoded":false}
+          JSON
+          aws lambda invoke --function-name "$FN" --cli-binary-format raw-in-base64-out --payload fileb:///tmp/invoke-event.json /tmp/api-invoke.json >/tmp/api-invoke-meta.json
+          jq -n --arg fn "$FN" --arg last "$LAST" --arg sha "$SHA" --argjson code "$API_CODE" --slurpfile invoke /tmp/api-invoke.json '{function:$fn,lastModified:$last,codeSha256:$sha,backlineCodePresent:$code,invoke:$invoke[0]}' > /tmp/api-status.json
+          cat /tmp/api-status.json
+          test "$API_CODE" = true
+      - name: Verify Backstage Amplify deployment
+        run: |
+          set -euo pipefail
+          aws amplify list-apps --max-results 100 > /tmp/amplify-apps.json
+          APP_ID=$(jq -r '.apps[] | select((((.repository // "") + " " + (.name // "")) | ascii_downcase | contains("bndy-backstage")) or (((.repository // "") + " " + (.name // "")) | ascii_downcase | contains("backstage"))) | .appId' /tmp/amplify-apps.json | head -1)
+          if [ -z "$APP_ID" ] || [ "$APP_ID" = null ]; then
+            jq -n '{found:false}' > /tmp/backstage-status.json
+            exit 1
+          fi
+          aws amplify list-jobs --app-id "$APP_ID" --branch-name main --max-results 20 > /tmp/amplify-jobs.json
+          jq --arg appId "$APP_ID" '{found:true,appId:$appId,latest:(.jobSummaries|sort_by(.startTime)|reverse|.[0]),recent:(.jobSummaries|sort_by(.startTime)|reverse|.[0:5])}' /tmp/amplify-jobs.json > /tmp/backstage-status.json
+          cat /tmp/backstage-status.json
+          test "$(jq -r '.latest.status' /tmp/backstage-status.json)" = SUCCEED
+      - name: Inspect failed Lemonrock tasks
+        run: |
+          set -euo pipefail
+          TABLE=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query "Stacks[0].Outputs[?OutputKey=='StateTableName'].OutputValue | [0]" --output text)
+          aws dynamodb query --table-name "$TABLE" --key-condition-expression "pk = :pk AND begins_with(sk, :prefix)" --expression-attribute-values '{":pk":{"S":"BOOTSTRAP#lemonrock"},":prefix":{"S":"TASK#"}}' --output json > /tmp/tasks.json
+          jq '[.Items[] | select(.status.S=="failed") | {sk:.sk.S,sourceId:(.sourceId.S//null),error:(.error.S//null),updatedAt:(.updatedAt.S//null),task:(.task.M//null)}][0:10]' /tmp/tasks.json > /tmp/failed-tasks.json
+          cat /tmp/failed-tasks.json
+      - name: Publish verification result
+        run: |
+          set -euo pipefail
+          mkdir -p ops
+          jq -n --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --slurpfile api /tmp/api-status.json --slurpfile backstage /tmp/backstage-status.json --slurpfile failed /tmp/failed-tasks.json '{verifiedAt:$verifiedAt,api:$api[0],backstage:$backstage[0],failedTasks:$failed[0]}' > ops/lemonrock-surface-status.json
+          printf '{"phase":"finished","status":"success","runId":"%s","finishedAt":"%s"}\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-surface-verify-run.json
+          cat ops/lemonrock-surface-status.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-surface-status.json ops/lemonrock-surface-verify-run.json
+          git commit -m "Record Lemonrock production surface verification"
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
