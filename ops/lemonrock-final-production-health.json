@@ -1,0 +1,187 @@
+{
+  "verifiedAt": "2026-08-24T05:30:44Z",
+  "stateTable": "BndyEnrichmentStack-StateTable9728C7E5-14HR6N3NEWGLM",
+  "sourceWorker": "BndyEnrichmentStack-SourceWorker336FEA29-ghZk2mBRjOks",
+  "sourceWorkerQueueConfigured": true,
+  "obsoleteDlqMessagesDeleted": 0,
+  "cancellationProbe": {
+    "before": 14,
+    "after": 15,
+    "passed": true
+  },
+  "taskTotal": 2745,
+  "taskStatus": {
+    "completed": 2744,
+    "failed": 1
+  },
+  "observationsBySource": {
+    "lemonrock-new-gigs": 14,
+    "lemonrock-cancellations": 15,
+    "lemonrock-artist-index": 4,
+    "lemonrock-venue-index": 30,
+    "lemonrock-artist-hydration": 53,
+    "lemonrock-venue-hydration": 2477,
+    "lemonrock-gig-hydration": 174,
+    "lemonrock-future-reconcile": 2,
+    "lemonrock-full-reconcile": 0
+  },
+  "knowledge": {
+    "claims": 19941,
+    "observations": 2769,
+    "resolutionClaims": 0,
+    "conflictClaims": 0
+  },
+  "queue": {
+    "ApproximateNumberOfMessages": "0",
+    "ApproximateNumberOfMessagesNotVisible": "11",
+    "ApproximateNumberOfMessagesDelayed": "0"
+  },
+  "dlq": {
+    "ApproximateNumberOfMessages": "0",
+    "ApproximateNumberOfMessagesNotVisible": "0"
+  },
+  "indexes": [
+    {
+      "name": "ObservationClaimsIndex",
+      "status": "ACTIVE"
+    },
+    {
+      "name": "SourceScheduleIndex",
+      "status": "ACTIVE"
+    },
+    {
+      "name": "SubjectClaimsIndex",
+      "status": "ACTIVE"
+    }
+  ],
+  "sources": {
+    "lemonrock-new-gigs": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-new-gigs"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-cancellations": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-cancellations"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-artist-index": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-artist-index"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-venue-index": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-venue-index"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-artist-hydration": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-artist-hydration"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-venue-hydration": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-venue-hydration"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-gig-hydration": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-gig-hydration"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-future-reconcile": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-future-reconcile"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-full-reconcile": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-full-reconcile"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    }
+  },
+  "shadowMode": true,
+  "canonicalWritesEnabled": false
+}
