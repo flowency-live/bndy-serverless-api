@@ -1,0 +1,92 @@
+{
+  "verifiedAt": "2026-08-24T04:46:24Z",
+  "api": {
+    "function": "bndy-serverless-api-SourceRunsFunc-bUjoJCjAxPH2",
+    "lastModified": "2026-08-24T03:56:04.000+0000",
+    "codeSha256": "6Y2csn9mh0ROcV13+S+O7sez/jamgWCHoLglrBzq0iU=",
+    "backlineCodePresent": true,
+    "invoke": {
+      "statusCode": 401,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store"
+      },
+      "body": "{\"error\":\"Not authenticated\"}"
+    }
+  },
+  "backstage": {
+    "found": true,
+    "appId": "d3hbhqxqqchzbb",
+    "latest": {
+      "jobArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/main/jobs/0000000785",
+      "jobId": "785",
+      "commitId": "e6c29ab70346f934cded0f5fdccc97be30d0b1e7",
+      "commitMessage": "Expose Backline Explorer in Godmode enrichment",
+      "commitTime": "2026-08-23T23:42:00+00:00",
+      "startTime": "2026-08-24T03:50:57.340000+00:00",
+      "status": "SUCCEED",
+      "endTime": "2026-08-24T03:53:03.630000+00:00"
+    },
+    "recent": [
+      {
+        "jobArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/main/jobs/0000000785",
+        "jobId": "785",
+        "commitId": "e6c29ab70346f934cded0f5fdccc97be30d0b1e7",
+        "commitMessage": "Expose Backline Explorer in Godmode enrichment",
+        "commitTime": "2026-08-23T23:42:00+00:00",
+        "startTime": "2026-08-24T03:50:57.340000+00:00",
+        "status": "SUCCEED",
+        "endTime": "2026-08-24T03:53:03.630000+00:00"
+      },
+      {
+        "jobArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/main/jobs/0000000784",
+        "jobId": "784",
+        "commitId": "00cbc4a8de94238c2bcda3ebb31f9a97fea2d113",
+        "commitMessage": "Merge Godmode traffic dashboard and curator access editor\n\nAdd Godmode traffic dashboard and curator access editor",
+        "commitTime": "2026-08-22T16:28:58+00:00",
+        "startTime": "2026-08-22T16:29:01.488000+00:00",
+        "status": "SUCCEED",
+        "endTime": "2026-08-22T16:31:06.762000+00:00"
+      },
+      {
+        "jobArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/main/jobs/0000000783",
+        "jobId": "783",
+        "commitId": "21b5aead1381a87f2ec7f95dfbf3acee29a15dfb",
+        "commitMessage": "feat: add same-origin API detection for bndy.live",
+        "commitTime": "2026-08-21T17:02:16+00:00",
+        "startTime": "2026-08-21T17:02:32.489000+00:00",
+        "status": "SUCCEED",
+        "endTime": "2026-08-21T17:04:41.613000+00:00"
+      },
+      {
+        "jobArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/main/jobs/0000000782",
+        "jobId": "782",
+        "commitId": "c0b21b6a01597353b2f5c342410b3fcfc356ee49",
+        "commitMessage": "feat: add sortable Created column to godmode artist, venue and event tables",
+        "commitTime": "2026-08-20T13:57:42+00:00",
+        "startTime": "2026-08-20T13:57:46.836000+00:00",
+        "status": "SUCCEED",
+        "endTime": "2026-08-20T13:59:48.203000+00:00"
+      },
+      {
+        "jobArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/main/jobs/0000000781",
+        "jobId": "781",
+        "commitId": "5d7679d3b9b6533e7a85dae5854fc29542526cba",
+        "commitMessage": "Normalize legacy artist taxonomy at Godmode boundary",
+        "commitTime": "2026-08-16T12:32:48+00:00",
+        "startTime": "2026-08-16T12:32:59.082000+00:00",
+        "status": "SUCCEED",
+        "endTime": "2026-08-16T12:34:57.213000+00:00"
+      }
+    ]
+  },
+  "failedTasks": [
+    {
+      "sk": "TASK#root:discovery:lemonrock-artist-index:2026-08-24T04-36-38-445Z",
+      "sourceId": null,
+      "error": null,
+      "updatedAt": "2026-08-24T04:36:40.730Z",
+      "task": null
+    }
+  ]
+}
