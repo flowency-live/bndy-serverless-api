@@ -1,0 +1,88 @@
+name: Deploy Lemonrock acquisition hotfix
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    if: contains(github.event.head_commit.message, 'Deploy Lemonrock acquisition hotfix')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - name: Publish run start
+        run: |
+          set -euo pipefail
+          mkdir -p ops
+          printf '{"phase":"started","runId":"%s","startedAt":"%s"}\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-hotfix-deploy-run.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-hotfix-deploy-run.json
+          git commit -m "Record Lemonrock hotfix deploy start"
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Deploy exact enrichment main
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch main https://github.com/flowency-live/bndy-enrichment.git /tmp/bndy-enrichment
+          cd /tmp/bndy-enrichment
+          git rev-parse HEAD | tee /tmp/enrichment-sha
+          npm install
+          npm run check
+          npx cdk deploy --all --require-approval never --outputs-file cdk-outputs.json
+          WORKER=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.SourceWorkerFunctionName)")
+          aws lambda wait function-updated --function-name "$WORKER"
+          aws lambda get-function-configuration --function-name "$WORKER" --query '{FunctionName:FunctionName,LastModified:LastModified,CodeSha256:CodeSha256}' > /tmp/worker.json
+      - name: Requeue artist root on patched worker
+        run: |
+          set -euo pipefail
+          cd /tmp/bndy-enrichment
+          TABLE=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.StateTableName)")
+          QUEUE_URL=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.SourceScanQueueUrl)")
+          TOKEN=$(date -u +%Y-%m-%dT%H-%M-%S-%3NZ)
+          TASK_KEY="root:artist-hotfix:$TOKEN"
+          BODY=$(jq -nc --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg key "$TASK_KEY" '{sourceId:"lemonrock-artist-index",reason:"manual",requestedAt:$at,taskKey:$key,task:{kind:"artist-index",url:"https://www.lemonrock.com/advancedsearchbands.php?_start=0",bootstrapMode:"discovery",bootstrapToken:$key}}')
+          aws sqs send-message --queue-url "$QUEUE_URL" --message-body "$BODY" >/dev/null
+          STATUS=missing
+          LAST_ERROR=''
+          for i in $(seq 1 30); do
+            ITEM=$(aws dynamodb get-item --table-name "$TABLE" --key "{\"pk\":{\"S\":\"BOOTSTRAP#lemonrock\"},\"sk\":{\"S\":\"TASK#$TASK_KEY\"}}")
+            STATUS=$(echo "$ITEM" | jq -r '.Item.status.S // "missing"')
+            LAST_ERROR=$(echo "$ITEM" | jq -r '.Item.lastError.S // ""')
+            [ "$STATUS" = completed ] && break
+            [ "$STATUS" = failed ] && break
+            sleep 5
+          done
+          ARTIST_INDEX=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex --key-condition-expression 'GSI1PK = :pk' --expression-attribute-values '{":pk":{"S":"SOURCE#lemonrock-artist-index"}}' --select COUNT --query Count --output text)
+          ARTIST_HYDRATION=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex --key-condition-expression 'GSI1PK = :pk' --expression-attribute-values '{":pk":{"S":"SOURCE#lemonrock-artist-hydration"}}' --select COUNT --query Count --output text)
+          TASK_TOTAL=$(aws dynamodb query --table-name "$TABLE" --key-condition-expression 'pk = :pk AND begins_with(sk, :prefix)' --expression-attribute-values '{":pk":{"S":"BOOTSTRAP#lemonrock"},":prefix":{"S":"TASK#"}}' --select COUNT --query Count --output text)
+          jq -n --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg enrichmentSha "$(cat /tmp/enrichment-sha)" --arg taskKey "$TASK_KEY" --arg status "$STATUS" --arg lastError "$LAST_ERROR" --arg artistIndex "$ARTIST_INDEX" --arg artistHydration "$ARTIST_HYDRATION" --arg taskTotal "$TASK_TOTAL" --slurpfile worker /tmp/worker.json '{verifiedAt:$verifiedAt,enrichmentSha:$enrichmentSha,artistRoot:{taskKey:$taskKey,status:$status,lastError:$lastError},artistIndexObservations:($artistIndex|tonumber),artistHydrationObservations:($artistHydration|tonumber),lemonrockTaskCount:($taskTotal|tonumber),worker:$worker[0]}' > "$GITHUB_WORKSPACE/ops/lemonrock-hotfix-status.json"
+          cat "$GITHUB_WORKSPACE/ops/lemonrock-hotfix-status.json"
+          test "$STATUS" = completed
+      - name: Publish result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          printf '{"phase":"finished","status":"%s","runId":"%s","finishedAt":"%s"}\n' "$JOB_STATUS" "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-hotfix-deploy-run.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-hotfix-deploy-run.json
+          [ ! -f ops/lemonrock-hotfix-status.json ] || git add ops/lemonrock-hotfix-status.json
+          git commit -m "Record Lemonrock hotfix deployment result" || true
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
