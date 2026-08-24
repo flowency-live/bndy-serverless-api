@@ -70,6 +70,18 @@ test('grounded search cannot overwrite trusted HTML fields', () => {
   assert.equal(result.observed.location, 'Manchester');
 });
 
+
+test('grounding cannot substitute an unrelated identity', () => {
+  const result = mergeBacklineEnrichment(sparse(), {
+    ...grounded,
+    name: 'Afrikaans',
+    nameEvidenceUrls: ['https://www.facebook.com/ahundredendings'],
+  });
+  assert.equal(result.observed.name, 'Ahundredendings');
+  assert.equal(result.backlineAssist.status, 'identity_mismatch');
+  assert.equal(result.observed.location, undefined);
+});
+
 test('assist failure preserves deterministic result', async () => {
   const result = await enrichSparseFacebookResult(sparse(), {
     expectedType: 'artist',
