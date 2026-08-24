@@ -186,13 +186,13 @@ const requireArtistAdmin = async (event, artistId) => {
 
   const membership = membershipResult.Items?.[0];
 
-  if (!membership || membership.role !== 'admin') {
+  if (!membership || !['admin', 'owner'].includes(membership.role)) {
     console.log('[MEMBERSHIPS] Access denied - not artist admin', {
       userId: authResult.user.userId.substring(0, 8) + '...',
       artistId,
       hasRole: membership?.role || 'none'
     });
-    return { error: 'Artist admin access required', statusCode: 403 };
+    return { error: 'Artist admin or owner access required', statusCode: 403 };
   }
 
   console.log('[MEMBERSHIPS] Artist admin verified', {

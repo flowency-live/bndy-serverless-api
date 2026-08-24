@@ -3111,7 +3111,7 @@ async function handleFindOrCreateArtist(event) {
           headers: getCommunityHeaders(),
           body: JSON.stringify({
             action: 'matched',
-            artist: { id: candidate.id, name: candidate.name, location: candidate.location, ...editionMetadata(candidate) },
+            artist: { id: candidate.id, name: candidate.name, location: candidate.location, nameVariants: variants, ...editionMetadata(candidate) },
             confidence: 1,
             matchedBy: 'name_variant',
             variant: variant
@@ -3134,7 +3134,7 @@ async function handleFindOrCreateArtist(event) {
       const sharedToken = queryTokens.some(t => aTokens.includes(t));
       const candidateRegion = regionBucket(a.location || '');
       const sameRegion = incomingRegion !== 'unknown' && candidateRegion !== 'unknown' && incomingRegion === candidateRegion;
-      return { id: a.id, name: a.name, location: a.location || '', sim, sharedToken, slugEqual, region: candidateRegion, sameRegion };
+      return { id: a.id, name: a.name, location: a.location || '', nameVariants: a.name_variants || [], sim, sharedToken, slugEqual, region: candidateRegion, sameRegion };
     })
     .filter(s => s.sim >= 60 || s.slugEqual) // Only consider plausible candidates
     .sort((x, y) => y.sim - x.sim)
@@ -3182,7 +3182,7 @@ async function handleFindOrCreateArtist(event) {
             action: 'review',
             reason: `Near-tie margin guard: top 2 candidates within ${MARGIN_THRESHOLD}pt (margin=${margin})`,
             candidates: scored.slice(0, 5).map(s => ({
-              id: s.id, name: s.name, location: s.location,
+              id: s.id, name: s.name, location: s.location, nameVariants: s.nameVariants || [],
               confidence: Math.round(s.footprintScore) / 100,
               footprintScore: s.footprintScore,
               footprintRegions: s.footprintRegions,
@@ -3232,7 +3232,7 @@ async function handleFindOrCreateArtist(event) {
             action: 'review',
             reason: `Same-name collision detected: top ${scored.length >= 2 ? 2 : 1} candidates within ${MARGIN_THRESHOLD}pt (margin=${simMargin}). Provide venueRegion for footprint disambiguation.`,
             candidates: scored.slice(0, 5).map(s => ({
-              id: s.id, name: s.name, location: s.location,
+              id: s.id, name: s.name, location: s.location, nameVariants: s.nameVariants || [],
               confidence: Math.round(s.sim) / 100,
               sharedToken: s.sharedToken
             }))
@@ -3260,7 +3260,7 @@ async function handleFindOrCreateArtist(event) {
       headers: getCommunityHeaders(),
       body: JSON.stringify({
         action: 'matched',
-        artist: { id: best.id, name: best.name, location: best.location, ...editionMetadata(best) },
+        artist: { id: best.id, name: best.name, location: best.location, nameVariants: best.nameVariants || [], ...editionMetadata(best) },
         confidence: Math.round(matchScore) / 100,
         matchedBy: matchMethod,
         // ADR-023: If billing string had an act qualifier, return it separately
