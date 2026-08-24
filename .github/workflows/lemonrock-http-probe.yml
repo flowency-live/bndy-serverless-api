@@ -1,0 +1,58 @@
+name: Probe Lemonrock HTTP semantics
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    if: contains(github.event.head_commit.message, 'Probe Lemonrock HTTP semantics')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - name: Probe curl and Node fetch
+        run: |
+          set -euo pipefail
+          URL='https://www.lemonrock.com/advancedsearchbands.php?_start=0'
+          UA='BNDY-Backline/1.0 (+https://bndy.live; source-reconciliation)'
+          curl -sS -D /tmp/h1 -o /tmp/b1 -A "$UA" --max-time 30 "$URL" || true
+          curl -sS -L -D /tmp/h2 -o /tmp/b2 -A "$UA" --max-time 30 "$URL" || true
+          node - <<'NODE' > /tmp/node.json
+          const url='https://www.lemonrock.com/advancedsearchbands.php?_start=0';
+          const headers={accept:'text/html,application/xhtml+xml','user-agent':'BNDY-Backline/1.0 (+https://bndy.live; source-reconciliation)'};
+          (async()=>{
+            const out={};
+            for (const redirect of ['error','manual','follow']) {
+              try {
+                const r=await fetch(url,{headers,redirect});
+                const b=await r.text();
+                out[redirect]={ok:r.ok,status:r.status,url:r.url,location:r.headers.get('location'),bytes:b.length};
+              } catch(e) {
+                out[redirect]={error:e.message,cause:e.cause?.message||String(e.cause||'')};
+              }
+            }
+            console.log(JSON.stringify(out,null,2));
+          })();
+          NODE
+          mkdir -p ops
+          jq -n \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg curlNoFollowStatus "$(awk 'toupper($1) ~ /^HTTP/ {s=$2} END{print s}' /tmp/h1)" \
+            --arg curlNoFollowLocation "$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]*:[ ]*/,""); sub(/\r$/,""); print; exit}' /tmp/h1)" \
+            --arg curlNoFollowBytes "$(wc -c </tmp/b1)" \
+            --arg curlFollowStatus "$(awk 'toupper($1) ~ /^HTTP/ {s=$2} END{print s}' /tmp/h2)" \
+            --arg curlFollowBytes "$(wc -c </tmp/b2)" \
+            --slurpfile node /tmp/node.json \
+            '{verifiedAt:$verifiedAt,curlNoFollow:{status:$curlNoFollowStatus,location:$curlNoFollowLocation,bytes:($curlNoFollowBytes|tonumber)},curlFollow:{status:$curlFollowStatus,bytes:($curlFollowBytes|tonumber)},node:$node[0]}' > ops/lemonrock-http-probe.json
+          cat ops/lemonrock-http-probe.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-http-probe.json
+          git commit -m "Record Lemonrock HTTP probe"
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
