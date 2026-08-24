@@ -484,6 +484,12 @@ const handleUpdateMembership = async (event, membershipId) => {
     const isOwnMembership = existingMembership.user_id === user.userId;
     const isRoleChange = role !== undefined && role !== existingMembership.role;
 
+    // Ownership is a separate lifecycle. It cannot be demoted through generic
+    // membership editing; use the explicit transfer/relinquish operation.
+    if (existingMembership.role === 'owner' && isRoleChange && !user.platformAdmin) {
+      return createResponse(409, { error: 'Owner role must be changed through ownership transfer', code: 'OWNER_LIFECYCLE_REQUIRED' });
+    }
+
     // SEC-AUD-003: Authorization check
     // Users can update their own membership (except role)
     // Artist admins can update any membership in their artist
@@ -502,7 +508,7 @@ const handleUpdateMembership = async (event, membershipId) => {
       }).promise();
 
       const userMembership = adminCheckResult.Items?.[0];
-      if (!userMembership || userMembership.role !== 'admin') {
+      if (!userMembership || !['admin', 'owner'].includes(userMembership.role)) {
         console.log('[MEMBERSHIPS] Access denied - not authorized to update membership', {
           userId: user.userId.substring(0, 8) + '...',
           membershipId,
@@ -528,12 +534,12 @@ const handleUpdateMembership = async (event, membershipId) => {
         }).promise();
 
         const userMembership = adminCheckResult.Items?.[0];
-        if (!userMembership || userMembership.role !== 'admin') {
+        if (!userMembership || !['admin', 'owner'].includes(userMembership.role)) {
           console.log('[MEMBERSHIPS] Access denied - cannot escalate role', {
             userId: user.userId.substring(0, 8) + '...',
             requestedRole: role
           });
-          return createResponse(403, { error: 'Only artist admins can change roles' });
+          return createResponse(403, { error: 'Only artist admins or owners can change roles' });
         }
       }
     }
@@ -656,6 +662,12 @@ const handleDeleteMembership = async (event, membershipId) => {
     const existingMembership = membershipResult.Item;
     const isOwnMembership = existingMembership.user_id === user.userId;
 
+    // Never let an Artist owner accidentally orphan the entity by leaving like a
+    // normal member. Ownership must be transferred or deliberately relinquished.
+    if (existingMembership.role === 'owner' && !user.platformAdmin) {
+      return createResponse(409, { error: 'Transfer or relinquish ownership before removing the owner membership', code: 'OWNER_LIFECYCLE_REQUIRED' });
+    }
+
     // SEC-AUD-003: Authorization check
     // Users can delete their own membership (self-removal / leave band)
     // Artist admins can delete any membership in their artist
@@ -674,7 +686,7 @@ const handleDeleteMembership = async (event, membershipId) => {
       }).promise();
 
       const userMembership = adminCheckResult.Items?.[0];
-      if (!userMembership || userMembership.role !== 'admin') {
+      if (!userMembership || !['admin', 'owner'].includes(userMembership.role)) {
         console.log('[MEMBERSHIPS] Access denied - not authorized to delete membership', {
           userId: user.userId.substring(0, 8) + '...',
           membershipId,
