@@ -953,6 +953,12 @@ Resources:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
           ENTITY_MEMBERSHIPS_TABLE: !Ref EntityMembershipsTable
       Events:
+        ListMyManagedEntities:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/managed-entities/me
+            Method: GET
         ListManagedEntityMembers:
           Type: HttpApi
           Properties:

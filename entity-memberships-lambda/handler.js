@@ -74,6 +74,20 @@ async function resolveUser(body) {
   return null;
 }
 
+async function listMyManagedEntities(event) {
+  const auth = await requireAuth(event);
+  if (auth.error) return response(auth.statusCode, { error: auth.error });
+  const result = await dynamodb.query({ TableName: TABLE, IndexName: 'user_id-index', KeyConditionExpression: 'user_id = :uid', ExpressionAttributeValues: { ':uid': auth.user.userId } }).promise();
+  const memberships = (result.Items || []).filter((item) => item.status === 'active');
+  const entities = await Promise.all(memberships.map(async (membership) => {
+    if (membership.entity_type !== 'venue') return null;
+    const venue = await dynamodb.get({ TableName: 'bndy-venues', Key: { id: membership.entity_id } }).promise();
+    if (!venue.Item) return null;
+    return { id: venue.Item.id, entityType: 'venue', name: venue.Item.name, address: venue.Item.address || '', city: venue.Item.city || '', profileImageUrl: venue.Item.profile_image_url || venue.Item.profileImageUrl || '', role: membership.role, membershipId: membership.membership_id };
+  }));
+  return response(200, { entities: entities.filter(Boolean) });
+}
+
 async function listEntity(event, entityId) {
   const auth = await requireManager(event, entityId);
   if (auth.error) return response(auth.statusCode, { error: auth.error });
@@ -163,6 +177,7 @@ exports.handler = async (event) => {
   const transferMatch = path.match(/^\/api\/managed-entities\/([^/]+)\/transfer$/);
   const membershipMatch = path.match(/^\/api\/entity-memberships\/([^/]+)$/);
   try {
+    if (method === 'GET' && path === '/api/managed-entities/me') return await listMyManagedEntities(event);
     if (entityMatch && method === 'GET') return await listEntity(event, entityMatch[1]);
     if (entityMatch && method === 'POST') return await addDelegate(event, entityMatch[1]);
     if (transferMatch && method === 'POST') return await transferOwnership(event, transferMatch[1]);
