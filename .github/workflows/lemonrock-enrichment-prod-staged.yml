@@ -1,0 +1,161 @@
+name: Deploy Lemonrock enrichment to production staged
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    if: contains(github.event.head_commit.message, 'Deploy Lemonrock enrichment production staged')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - name: Publish run start
+        run: |
+          set -euo pipefail
+          mkdir -p ops
+          printf '{"phase":"started","runId":"%s","sha":"%s","startedAt":"%s"}\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-staged-production-run.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-staged-production-run.json
+          git commit -m "Record Lemonrock staged AWS deployment start"
+          git push origin HEAD:ops/lemonrock-prod-deploy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Check out enrichment main
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch main https://github.com/flowency-live/bndy-enrichment.git /tmp/bndy-enrichment
+          cd /tmp/bndy-enrichment
+          git rev-parse HEAD | tee /tmp/enrichment-sha
+          npm install
+          cp lib/bndy-enrichment-stack.ts /tmp/bndy-enrichment-stack.original.ts
+      - name: Wait for rollback to settle
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            STATUS=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query 'Stacks[0].StackStatus' --output text)
+            echo "Stack status: $STATUS"
+            case "$STATUS" in
+              *_IN_PROGRESS) sleep 10 ;;
+              *) break ;;
+            esac
+          done
+      - name: Stage 1 - add SourceScheduleIndex
+        working-directory: /tmp/bndy-enrichment
+        run: |
+          set -euo pipefail
+          cp /tmp/bndy-enrichment-stack.original.ts lib/bndy-enrichment-stack.ts
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('lib/bndy-enrichment-stack.ts')
+          s=p.read_text()
+          for index in ['ObservationClaimsIndex','SubjectClaimsIndex']:
+              marker=f"    table.addGlobalSecondaryIndex({{\n      indexName: '{index}',"
+              start=s.index(marker)
+              end=s.index('    });', start)+len('    });\n')
+              s=s[:start]+s[end:]
+          p.write_text(s)
+          PY
+          npx cdk deploy --all --require-approval never --outputs-file /tmp/cdk-stage1.json
+          aws dynamodb wait table-exists --table-name $(node -e "const x=require('/tmp/cdk-stage1.json'); console.log(x.BndyEnrichmentStack.StateTableName)")
+      - name: Stage 2 - add ObservationClaimsIndex
+        working-directory: /tmp/bndy-enrichment
+        run: |
+          set -euo pipefail
+          cp /tmp/bndy-enrichment-stack.original.ts lib/bndy-enrichment-stack.ts
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('lib/bndy-enrichment-stack.ts')
+          s=p.read_text()
+          marker="    table.addGlobalSecondaryIndex({\n      indexName: 'SubjectClaimsIndex',"
+          start=s.index(marker)
+          end=s.index('    });', start)+len('    });\n')
+          p.write_text(s[:start]+s[end:])
+          PY
+          npx cdk deploy --all --require-approval never --outputs-file /tmp/cdk-stage2.json
+          TABLE=$(node -e "const x=require('/tmp/cdk-stage2.json'); console.log(x.BndyEnrichmentStack.StateTableName)")
+          for i in $(seq 1 60); do
+            STATUS=$(aws dynamodb describe-table --table-name "$TABLE" --query "Table.GlobalSecondaryIndexes[?IndexName=='ObservationClaimsIndex'].IndexStatus | [0]" --output text)
+            [ "$STATUS" = "ACTIVE" ] && break
+            sleep 10
+          done
+      - name: Stage 3 - add SubjectClaimsIndex and deploy exact main definition
+        working-directory: /tmp/bndy-enrichment
+        run: |
+          set -euo pipefail
+          cp /tmp/bndy-enrichment-stack.original.ts lib/bndy-enrichment-stack.ts
+          npx cdk deploy --all --require-approval never --outputs-file cdk-outputs.json
+          TABLE=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.StateTableName)")
+          for i in $(seq 1 60); do
+            STATUS=$(aws dynamodb describe-table --table-name "$TABLE" --query "Table.GlobalSecondaryIndexes[?IndexName=='SubjectClaimsIndex'].IndexStatus | [0]" --output text)
+            [ "$STATUS" = "ACTIVE" ] && break
+            sleep 10
+          done
+      - name: Seed and start Lemonrock national discovery
+        working-directory: /tmp/bndy-enrichment
+        run: |
+          set -euo pipefail
+          export STATE_TABLE=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.StateTableName)")
+          export SOURCE_SCAN_QUEUE_URL=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.SourceScanQueueUrl)")
+          npm run lemonrock:bootstrap -- --mode=discovery | tee /tmp/lemonrock-bootstrap-output.txt
+      - name: Confirm production activity
+        working-directory: /tmp/bndy-enrichment
+        run: |
+          set -euo pipefail
+          STATE_TABLE=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.StateTableName)")
+          QUEUE_URL=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.SourceScanQueueUrl)")
+          SOURCE_WORKER=$(node -e "const x=require('./cdk-outputs.json'); console.log(x.BndyEnrichmentStack.SourceWorkerFunctionName)")
+          TASK_COUNT=0
+          OBS_COUNT=0
+          for i in $(seq 1 60); do
+            TASK_COUNT=$(aws dynamodb query --table-name "$STATE_TABLE" --key-condition-expression "pk = :pk AND begins_with(sk, :prefix)" --expression-attribute-values '{":pk":{"S":"BOOTSTRAP#lemonrock"},":prefix":{"S":"TASK#"}}' --select COUNT --query Count --output text)
+            OBS_COUNT=$(aws dynamodb query --table-name "$STATE_TABLE" --index-name ObservationClaimsIndex --key-condition-expression "GSI1PK = :pk AND begins_with(GSI1SK, :prefix)" --expression-attribute-values '{":pk":{"S":"SOURCE#lemonrock-artist-index"},":prefix":{"S":"OBS#"}}' --select COUNT --query Count --output text)
+            if [ "$TASK_COUNT" -gt 0 ] || [ "$OBS_COUNT" -gt 0 ]; then break; fi
+            sleep 5
+          done
+          INDEXES=$(aws dynamodb describe-table --table-name "$STATE_TABLE" --query 'Table.GlobalSecondaryIndexes[].{IndexName:IndexName,IndexStatus:IndexStatus}')
+          QUEUE=$(aws sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible)
+          WORKER_ENV=$(aws lambda get-function-configuration --function-name "$SOURCE_WORKER" --query 'Environment.Variables.SOURCE_SCAN_QUEUE_URL' --output text)
+          SOURCE=$(aws dynamodb get-item --table-name "$STATE_TABLE" --key '{"pk":{"S":"SOURCE#lemonrock-artist-index"},"sk":{"S":"CONFIG"}}')
+          jq -n \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg enrichmentSha "$(cat /tmp/enrichment-sha)" \
+            --arg stateTable "$STATE_TABLE" \
+            --arg sourceWorker "$SOURCE_WORKER" \
+            --arg workerQueueEnv "$WORKER_ENV" \
+            --argjson taskCount "$TASK_COUNT" \
+            --argjson observationCount "$OBS_COUNT" \
+            --argjson indexes "$INDEXES" \
+            --argjson queue "$QUEUE" \
+            --argjson source "$SOURCE" \
+            '{verifiedAt:$verifiedAt,deployment:"success",enrichmentSha:$enrichmentSha,stateTable:$stateTable,indexes:$indexes,sourceWorker:$sourceWorker,sourceWorkerQueueConfigured:($workerQueueEnv != "None" and $workerQueueEnv != ""),lemonrockTaskCount:$taskCount,artistIndexObservationCount:$observationCount,queue:$queue.Attributes,artistIndexSource:$source.Item,shadowMode:true,canonicalWritesEnabled:false}' \
+            > /tmp/lemonrock-staged-production-status.json
+          cat /tmp/lemonrock-staged-production-status.json
+          test "$WORKER_ENV" != "None"
+          test "$TASK_COUNT" -gt 0 -o "$OBS_COUNT" -gt 0
+      - name: Publish production result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          printf '{"phase":"finished","status":"%s","runId":"%s","sha":"%s","finishedAt":"%s"}\n' "$JOB_STATUS" "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-staged-production-run.json
+          if [ -f /tmp/lemonrock-staged-production-status.json ]; then cp /tmp/lemonrock-staged-production-status.json ops/lemonrock-staged-production-status.json; fi
+          git add ops/lemonrock-staged-production-run.json
+          [ ! -f ops/lemonrock-staged-production-status.json ] || git add ops/lemonrock-staged-production-status.json
+          git commit -m "Record Lemonrock staged AWS deployment result" || true
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
