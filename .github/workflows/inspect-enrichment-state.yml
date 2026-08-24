@@ -1,0 +1,37 @@
+name: Inspect enrichment production state
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    if: contains(github.event.head_commit.message, 'Inspect enrichment production state')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Inspect live stack and table
+        run: |
+          set -euo pipefail
+          TABLE=$(aws cloudformation describe-stack-resource --stack-name BndyEnrichmentStack --logical-resource-id StateTable9728C7E5 --query 'StackResourceDetail.PhysicalResourceId' --output text)
+          STACK_STATUS=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query 'Stacks[0].StackStatus' --output text)
+          TABLE_JSON=$(aws dynamodb describe-table --table-name "$TABLE" --query 'Table.{TableName:TableName,TableStatus:TableStatus,GSIs:GlobalSecondaryIndexes[].{IndexName:IndexName,IndexStatus:IndexStatus,ItemCount:ItemCount}}')
+          mkdir -p ops
+          jq -n --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg stackStatus "$STACK_STATUS" --argjson table "$TABLE_JSON" '{verifiedAt:$at,stackStatus:$stackStatus,table:$table}' > ops/enrichment-production-state.json
+          cat ops/enrichment-production-state.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/enrichment-production-state.json
+          git commit -m "Record enrichment production state"
+          git pull --rebase origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
