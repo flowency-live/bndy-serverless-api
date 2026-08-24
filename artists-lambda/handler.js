@@ -20,6 +20,7 @@ const { deleteArtistEvents } = require('./lib/cascade-delete-events');
 const { hasEventsForArtist, countEventsForArtist } = require('./lib/artist-event-guard');
 const { isPublishedInEdition, hasPrivilegedIngestionFields, validateScopedIngestion, editionMetadata } = require('./lib/edition-domain');
 const { requireRole: requireCuratorRole, logActivity: logCuratorActivity, pickFields: pickCuratorFields, hideEntity: hideArtistEntity, restoreEntity: restoreArtistEntity } = require('./curator-core');
+const { publishUserCreatedArtistClaims } = require('./backline-user-claims');
 
 /**
  * Sentinel keys for an artist record (2026-07-27 gate plan):
@@ -2426,6 +2427,19 @@ async function handleCreateCommunityArtist(event) {
     }
 
     console.log(` Community artist created: ${artistId} (${name}) with ${locationType || 'unknown'} location [gate: ${gateResult.gate}]`);
+
+    // The interactive Facebook check is deliberately read-only and fast.
+    // Backline only receives provenance after the edited artist is persisted.
+    if (newArtist.source === 'frontstage') {
+      try {
+        const published = await publishUserCreatedArtistClaims(newArtist);
+        console.log(`[BACKLINE] Recorded user-created artist ${artistId}: ${published.claimCount} high-confidence claims`);
+      } catch (error) {
+        // Canonical creation must never be rolled back because an auxiliary
+        // knowledge-store write failed. The error is observable and retryable.
+        console.error(`[BACKLINE] Failed to record user-created artist ${artistId}:`, error);
+      }
+    }
 
     return {
       statusCode: 201,
