@@ -1,0 +1,79 @@
+name: Deploy current Join API once
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    if: contains(github.event.head_commit.message, 'Run current Join production deploy')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Validate current Join API
+        run: |
+          for dir in *-lambda/; do
+            if [[ -d "$dir" && -f "$dir/package.json" ]]; then
+              (cd "$dir" && npm install --production --legacy-peer-deps --ignore-scripts)
+            fi
+          done
+          cd scripts
+          npm install
+          node validate-deployment.js
+          node verify-routes.js
+          cd ..
+      - name: Build and deploy
+        run: |
+          sam build --parallel
+          sam deploy \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --stack-name bndy-serverless-api \
+            --region eu-west-2 \
+            --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+            --s3-bucket bndy-deployment-artifacts-1758805276 \
+            --s3-prefix bndy-serverless-api
+          sleep 15
+      - name: Verify Join endpoints
+        run: |
+          API='https://api.bndy.co.uk'
+          ANALYTICS=$(curl -sS -o /tmp/analytics.json -w '%{http_code}' -X POST "$API/api/join/analytics" -H 'Content-Type: application/json' --data '{"event":"join_opened","sessionId":"post-deploy-smoke","step":"deployment"}')
+          ARTIST=$(curl -sS -o /tmp/artist.json -w '%{http_code}' -X POST "$API/api/join/artists" -H 'Content-Type: application/json' --data '{"name":"__smoke__","location":"Manchester"}')
+          VENUE=$(curl -sS -o /tmp/venue.json -w '%{http_code}' -X POST "$API/api/join/venues" -H 'Content-Type: application/json' --data '{"name":"__smoke__","address":"__smoke__","googlePlaceId":"__smoke__"}')
+          PASS=true
+          [[ "$ANALYTICS" == '202' ]] || PASS=false
+          [[ "$ARTIST" == '401' ]] || PASS=false
+          [[ "$VENUE" == '401' ]] || PASS=false
+          {
+            echo "deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "pass=$PASS"
+            echo "analytics_status=$ANALYTICS body=$(cat /tmp/analytics.json)"
+            echo "artist_without_auth_status=$ARTIST body=$(cat /tmp/artist.json)"
+            echo "venue_without_auth_status=$VENUE body=$(cat /tmp/venue.json)"
+          } > docs/JOIN-PRODUCTION-DEPLOY.txt
+          [[ "$PASS" == 'true' ]]
+      - name: Record production deploy
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/JOIN-PRODUCTION-DEPLOY.txt
+          git commit -m 'Record Join production deployment'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
