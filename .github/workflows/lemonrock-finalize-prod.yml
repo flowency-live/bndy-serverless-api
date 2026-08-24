@@ -1,0 +1,143 @@
+name: Finalize Lemonrock production
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: contains(github.event.head_commit.message, 'Finalize Lemonrock production now')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - name: Publish start
+        run: |
+          set -euo pipefail
+          mkdir -p ops
+          printf '{"phase":"started","runId":"%s","startedAt":"%s"}\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-finalize-run.json
+          git config user.name bndy-backline-bot
+          git config user.email actions@users.noreply.github.com
+          git add ops/lemonrock-finalize-run.json
+          git commit -m 'Record Lemonrock finalizer start'
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Finalize and verify live Backline
+        run: |
+          set -euo pipefail
+          STACK=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query 'Stacks[0]')
+          TABLE=$(echo "$STACK" | jq -r '.Outputs[] | select(.OutputKey=="StateTableName") | .OutputValue')
+          QUEUE_URL=$(echo "$STACK" | jq -r '.Outputs[] | select(.OutputKey=="SourceScanQueueUrl") | .OutputValue')
+          WORKER=$(echo "$STACK" | jq -r '.Outputs[] | select(.OutputKey=="SourceWorkerFunctionName") | .OutputValue')
+          DLQ_URL=$(aws sqs list-queues --queue-name-prefix BndyEnrichmentStack-SourceScanDLQ --query 'QueueUrls[0]' --output text)
+          SOURCE_IDS=(lemonrock-new-gigs lemonrock-cancellations lemonrock-artist-index lemonrock-venue-index lemonrock-artist-hydration lemonrock-venue-hydration lemonrock-gig-hydration lemonrock-future-reconcile lemonrock-full-reconcile)
+
+          # Ensure registry is live while remaining shadow/no-write.
+          for ID in "${SOURCE_IDS[@]}"; do
+            aws dynamodb update-item --table-name "$TABLE" \
+              --key "{\"pk\":{\"S\":\"SOURCE#$ID\"},\"sk\":{\"S\":\"CONFIG\"}}" \
+              --update-expression 'SET enabled = :e, shadow = :s' \
+              --expression-attribute-values '{":e":{"BOOL":true},":s":{"BOOL":true}}' >/dev/null
+          done
+
+          # Delete only the superseded pre-fix artist-root DLQ payload. Keep its failed Dynamo task row as audit history.
+          DELETED=0
+          if [ "$DLQ_URL" != "None" ]; then
+            for i in $(seq 1 8); do
+              R=$(aws sqs receive-message --queue-url "$DLQ_URL" --max-number-of-messages 10 --visibility-timeout 15 --wait-time-seconds 1)
+              [ "$(echo "$R" | jq '.Messages // [] | length')" -eq 0 ] && break
+              while IFS= read -r row; do
+                BODY=$(echo "$row" | jq -r '.Body')
+                RECEIPT=$(echo "$row" | jq -r '.ReceiptHandle')
+                SOURCE=$(echo "$BODY" | jq -r '.sourceId // ""' 2>/dev/null || true)
+                KEY=$(echo "$BODY" | jq -r '.taskKey // ""' 2>/dev/null || true)
+                if [ "$SOURCE" = lemonrock-artist-index ] && [ "$KEY" = 'root:discovery:lemonrock-artist-index:2026-08-24T04-36-38-445Z' ]; then
+                  aws sqs delete-message --queue-url "$DLQ_URL" --receipt-handle "$RECEIPT"
+                  DELETED=$((DELETED+1))
+                fi
+              done < <(echo "$R" | jq -c '.Messages[]?')
+            done
+          fi
+
+          # Prove the cancellations fast-changing surface still executes on the corrected worker.
+          C_BEFORE=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex \
+            --key-condition-expression 'GSI1PK = :pk AND begins_with(GSI1SK, :p)' \
+            --expression-attribute-values '{":pk":{"S":"SOURCE#lemonrock-cancellations"},":p":{"S":"OBS#"}}' \
+            --projection-expression pk --output json | jq '.Items|length')
+          aws sqs send-message --queue-url "$QUEUE_URL" --message-body '{"sourceId":"lemonrock-cancellations","reason":"manual"}' >/dev/null
+          C_AFTER=$C_BEFORE
+          for i in $(seq 1 36); do
+            sleep 5
+            C_AFTER=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex \
+              --key-condition-expression 'GSI1PK = :pk AND begins_with(GSI1SK, :p)' \
+              --expression-attribute-values '{":pk":{"S":"SOURCE#lemonrock-cancellations"},":p":{"S":"OBS#"}}' \
+              --projection-expression pk --output json | jq '.Items|length')
+            [ "$C_AFTER" -gt "$C_BEFORE" ] && break
+          done
+
+          TASKS=$(aws dynamodb query --table-name "$TABLE" --key-condition-expression 'pk = :pk' \
+            --expression-attribute-values '{":pk":{"S":"BOOTSTRAP#lemonrock"}}' \
+            --projection-expression '#s,sourceId,taskKind,updatedAt' --expression-attribute-names '{"#s":"status"}' --output json)
+          TASK_TOTAL=$(echo "$TASKS" | jq '.Items|length')
+          TASK_STATUS=$(echo "$TASKS" | jq '[.Items[].status.S // "unknown"] | sort | group_by(.) | map({(.[0]):length}) | add // {}')
+
+          OBS='{}'
+          for ID in "${SOURCE_IDS[@]}"; do
+            C=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex \
+              --key-condition-expression 'GSI1PK = :pk AND begins_with(GSI1SK, :p)' \
+              --expression-attribute-values "{\":pk\":{\"S\":\"SOURCE#$ID\"},\":p\":{\"S\":\"OBS#\"}}" \
+              --projection-expression pk --output json | jq '.Items|length')
+            OBS=$(echo "$OBS" | jq --arg id "$ID" --argjson c "$C" '. + {($id):$c}')
+          done
+
+          KNOWLEDGE=$(aws dynamodb scan --table-name "$TABLE" --projection-expression 'entityType,predicate' --output json)
+          CLAIMS=$(echo "$KNOWLEDGE" | jq '[.Items[] | select(.entityType.S=="KnowledgeClaim")] | length')
+          OBS_TOTAL=$(echo "$KNOWLEDGE" | jq '[.Items[] | select(.entityType.S=="SourceObservation")] | length')
+          RESOLVES=$(echo "$KNOWLEDGE" | jq '[.Items[] | select(.entityType.S=="KnowledgeClaim" and .predicate.S=="resolvesTo")] | length')
+          CONFLICTS=$(echo "$KNOWLEDGE" | jq '[.Items[] | select(.entityType.S=="KnowledgeClaim" and .predicate.S=="contradicts")] | length')
+
+          Q=$(aws sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible ApproximateNumberOfMessagesDelayed)
+          if [ "$DLQ_URL" != "None" ]; then DQ=$(aws sqs get-queue-attributes --queue-url "$DLQ_URL" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible); else DQ='{"Attributes":{}}'; fi
+          INDEXES=$(aws dynamodb describe-table --table-name "$TABLE" --query 'Table.GlobalSecondaryIndexes[].{name:IndexName,status:IndexStatus}')
+          CONFIGURED=$(aws lambda get-function-configuration --function-name "$WORKER" --query 'Environment.Variables.SOURCE_SCAN_QUEUE_URL' --output text)
+          SOURCES='{}'
+          for ID in "${SOURCE_IDS[@]}"; do
+            ITEM=$(aws dynamodb get-item --table-name "$TABLE" --key "{\"pk\":{\"S\":\"SOURCE#$ID\"},\"sk\":{\"S\":\"CONFIG\"}}" --projection-expression 'id,enabled,shadow,health,lastSuccessfulScanAt')
+            SOURCES=$(echo "$SOURCES" | jq --arg id "$ID" --argjson item "$ITEM" '.+{($id):$item.Item}')
+          done
+
+          jq -n --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg table "$TABLE" --arg worker "$WORKER" --arg queueEnv "$CONFIGURED" \
+            --argjson deleted "$DELETED" --argjson cBefore "$C_BEFORE" --argjson cAfter "$C_AFTER" --argjson taskTotal "$TASK_TOTAL" --argjson taskStatus "$TASK_STATUS" \
+            --argjson observations "$OBS" --argjson claims "$CLAIMS" --argjson observationsTotal "$OBS_TOTAL" --argjson resolutions "$RESOLVES" --argjson conflicts "$CONFLICTS" \
+            --argjson queue "$Q" --argjson dlq "$DQ" --argjson indexes "$INDEXES" --argjson sources "$SOURCES" \
+            '{verifiedAt:$verifiedAt,stateTable:$table,sourceWorker:$worker,sourceWorkerQueueConfigured:($queueEnv!="None" and $queueEnv!=""),obsoleteDlqMessagesDeleted:$deleted,cancellationProbe:{before:$cBefore,after:$cAfter,passed:($cAfter>$cBefore)},taskTotal:$taskTotal,taskStatus:$taskStatus,observationsBySource:$observations,knowledge:{claims:$claims,observations:$observationsTotal,resolutionClaims:$resolutions,conflictClaims:$conflicts},queue:$queue.Attributes,dlq:$dlq.Attributes,indexes:$indexes,sources:$sources,shadowMode:true,canonicalWritesEnabled:false}' > ops/lemonrock-final-production-health.json
+          cat ops/lemonrock-final-production-health.json
+
+          test "$C_AFTER" -gt "$C_BEFORE"
+          test "$CONFIGURED" != None
+          test "$(echo "$DQ" | jq -r '.Attributes.ApproximateNumberOfMessages // "0" | tonumber')" -eq 0
+          test "$(echo "$DQ" | jq -r '.Attributes.ApproximateNumberOfMessagesNotVisible // "0" | tonumber')" -eq 0
+          test "$(echo "$INDEXES" | jq '[.[]|select(.status=="ACTIVE")]|length')" -eq 3
+      - name: Publish result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          printf '{"phase":"finished","status":"%s","runId":"%s","finishedAt":"%s"}\n' "$JOB_STATUS" "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-finalize-run.json
+          git config user.name bndy-backline-bot
+          git config user.email actions@users.noreply.github.com
+          git add ops/lemonrock-finalize-run.json
+          [ ! -f ops/lemonrock-final-production-health.json ] || git add ops/lemonrock-final-production-health.json
+          git commit -m 'Record final Lemonrock production health' || true
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
