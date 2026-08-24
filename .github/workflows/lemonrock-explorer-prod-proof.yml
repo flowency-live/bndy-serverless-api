@@ -39,14 +39,15 @@ jobs:
           STATUS=success
           {
             SRC=$(aws cloudformation describe-stack-resources --stack-name bndy-serverless-api --output json | jq -r '.StackResources[] | select(.ResourceType=="AWS::Lambda::Function" and (.LogicalResourceId|test("SourceRuns";"i"))) | .PhysicalResourceId' | head -1)
-            if [ -z "$SRC" ]; then
-              SRC=$(aws lambda list-functions --query "Functions[?contains(FunctionName, 'SourceRuns') || contains(FunctionName, 'source-runs')].FunctionName | [0]" --output text)
-            fi
+            if [ -z "$SRC" ]; then SRC=$(aws lambda list-functions --query "Functions[?contains(FunctionName, 'SourceRuns') || contains(FunctionName, 'source-runs')].FunctionName | [0]" --output text); fi
+            echo "source-runs-function=$SRC"
             test -n "$SRC" && test "$SRC" != "None"
             CFG=$(aws lambda get-function-configuration --function-name "$SRC")
+            echo "source-runs-last-modified=$(echo "$CFG" | jq -r .LastModified)"
             aws lambda invoke --function-name "$SRC" --cli-binary-format raw-in-base64-out \
               --payload '{"requestContext":{"http":{"method":"GET","path":"/api/source-runs/backline/summary"}},"rawPath":"/api/source-runs/backline/summary","headers":{}}' \
               /tmp/explorer-response.json >/tmp/invoke-meta.json
+            cat /tmp/explorer-response.json
             HTTP_STATUS=$(jq -r '.statusCode // 0' /tmp/explorer-response.json)
             BODY=$(jq -r '.body // ""' /tmp/explorer-response.json)
             test "$HTTP_STATUS" = "401"
@@ -54,6 +55,7 @@ jobs:
 
             APPS=$(aws amplify list-apps --output json)
             APP=$(echo "$APPS" | jq -c '[.apps[] | select((.name|ascii_downcase|contains("backstage")) or ((.repository // "")|ascii_downcase|contains("bndy-backstage")))] | first // {}')
+            echo "amplify-app=$(echo "$APP" | jq -r '.name // "none"')"
             APP_ID=$(echo "$APP" | jq -r '.appId // empty')
             if [ -n "$APP_ID" ]; then
               BRANCHES=$(aws amplify list-branches --app-id "$APP_ID" --output json)
@@ -63,11 +65,9 @@ jobs:
               BRANCHES='{"branches":[]}'
               JOBS='{"jobSummaries":[]}'
             fi
-
             jq -n --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg sourceRunsFunction "$SRC" --argjson cfg "$CFG" --argjson response "$(cat /tmp/explorer-response.json)" --argjson amplifyApp "$APP" --argjson amplifyBranches "$BRANCHES" --argjson amplifyJobs "$JOBS" '{verifiedAt:$verifiedAt,sourceRunsFunction:$sourceRunsFunction,sourceRunsLastModified:$cfg.LastModified,explorerUnauthenticatedProbe:{statusCode:$response.statusCode,body:($response.body|fromjson? // $response.body)},amplifyApp:$amplifyApp,amplifyBranches:$amplifyBranches.branches,amplifyRecentJobs:$amplifyJobs.jobSummaries}' > ops/lemonrock-explorer-prod-proof.json
           } > /tmp/explorer-proof.log 2>&1 || STATUS=failure
           cp /tmp/explorer-proof.log ops/lemonrock-explorer-prod-proof.log
-          echo "$STATUS" > /tmp/proof-status
           test "$STATUS" = success
       - name: Publish proof result
         if: always()
@@ -80,7 +80,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add ops/lemonrock-explorer-proof-run.json
           [ ! -f ops/lemonrock-explorer-prod-proof.json ] || git add ops/lemonrock-explorer-prod-proof.json
-          [ ! -f ops/lemonrock-explorer-prod-proof.log ] || git add ops/lemonrock-explorer-prod-proof.log
+          [ ! -f ops/lemonrock-explorer-prod-proof.log ] || git add -f ops/lemonrock-explorer-prod-proof.log
           git commit -m 'Record Backline Explorer production proof result' || true
           git pull --rebase --autostash origin ops/lemonrock-prod-deploy
           git push origin HEAD:ops/lemonrock-prod-deploy
