@@ -1,0 +1,52 @@
+name: Apply Join claim review routes
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Run Join claim review routes')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Add review routes and membership dependency
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const p = 'template.yaml';
+          let t = fs.readFileSync(p, 'utf8');
+          const replace = (from, to, label) => {
+            if (t.includes(to)) return;
+            if (!t.includes(from)) throw new Error(`Missing ${label}`);
+            t = t.replace(from, to);
+          };
+          replace(
+            "          ENTITY_CLAIMS_TABLE: !Ref EntityClaimsTable\n      Events:\n",
+            "          ENTITY_CLAIMS_TABLE: !Ref EntityClaimsTable\n          ENTITY_MEMBERSHIPS_TABLE: !Ref EntityMembershipsTable\n      Events:\n",
+            'Claims env'
+          );
+          const anchor = `        CancelClaim:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/claims/{id}\n            Method: DELETE\n`;
+          const extra = `${anchor}        ListPendingClaims:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/admin/claims\n            Method: GET\n        ReviewClaim:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/admin/claims/{id}\n            Method: PATCH\n`;
+          replace(anchor, extra, 'Claims review events');
+          fs.writeFileSync(p, t);
+          NODE
+          node --check claims-lambda/handler.js
+          npm run validate
+          npm run verify-routes
+      - name: Commit
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add template.yaml
+          git commit -m 'Enable Join claim review and approval routes'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
