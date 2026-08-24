@@ -1,0 +1,9 @@
+{
+  "name": "bndy-claims-lambda",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "aws-sdk": "^2.1692.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
