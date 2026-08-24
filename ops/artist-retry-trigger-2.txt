@@ -1,0 +1,1 @@
+retry artist root after production redirect-aware worker deployment
