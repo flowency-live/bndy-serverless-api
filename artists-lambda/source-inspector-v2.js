@@ -106,6 +106,48 @@ function isGenericFacebookDescription(value) {
     || description === 'log into facebook to start sharing and connecting with your friends, family, and people you know';
 }
 
+function cleanFacebookDescription(value, pageName) {
+  const original = String(value || '').replace(/\s+/g, ' ').trim();
+  const name = String(pageName || '').replace(/\s+/g, ' ').trim();
+  if (!original || !name) return original || null;
+
+  // Facebook's public OG description commonly starts with:
+  //   "<page name>. <likes> likes · <people> talking about this. <real bio>"
+  // Only strip when the exact observed page name AND an anchored engagement
+  // block are present, so ordinary bios containing numbers remain untouched.
+  const namePrefix = new RegExp(
+    `^${escapeRegExp(name)}\\s*(?:[.·•|:\\-–—]+)\\s*`,
+    'i',
+  );
+  const namedRemainder = original.match(namePrefix)
+    ? original.replace(namePrefix, '')
+    : null;
+  if (namedRemainder === null) return original;
+
+  const count = '[0-9][0-9,.]*\\s*[KMB]?';
+  const primaryMetric = `${count}\\s+(?:likes?|followers?)`;
+  const secondaryMetric = `${count}\\s+(?:talking about this|(?:people?\\s+)?talking about this|were here|followers?|following|likes?)`;
+  const engagementPrefix = new RegExp(
+    `^${primaryMetric}(?:\\s*[·•|]\\s*${secondaryMetric})*\\s*(?:[.]\\s*|$)`,
+    'i',
+  );
+
+  if (!engagementPrefix.test(namedRemainder)) return original;
+  return namedRemainder.replace(engagementPrefix, '').trim() || null;
+}
+
+function isFacebookCrawlerImageUrl(urlString) {
+  if (!urlString) return false;
+  try {
+    const parsed = new URL(urlString);
+    const host = parsed.hostname.toLowerCase();
+    return (host === 'lookaside.fbsbx.com' || host.endsWith('.lookaside.fbsbx.com'))
+      && parsed.pathname.startsWith('/lookaside/crawler/');
+  } catch {
+    return false;
+  }
+}
+
 function sanitiseFacebookBoilerplate(result) {
   if (!result?.observed) return result;
   if (result.existing) return result;
@@ -465,7 +507,8 @@ async function enrichInspectionResult(result, { expectedType = null, fetchHtml =
   const aboutPromise = needsMetadata
     ? fetchBasicFacebookAbout(handle, fetchHtml)
     : Promise.resolve(null);
-  const picturePromise = expectedType === 'artist' && !observed.imageUrl
+  const needsDirectPicture = !observed.imageUrl || isFacebookCrawlerImageUrl(observed.imageUrl);
+  const picturePromise = expectedType === 'artist' && needsDirectPicture
     ? fetchPicture(handle)
     : Promise.resolve(null);
 
@@ -478,7 +521,7 @@ async function enrichInspectionResult(result, { expectedType = null, fetchHtml =
   if (basicResult.status === 'fulfilled') mergeMissingObserved(observed, evidence, basicResult.value);
   if (aboutResult.status === 'fulfilled') mergeMissingObserved(observed, evidence, aboutResult.value);
 
-  if (!observed.imageUrl && pictureResult.status === 'fulfilled' && pictureResult.value) {
+  if (needsDirectPicture && pictureResult.status === 'fulfilled' && pictureResult.value) {
     observed.imageUrl = pictureResult.value;
     evidence.imageUrl = 'facebook_graph_picture';
   }
@@ -489,6 +532,12 @@ async function enrichInspectionResult(result, { expectedType = null, fetchHtml =
       observed.name = hint;
       evidence.name = 'facebook_handle_hint';
     }
+  }
+
+  if (observed.description) {
+    const cleanedDescription = cleanFacebookDescription(observed.description, observed.name);
+    observed.description = cleanedDescription;
+    if (!cleanedDescription) delete evidence.description;
   }
 
   return {
@@ -572,6 +621,8 @@ module.exports = {
   unwrapGroupMemberProfileInput,
   isGenericFacebookName,
   isGenericFacebookDescription,
+  cleanFacebookDescription,
+  isFacebookCrawlerImageUrl,
   sanitiseFacebookBoilerplate,
   restoreStableInputIdentity,
   readHtmlTitle,
