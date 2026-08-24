@@ -1,0 +1,148 @@
+{
+  "verifiedAt": "2026-08-24T06:41:59Z",
+  "sourceRunsFunction": "bndy-serverless-api-SourceRunsFunc-bUjoJCjAxPH2",
+  "sourceRunsLastModified": "2026-08-24T03:56:04.000+0000",
+  "explorerUnauthenticatedProbe": {
+    "statusCode": 401,
+    "body": {
+      "error": "Not authenticated"
+    }
+  },
+  "amplifyApp": {
+    "appId": "d3hbhqxqqchzbb",
+    "appArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb",
+    "name": "bndy-backstage",
+    "tags": {},
+    "repository": "https://github.com/flowency-live/bndy-backstage",
+    "platform": "WEB",
+    "createTime": "2025-09-24T17:32:17.987000+00:00",
+    "updateTime": "2025-11-17T12:27:46.794000+00:00",
+    "environmentVariables": {
+      "VITE_GOOGLE_MAPS_API_KEY": "AIzaSyCXtOe0EV-UTTuE62XTV6Z7K18XDEYGv8Q"
+    },
+    "defaultDomain": "d3hbhqxqqchzbb.amplifyapp.com",
+    "enableBranchAutoBuild": false,
+    "enableBranchAutoDeletion": false,
+    "enableBasicAuth": false,
+    "customRules": [
+      {
+        "source": "/api/<*>",
+        "target": "https://api.bndy.co.uk/api/<*>",
+        "status": "200"
+      },
+      {
+        "source": "/<*>",
+        "target": "/index.html",
+        "status": "404-200"
+      }
+    ],
+    "productionBranch": {
+      "lastDeployTime": "2026-08-24T06:38:59.556000+00:00",
+      "status": "SUCCEED",
+      "branchName": "main"
+    },
+    "buildSpec": "version: 1\nfrontend:\n  phases:\n    preBuild:\n      commands:\n        - npm ci\n    build:\n      commands:\n        - npm run build\n  artifacts:\n    baseDirectory: dist\n    files:\n      - '**/*'\n  cache:\n    paths:\n      - node_modules/**/*",
+    "customHeaders": "",
+    "enableAutoBranchCreation": false,
+    "repositoryCloneMethod": "TOKEN",
+    "cacheConfig": {
+      "type": "AMPLIFY_MANAGED"
+    },
+    "webhookCreateTime": "2025-09-24T17:32:17.728000+00:00",
+    "jobConfig": {
+      "buildComputeType": "STANDARD_8GB"
+    }
+  },
+  "amplifyBranches": [
+    {
+      "branchArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/main",
+      "branchName": "main",
+      "tags": {},
+      "stage": "PRODUCTION",
+      "displayName": "main",
+      "enableNotification": false,
+      "createTime": "2025-09-24T17:32:18.213000+00:00",
+      "updateTime": "2026-08-24T06:38:59.660000+00:00",
+      "environmentVariables": {},
+      "enableAutoBuild": true,
+      "framework": "Web",
+      "activeJobId": "0000000795",
+      "totalNumberOfJobs": "0",
+      "enableBasicAuth": false,
+      "enablePerformanceMode": false,
+      "ttl": "5",
+      "enablePullRequestPreview": false,
+      "backend": {}
+    },
+    {
+      "branchArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/staging",
+      "branchName": "staging",
+      "tags": {},
+      "stage": "NONE",
+      "displayName": "staging",
+      "enableNotification": false,
+      "createTime": "2025-11-03T22:20:25.137000+00:00",
+      "updateTime": "2025-11-10T22:46:42.829000+00:00",
+      "enableAutoBuild": true,
+      "activeJobId": "0000000017",
+      "totalNumberOfJobs": "0",
+      "enableBasicAuth": false,
+      "enablePerformanceMode": false,
+      "ttl": "5",
+      "enablePullRequestPreview": false,
+      "backend": {}
+    }
+  ],
+  "amplifyRecentJobs": [
+    {
+      "jobArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/main/jobs/0000000795",
+      "jobId": "795",
+      "commitId": "2b22b41a30e32a29c72df9ef7a60f30e21e31239",
+      "commitMessage": "[force-amplify] code-split Godmode intelligence",
+      "commitTime": "2026-08-24T06:36:42+00:00",
+      "startTime": "2026-08-24T06:37:04.252000+00:00",
+      "status": "SUCCEED",
+      "endTime": "2026-08-24T06:38:59.556000+00:00"
+    },
+    {
+      "jobArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/main/jobs/0000000794",
+      "jobId": "794",
+      "commitId": "99863eb7c16139b13d927fe271555490acf05276",
+      "commitMessage": "[force-amplify] expose Vite log tail",
+      "commitTime": "2026-08-24T06:34:35+00:00",
+      "startTime": "2026-08-24T06:35:16.869000+00:00",
+      "status": "FAILED",
+      "endTime": "2026-08-24T06:37:03.599000+00:00"
+    },
+    {
+      "jobArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/main/jobs/0000000793",
+      "jobId": "793",
+      "commitId": "1d27ff19cb12287bf05ee727108db6461f954ee3",
+      "commitMessage": "[force-amplify] surface Backstage build error",
+      "commitTime": "2026-08-24T06:33:29+00:00",
+      "startTime": "2026-08-24T06:33:31.050000+00:00",
+      "status": "FAILED",
+      "endTime": "2026-08-24T06:35:16.670000+00:00"
+    },
+    {
+      "jobArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/main/jobs/0000000792",
+      "jobId": "792",
+      "commitId": "95430f54e26399ff2621eda32371eec9ecd51fb0",
+      "commitMessage": "[force-amplify] expose Backstage deployment stages",
+      "commitTime": "2026-08-24T06:31:40+00:00",
+      "startTime": "2026-08-24T06:31:42.530000+00:00",
+      "status": "FAILED",
+      "endTime": "2026-08-24T06:33:28.754000+00:00"
+    },
+    {
+      "jobArn": "arn:aws:amplify:eu-west-2:771551874768:apps/d3hbhqxqqchzbb/branches/main/jobs/0000000791",
+      "jobId": "791",
+      "commitId": "a8308d55aeade2d9b54cfe651aea0f6afb6b0418",
+      "commitMessage": "[force-amplify] add observable Backstage release trigger",
+      "commitTime": "2026-08-24T06:28:58+00:00",
+      "startTime": "2026-08-24T06:28:59.930000+00:00",
+      "status": "FAILED",
+      "endTime": "2026-08-24T06:30:42.812000+00:00"
+    }
+  ]
+}
