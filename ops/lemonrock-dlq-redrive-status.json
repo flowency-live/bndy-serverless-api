@@ -1,11 +1,11 @@
 {
-  "verifiedAt": "2026-08-24T05:22:59Z",
+  "verifiedAt": "2026-08-24T06:40:05Z",
   "moveStatus": "",
-  "taskHandle": "eyJ0YXNrSWQiOiI2ZmU1YmVlYS0wM2FhLTQ1OTctOTBjYi1mZWE0YTM3ODZiM2UiLCJzb3VyY2VBcm4iOiJhcm46YXdzOnNxczpldS13ZXN0LTI6NzcxNTUxODc0NzY4OkJuZHlFbnJpY2htZW50U3RhY2stU291cmNlU2NhbkRMUUIzOUMzQjUxLUhGZ1hmTldoanRRNyJ9",
-  "cancellationObservationsBefore": 9,
-  "cancellationObservationsAfter": 11,
+  "taskHandle": "eyJ0YXNrSWQiOiJkMDE4ODQ0NC1jNjc3LTQ2OGItYmM5OC1hZTgwNTJiNTA5YjIiLCJzb3VyY2VBcm4iOiJhcm46YXdzOnNxczpldS13ZXN0LTI6NzcxNTUxODc0NzY4OkJuZHlFbnJpY2htZW50U3RhY2stU291cmNlU2NhbkRMUUIzOUMzQjUxLUhGZ1hmTldoanRRNyJ9",
+  "cancellationObservationsBefore": 32,
+  "cancellationObservationsAfter": 39,
   "dlq": {
-    "ApproximateNumberOfMessages": "1",
+    "ApproximateNumberOfMessages": "0",
     "ApproximateNumberOfMessagesNotVisible": "0"
   }
 }
