@@ -2,7 +2,6 @@
 
 /**
  * Production transport wrapper for the Facebook source inspector.
- * Sparse artist results are subsequently guarded and enriched by Backline.
  *
  * v2 owns all identity, trust and parsing behaviour. This wrapper only changes
  * the anonymous HTML representation we ask Facebook for. The previous
@@ -22,7 +21,6 @@
 const https = require('https');
 const base = require('./source-inspector');
 const v2 = require('./source-inspector-v2');
-const backline = require('./source-inspector-backline');
 
 const keepAliveAgent = new https.Agent({ keepAlive: true });
 const PREVIEW_USER_AGENT = 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)';
@@ -159,13 +157,10 @@ async function handler(event) {
   }
 
   try {
-    const deterministic = await v2.inspectFacebookSourceV2({
+    const result = await v2.inspectFacebookSourceV2({
       input: body.input,
       expectedType: body.expectedType ?? null,
       fetchHtml: fetchFacebookPreviewHtml,
-    });
-    const result = await backline.enrichSparseFacebookResult(deterministic, {
-      expectedType: body.expectedType ?? null,
     });
     return response(200, result);
   } catch (error) {
