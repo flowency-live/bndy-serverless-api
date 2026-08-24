@@ -1,0 +1,47 @@
+name: Smoke Join production contracts once
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  smoke:
+    if: contains(github.event.head_commit.message, 'Run Join production contract smoke')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - name: Smoke deployed Join contracts
+        run: |
+          set +e
+          API='https://api.bndy.co.uk'
+          ANALYTICS=$(curl -sS -o /tmp/analytics.json -w '%{http_code}' -X POST "$API/api/join/analytics" -H 'Content-Type: application/json' --data '{"event":"join_opened","sessionId":"production-smoke","step":"contract-smoke"}')
+          ARTIST=$(curl -sS -o /tmp/artist.json -w '%{http_code}' -X POST "$API/api/join/artists" -H 'Content-Type: application/json' --data '{"name":"__smoke__","location":"Manchester"}')
+          VENUE=$(curl -sS -o /tmp/venue.json -w '%{http_code}' -X POST "$API/api/join/venues" -H 'Content-Type: application/json' --data '{"name":"__smoke__","googlePlaceId":"__smoke__"}')
+          INVITE=$(curl -sS -o /tmp/invite.json -w '%{http_code}' "$API/api/entity-invites/definitely-not-a-real-token")
+          set -e
+          PASS=true
+          [[ "$ANALYTICS" == '202' ]] || PASS=false
+          [[ "$ARTIST" == '401' ]] || PASS=false
+          [[ "$VENUE" == '401' ]] || PASS=false
+          [[ "$INVITE" == '404' || "$INVITE" == '410' ]] || PASS=false
+          {
+            echo "checked_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "pass=$PASS"
+            echo "analytics_status=$ANALYTICS body=$(cat /tmp/analytics.json)"
+            echo "artist_without_auth_status=$ARTIST body=$(cat /tmp/artist.json)"
+            echo "venue_without_auth_status=$VENUE body=$(cat /tmp/venue.json)"
+            echo "unknown_invite_status=$INVITE body=$(cat /tmp/invite.json)"
+          } > docs/JOIN-PRODUCTION-SMOKE.txt
+      - name: Commit smoke result
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/JOIN-PRODUCTION-SMOKE.txt
+          git commit -m 'Record Join production contract smoke'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
