@@ -906,6 +906,7 @@ Resources:
         Variables:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
           ENTITY_CLAIMS_TABLE: !Ref EntityClaimsTable
+          ENTITY_MEMBERSHIPS_TABLE: !Ref EntityMembershipsTable
       Events:
         CreateClaim:
           Type: HttpApi
@@ -925,6 +926,18 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/claims/{id}
             Method: DELETE
+        ListPendingClaims:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/admin/claims
+            Method: GET
+        ReviewClaim:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/admin/claims/{id}
+            Method: PATCH
 
   # Auth Lambda
   AuthFunction:
