@@ -266,9 +266,11 @@ function parseJsonLd(html) {
 function parseEmbeddedFacebookDetails(html) {
   const jsonLd = parseJsonLd(html) || {};
 
+  // Only profile_name is sufficiently entity-specific in Facebook's embedded
+  // payload. Generic page_name/display_name keys also describe UI language and
+  // navigation objects (for example "Afrikaans"), not the inspected artist.
   const name = jsonLd.name || findJsonString(html, [
     'profile_name',
-    'page_name',
   ]);
 
   const description = jsonLd.description || findJsonString(html, [
