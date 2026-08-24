@@ -1,0 +1,2 @@
+snapshot=bndy-baseline-2026-08-24-v1
+snapshotAt=2026-08-24T07:15:00.000Z
