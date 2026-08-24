@@ -1,0 +1,72 @@
+name: Retry Lemonrock artist root
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  retry:
+    if: contains(github.event.head_commit.message, 'Retry Lemonrock artist root')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - name: Publish run start
+        run: |
+          mkdir -p ops
+          printf '{"phase":"started","runId":"%s","startedAt":"%s"}\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-artist-retry-run.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-artist-retry-run.json
+          git commit -m "Record Lemonrock artist retry start"
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Probe and requeue artist root
+        run: |
+          set -euo pipefail
+          TABLE=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query "Stacks[0].Outputs[?OutputKey=='StateTableName'].OutputValue | [0]" --output text)
+          QUEUE_URL=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query "Stacks[0].Outputs[?OutputKey=='SourceScanQueueUrl'].OutputValue | [0]" --output text)
+          URL='https://www.lemonrock.com/advancedsearchbands.php?_start=0'
+          HTTP=$(curl -L -sS --connect-timeout 10 --max-time 30 -A 'Mozilla/5.0 (compatible; BNDY-Backline/1.0)' -o /tmp/artist-root.html -w '%{http_code}' "$URL" || true)
+          BYTES=$(wc -c </tmp/artist-root.html 2>/dev/null || echo 0)
+          TOKEN=$(date -u +%Y-%m-%dT%H-%M-%S-%3NZ)
+          TASK_KEY="root:artist-retry:$TOKEN"
+          BODY=$(jq -nc --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg key "$TASK_KEY" --arg url "$URL" '{sourceId:"lemonrock-artist-index",reason:"manual",requestedAt:$at,taskKey:$key,task:{kind:"artist-index",url:$url,bootstrapMode:"discovery",bootstrapToken:$key}}')
+          aws sqs send-message --queue-url "$QUEUE_URL" --message-body "$BODY" >/tmp/send.json
+          STATUS=missing
+          LAST_ERROR=null
+          for i in $(seq 1 18); do
+            ITEM=$(aws dynamodb get-item --table-name "$TABLE" --key "{\"pk\":{\"S\":\"BOOTSTRAP#lemonrock\"},\"sk\":{\"S\":\"TASK#$TASK_KEY\"}}")
+            STATUS=$(echo "$ITEM" | jq -r '.Item.status.S // "missing"')
+            LAST_ERROR=$(echo "$ITEM" | jq -r '.Item.lastError.S // ""')
+            if [ "$STATUS" = completed ] || [ "$STATUS" = failed ]; then break; fi
+            sleep 5
+          done
+          ARTIST_INDEX=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex --key-condition-expression 'GSI1PK = :pk' --expression-attribute-values '{":pk":{"S":"SOURCE#lemonrock-artist-index"}}' --select COUNT --query Count --output text)
+          ARTIST_HYDRATION=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex --key-condition-expression 'GSI1PK = :pk' --expression-attribute-values '{":pk":{"S":"SOURCE#lemonrock-artist-hydration"}}' --select COUNT --query Count --output text)
+          ARTIST_TASKS=$(aws dynamodb query --table-name "$TABLE" --key-condition-expression 'pk = :pk AND begins_with(sk, :prefix)' --expression-attribute-values '{":pk":{"S":"BOOTSTRAP#lemonrock"},":prefix":{"S":"TASK#artist:"}}' --select COUNT --query Count --output text 2>/dev/null || echo 0)
+          jq -n --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg taskKey "$TASK_KEY" --arg status "$STATUS" --arg lastError "$LAST_ERROR" --arg http "$HTTP" --arg bytes "$BYTES" --arg artistIndex "$ARTIST_INDEX" --arg artistHydration "$ARTIST_HYDRATION" --arg artistTasks "$ARTIST_TASKS" '{verifiedAt:$verifiedAt,taskKey:$taskKey,status:$status,lastError:$lastError,httpProbe:{status:($http|tonumber),bytes:($bytes|tonumber)},artistIndexObservations:($artistIndex|tonumber),artistHydrationObservations:($artistHydration|tonumber),artistTaskCount:($artistTasks|tonumber)}' > ops/lemonrock-artist-retry-status.json
+          cat ops/lemonrock-artist-retry-status.json
+          test "$STATUS" = completed
+      - name: Publish result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          printf '{"phase":"finished","status":"%s","runId":"%s","finishedAt":"%s"}\n' "$JOB_STATUS" "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-artist-retry-run.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-artist-retry-run.json
+          [ ! -f ops/lemonrock-artist-retry-status.json ] || git add ops/lemonrock-artist-retry-status.json
+          git commit -m "Record Lemonrock artist retry result" || true
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
