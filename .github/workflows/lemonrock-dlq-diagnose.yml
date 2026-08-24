@@ -1,0 +1,47 @@
+name: Diagnose Lemonrock SourceScan DLQ
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    if: contains(github.event.head_commit.message, 'Diagnose Lemonrock DLQ')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Inspect DLQ and worker logs
+        run: |
+          set -euo pipefail
+          DLQ_URL=$(aws sqs list-queues --queue-name-prefix BndyEnrichmentStack-SourceScanDLQ --query 'QueueUrls[0]' --output text)
+          WORKER=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query "Stacks[0].Outputs[?OutputKey=='SourceWorkerFunctionName'].OutputValue | [0]" --output text)
+          LOG_GROUP="/aws/lambda/$WORKER"
+          ATTR=$(aws sqs get-queue-attributes --queue-url "$DLQ_URL" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible)
+          echo '[]' > /tmp/messages.json
+          for batch in 1 2; do
+            R=$(aws sqs receive-message --queue-url "$DLQ_URL" --max-number-of-messages 10 --visibility-timeout 1 --wait-time-seconds 1 --attribute-names All --message-attribute-names All)
+            echo "$R" | jq '.Messages // [] | map({messageId:.MessageId,body:(.Body|fromjson? // .Body),approxReceiveCount:.Attributes.ApproximateReceiveCount,sentTimestamp:.Attributes.SentTimestamp})' > /tmp/batch.json
+            jq -s '.[0] + .[1] | unique_by(.messageId)' /tmp/messages.json /tmp/batch.json > /tmp/messages2.json && mv /tmp/messages2.json /tmp/messages.json
+            sleep 2
+          done
+          START_MS=$(( ($(date +%s) - 7200) * 1000 ))
+          LOGS=$(aws logs filter-log-events --log-group-name "$LOG_GROUP" --start-time "$START_MS" --filter-pattern 'SourceWorker failed' --limit 100 || echo '{"events":[]}')
+          mkdir -p ops
+          jq -n --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg dlqUrl "$DLQ_URL" --arg worker "$WORKER" --argjson attrs "$ATTR" --argjson messages "$(cat /tmp/messages.json)" --argjson logs "$LOGS" '{verifiedAt:$verifiedAt,sourceWorker:$worker,dlq:$attrs.Attributes,messages:$messages,recentFailureLogs:[$logs.events[]? | {timestamp:.timestamp,message:.message}]}' > ops/lemonrock-dlq-diagnosis.json
+          cat ops/lemonrock-dlq-diagnosis.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-dlq-diagnosis.json
+          git commit -m 'Record Lemonrock DLQ diagnosis'
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
