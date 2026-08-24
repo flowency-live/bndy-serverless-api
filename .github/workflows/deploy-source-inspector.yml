@@ -234,7 +234,10 @@ jobs:
           jq -e '.valid == true and .identityResolved == true' /tmp/source-inspector-ahundredendings.json
           jq -e '.facebookUrl == "https://www.facebook.com/ahundredendings"' /tmp/source-inspector-ahundredendings.json
           jq -e '.observed.name == "A Hundred Endings" or .observed.name == "Ahundredendings"' /tmp/source-inspector-ahundredendings.json
+          jq -e '.observed.description | type == "string" and length > 0' /tmp/source-inspector-ahundredendings.json
+          jq -e '(.observed.description | test("[0-9,.]+ likes.*talking about this"; "i")) | not' /tmp/source-inspector-ahundredendings.json
           jq -e '.observed.imageUrl | type == "string" and length > 0' /tmp/source-inspector-ahundredendings.json
+          jq -e '(.observed.imageUrl | test("^https://lookaside\\.fbsbx\\.com/")) | not' /tmp/source-inspector-ahundredendings.json
           jq -e 'has("backlineAssist") | not' /tmp/source-inspector-ahundredendings.json
 
       - name: Mark source inspector deployment successful
