@@ -2,6 +2,7 @@
 
 /**
  * Production transport wrapper for the Facebook source inspector.
+ * Sparse artist results are subsequently guarded and enriched by Backline.
  *
  * v2 owns all identity, trust and parsing behaviour. This wrapper only changes
  * the anonymous HTML representation we ask Facebook for. The previous
