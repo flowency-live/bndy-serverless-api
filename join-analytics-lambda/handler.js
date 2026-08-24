@@ -25,6 +25,7 @@ const ALLOWED_EVENTS = new Set([
   'delegate_invitation_accepted',
   'delegate_revoked',
   'ownership_transferred',
+  'ownership_relinquished',
 ]);
 
 function response(statusCode, body) {
