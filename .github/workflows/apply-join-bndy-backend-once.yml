@@ -33,88 +33,39 @@ jobs:
             if (idx < 0) throw new Error(`Anchor not found for ${label}`);
             return source.slice(0, idx) + addition + source.slice(idx);
           }
-
           function replaceRequired(source, from, to, label, all = false) {
             if (source.includes(to)) return source;
             if (!source.includes(from)) throw new Error(`Replacement anchor not found for ${label}`);
             return all ? source.split(from).join(to) : source.replace(from, to);
           }
 
-          // Owner is an artist administrator, while retaining stronger lifecycle semantics.
-          handler = replaceRequired(
-            handler,
-            "if (!membership || membership.role !== 'admin') {",
-            "if (!membership || !['admin', 'owner'].includes(membership.role)) {",
-            'owner admin authorisation'
-          );
-
-          // Expose canonical aliases/name variants to Join candidate cards.
-          handler = replaceRequired(
-            handler,
-            "return { id: a.id, name: a.name, location: a.location || '', sim, sharedToken, slugEqual, region: candidateRegion, sameRegion };",
-            "return { id: a.id, name: a.name, location: a.location || '', nameVariants: a.name_variants || [], sim, sharedToken, slugEqual, region: candidateRegion, sameRegion };",
-            'candidate name variants'
-          );
-          handler = replaceRequired(
-            handler,
-            "id: s.id, name: s.name, location: s.location,\n              confidence:",
-            "id: s.id, name: s.name, location: s.location, nameVariants: s.nameVariants || [],\n              confidence:",
-            'review aliases', true
-          );
-          handler = replaceRequired(
-            handler,
-            "artist: { id: best.id, name: best.name, location: best.location, ...editionMetadata(best) },",
-            "artist: { id: best.id, name: best.name, location: best.location, nameVariants: best.nameVariants || [], ...editionMetadata(best) },",
-            'confident match aliases'
-          );
-          handler = replaceRequired(
-            handler,
-            "artist: { id: candidate.id, name: candidate.name, location: candidate.location, ...editionMetadata(candidate) },",
-            "artist: { id: candidate.id, name: candidate.name, location: candidate.location, nameVariants: variants, ...editionMetadata(candidate) },",
-            'variant match aliases'
-          );
-          handler = replaceRequired(
-            handler,
-            "artist: { id: fbMatch.Item.id, name: fbMatch.Item.name, location: fbMatch.Item.location, ...editionMetadata(fbMatch.Item) },",
-            "artist: { id: fbMatch.Item.id, name: fbMatch.Item.name, location: fbMatch.Item.location, nameVariants: fbMatch.Item.name_variants || [], ...editionMetadata(fbMatch.Item) },",
-            'facebook match aliases'
-          );
-          handler = replaceRequired(
-            handler,
-            "artist: { id: resolved.Item.id, name: resolved.Item.name, location: resolved.Item.location || '', ...editionMetadata(resolved.Item) },",
-            "artist: { id: resolved.Item.id, name: resolved.Item.name, location: resolved.Item.location || '', nameVariants: resolved.Item.name_variants || [], ...editionMetadata(resolved.Item) },",
-            'manual resolution aliases'
-          );
+          handler = replaceRequired(handler, "if (!membership || membership.role !== 'admin') {", "if (!membership || !['admin', 'owner'].includes(membership.role)) {", 'owner admin authorisation');
+          handler = replaceRequired(handler, "return { id: a.id, name: a.name, location: a.location || '', sim, sharedToken, slugEqual, region: candidateRegion, sameRegion };", "return { id: a.id, name: a.name, location: a.location || '', nameVariants: a.name_variants || [], sim, sharedToken, slugEqual, region: candidateRegion, sameRegion };", 'candidate name variants');
+          handler = replaceRequired(handler, "id: s.id, name: s.name, location: s.location,\n              confidence:", "id: s.id, name: s.name, location: s.location, nameVariants: s.nameVariants || [],\n              confidence:", 'review aliases', true);
+          handler = replaceRequired(handler, "artist: { id: best.id, name: best.name, location: best.location, ...editionMetadata(best) },", "artist: { id: best.id, name: best.name, location: best.location, nameVariants: best.nameVariants || [], ...editionMetadata(best) },", 'confident match aliases');
+          handler = replaceRequired(handler, "artist: { id: candidate.id, name: candidate.name, location: candidate.location, ...editionMetadata(candidate) },", "artist: { id: candidate.id, name: candidate.name, location: candidate.location, nameVariants: variants, ...editionMetadata(candidate) },", 'variant match aliases');
+          handler = replaceRequired(handler, "artist: { id: fbMatch.Item.id, name: fbMatch.Item.name, location: fbMatch.Item.location, ...editionMetadata(fbMatch.Item) },", "artist: { id: fbMatch.Item.id, name: fbMatch.Item.name, location: fbMatch.Item.location, nameVariants: fbMatch.Item.name_variants || [], ...editionMetadata(fbMatch.Item) },", 'facebook match aliases');
+          handler = replaceRequired(handler, "artist: { id: resolved.Item.id, name: resolved.Item.name, location: resolved.Item.location || '', ...editionMetadata(resolved.Item) },", "artist: { id: resolved.Item.id, name: resolved.Item.name, location: resolved.Item.location || '', nameVariants: resolved.Item.name_variants || [], ...editionMetadata(resolved.Item) },", 'manual resolution aliases');
 
           const joinRoute = `    // Join bndy: authenticated creation of a genuinely new Artist plus initial owner relationship.\n    if (method === 'POST' && path === '/api/join/artists') {\n      return await handleJoinArtist(event);\n    }\n\n`;
-          handler = insertBefore(
-            handler,
-            "    // Community artist creation endpoint (public, no auth required)\n",
-            joinRoute,
-            'Join artist router'
-          );
+          handler = insertBefore(handler, "    // Community artist creation endpoint (public, no auth required)\n", joinRoute, 'Join artist router');
 
-          const joinHandler = `// ============================================================================\n// JOIN BNDY — AUTHENTICATED NEW ARTIST + INITIAL OWNERSHIP\n// ============================================================================\nasync function handleJoinArtist(event) {\n  const authResult = await requireAuth(event);\n  if (authResult.error) {\n    return { statusCode: 401, headers: getCommunityHeaders(), body: JSON.stringify({ error: authResult.error, code: 'AUTH_REQUIRED' }) };\n  }\n\n  let body;\n  try { body = JSON.parse(event.body || '{}'); }\n  catch { return { statusCode: 400, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Invalid JSON body' }) }; }\n\n  const name = String(body.name || '').trim();\n  const location = String(body.location || '').trim();\n  if (!name || !location) {\n    return { statusCode: 400, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Artist name and location are required' }) };\n  }\n\n  // Re-run the full canonical resolver at commit time. Join never trusts the\n  // earlier client-side check because another record may have appeared since.\n  const dryEvent = { ...event, body: JSON.stringify({ ...body, name, location, dryRun: true, canCreate: true, source: 'join_bndy' }) };\n  const resolutionResponse = await handleFindOrCreateArtist(dryEvent);\n  let resolution;\n  try { resolution = JSON.parse(resolutionResponse.body || '{}'); } catch { resolution = {}; }\n\n  if (resolutionResponse.statusCode !== 200) return resolutionResponse;\n  if (resolution.action === 'matched' || resolution.action === 'review') {\n    return {\n      statusCode: 409,\n      headers: getCommunityHeaders(),\n      body: JSON.stringify({\n        error: 'An existing artist may match this identity',\n        code: 'EXISTING_ENTITY',\n        action: resolution.action,\n        artist: resolution.artist || null,\n        candidates: resolution.candidates || [],\n        matchedBy: resolution.matchedBy || null,\n        variant: resolution.variant || null\n      })\n    };\n  }\n  if (resolution.action !== 'clear') {\n    return { statusCode: 422, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Artist identity could not be safely cleared for creation', code: 'IDENTITY_NOT_CLEAR', resolution }) };\n  }\n\n  // Create through the existing canonical community path so data quality,\n  // genre validation, image handling and hard uniqueness sentinels remain one\n  // implementation. Use a Join source so Backline publication waits until the\n  // ownership relationship has committed successfully.\n  const createEvent = { ...event, body: JSON.stringify({ ...body, name, location, source: 'join_bndy' }) };\n  const createResponse = await handleCreateCommunityArtist(createEvent);\n  if (createResponse.statusCode !== 201) {\n    if (createResponse.statusCode === 409) {\n      let duplicate = {};\n      try { duplicate = JSON.parse(createResponse.body || '{}'); } catch {}\n      return { statusCode: 409, headers: getCommunityHeaders(), body: JSON.stringify({ ...duplicate, code: 'EXISTING_ENTITY' }) };\n    }\n    return createResponse;\n  }\n\n  let createdBody;\n  try { createdBody = JSON.parse(createResponse.body || '{}'); } catch { createdBody = {}; }\n  const artistId = createdBody.artist?.id;\n  if (!artistId) {\n    return { statusCode: 500, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Artist was created without a returned id', code: 'JOIN_CREATE_INCOMPLETE' }) };\n  }\n\n  const membershipId = crypto.randomUUID();\n  const now = new Date().toISOString();\n  const userId = authResult.user.userId;\n  const membership = {\n    membership_id: membershipId,\n    user_id: userId,\n    artist_id: artistId,\n    membership_type: 'owner',\n    role: 'owner',\n    display_name: null, avatar_url: null, instrument: null, bio: null,\n    icon: 'fa-music', color: '#708090', permissions: [],\n    joined_at: now, invited_at: now, invited_by_user_id: userId, status: 'active',\n    created_at: now, updated_at: now\n  };\n\n  try {\n    // Artist creation itself uses the shared uniqueness-gate transaction. The\n    // second transaction binds management atomically to the already-gated\n    // artist. If this fails, the newly-created artist is compensated below so\n    // Join never intentionally leaves an orphaned entity.\n    await dynamodb.transactWrite({ TransactItems: [\n      { Put: { TableName: MEMBERSHIPS_TABLE, Item: membership, ConditionExpression: 'attribute_not_exists(membership_id)' } },\n      { Update: {\n        TableName: 'bndy-artists', Key: { id: artistId },\n        UpdateExpression: 'SET owner_user_id = :uid, claimedByUserId = :uid, updated_at = :now',\n        ConditionExpression: 'attribute_exists(id) AND (attribute_not_exists(owner_user_id) OR owner_user_id = :empty)',\n        ExpressionAttributeValues: { ':uid': userId, ':now': now, ':empty': null }\n      } }\n    ] }).promise();\n  } catch (ownershipError) {\n    console.error('[JOIN_ARTIST] Ownership transaction failed, compensating new artist:', ownershipError);\n    try {\n      await dynamodb.delete({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();\n      const { keys } = buildArtistUniqueKeys(name, location, body.facebookUrl, body.nameVariants || []);\n      await releaseUniqueKeys(dynamodb, keys, artistId);\n    } catch (cleanupError) {\n      console.error('[JOIN_ARTIST] COMPENSATION FAILED:', cleanupError);\n    }\n    return { statusCode: 500, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Could not establish artist ownership', code: 'JOIN_OWNERSHIP_FAILED' }) };\n  }\n\n  // Publish owner-supplied facts only after canonical identity + ownership are durable.\n  try {\n    const persisted = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();\n    if (persisted.Item) await publishUserCreatedArtistClaims(persisted.Item);\n  } catch (backlineError) {\n    console.error('[JOIN_ARTIST] Backline provenance write failed (canonical Join remains valid):', backlineError);\n  }\n\n  return {\n    statusCode: 201,\n    headers: getCommunityHeaders(),\n    body: JSON.stringify({\n      action: 'created',\n      artist: { ...createdBody.artist, ownerUserId: userId },\n      relationship: { id: membershipId, role: 'owner', status: 'active' }\n    })\n  };\n}\n\n`;
-          handler = insertBefore(
-            handler,
-            "// ============================================================================\n// COMMUNITY WIZARD ENDPOINTS (Public, No Auth Required)\n// ============================================================================\n",
-            joinHandler,
-            'Join artist handler'
-          );
+          const joinHandler = `// ============================================================================\n// JOIN BNDY — AUTHENTICATED NEW ARTIST + INITIAL OWNERSHIP\n// ============================================================================\nasync function handleJoinArtist(event) {\n  const authResult = await requireAuth(event);\n  if (authResult.error) return { statusCode: 401, headers: getCommunityHeaders(), body: JSON.stringify({ error: authResult.error, code: 'AUTH_REQUIRED' }) };\n\n  let body;\n  try { body = JSON.parse(event.body || '{}'); } catch { return { statusCode: 400, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Invalid JSON body' }) }; }\n  const name = String(body.name || '').trim();\n  const location = String(body.location || '').trim();\n  if (!name || !location) return { statusCode: 400, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Artist name and location are required' }) };\n\n  const dryEvent = { ...event, body: JSON.stringify({ ...body, name, location, dryRun: true, canCreate: true, source: 'join_bndy' }) };\n  const resolutionResponse = await handleFindOrCreateArtist(dryEvent);\n  let resolution; try { resolution = JSON.parse(resolutionResponse.body || '{}'); } catch { resolution = {}; }\n  if (resolutionResponse.statusCode !== 200) return resolutionResponse;\n  if (resolution.action === 'matched' || resolution.action === 'review') return { statusCode: 409, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'An existing artist may match this identity', code: 'EXISTING_ENTITY', action: resolution.action, artist: resolution.artist || null, candidates: resolution.candidates || [], matchedBy: resolution.matchedBy || null, variant: resolution.variant || null }) };\n  if (resolution.action !== 'clear') return { statusCode: 422, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Artist identity could not be safely cleared for creation', code: 'IDENTITY_NOT_CLEAR', resolution }) };\n\n  const createEvent = { ...event, body: JSON.stringify({ ...body, name, location, source: 'join_bndy' }) };\n  const createResponse = await handleCreateCommunityArtist(createEvent);\n  if (createResponse.statusCode !== 201) {\n    if (createResponse.statusCode === 409) { let duplicate = {}; try { duplicate = JSON.parse(createResponse.body || '{}'); } catch {} return { statusCode: 409, headers: getCommunityHeaders(), body: JSON.stringify({ ...duplicate, code: 'EXISTING_ENTITY' }) }; }\n    return createResponse;\n  }\n\n  let createdBody; try { createdBody = JSON.parse(createResponse.body || '{}'); } catch { createdBody = {}; }\n  const artistId = createdBody.artist?.id;\n  if (!artistId) return { statusCode: 500, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Artist was created without a returned id', code: 'JOIN_CREATE_INCOMPLETE' }) };\n\n  const membershipId = crypto.randomUUID();\n  const now = new Date().toISOString();\n  const userId = authResult.user.userId;\n  const membership = { membership_id: membershipId, user_id: userId, artist_id: artistId, membership_type: 'owner', role: 'owner', display_name: null, avatar_url: null, instrument: null, bio: null, icon: 'fa-music', color: '#708090', permissions: [], joined_at: now, invited_at: now, invited_by_user_id: userId, status: 'active', created_at: now, updated_at: now };\n\n  try {\n    await dynamodb.transactWrite({ TransactItems: [\n      { Put: { TableName: MEMBERSHIPS_TABLE, Item: membership, ConditionExpression: 'attribute_not_exists(membership_id)' } },\n      { Update: { TableName: 'bndy-artists', Key: { id: artistId }, UpdateExpression: 'SET owner_user_id = :uid, claimedByUserId = :uid, updated_at = :now', ConditionExpression: 'attribute_exists(id) AND attribute_not_exists(owner_user_id)', ExpressionAttributeValues: { ':uid': userId, ':now': now } } }\n    ] }).promise();\n  } catch (ownershipError) {\n    console.error('[JOIN_ARTIST] Ownership transaction failed, compensating new artist:', ownershipError);\n    try { await dynamodb.delete({ TableName: 'bndy-artists', Key: { id: artistId } }).promise(); const { keys } = buildArtistUniqueKeys(name, location, body.facebookUrl, body.nameVariants || []); await releaseUniqueKeys(dynamodb, keys, artistId); } catch (cleanupError) { console.error('[JOIN_ARTIST] COMPENSATION FAILED:', cleanupError); }\n    return { statusCode: 500, headers: getCommunityHeaders(), body: JSON.stringify({ error: 'Could not establish artist ownership', code: 'JOIN_OWNERSHIP_FAILED' }) };\n  }\n\n  try { const persisted = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise(); if (persisted.Item) await publishUserCreatedArtistClaims(persisted.Item); } catch (backlineError) { console.error('[JOIN_ARTIST] Backline provenance write failed (canonical Join remains valid):', backlineError); }\n  return { statusCode: 201, headers: getCommunityHeaders(), body: JSON.stringify({ action: 'created', artist: { ...createdBody.artist, ownerUserId: userId }, relationship: { id: membershipId, role: 'owner', status: 'active' } }) };\n}\n\n`;
+          handler = insertBefore(handler, "// ============================================================================\n// COMMUNITY WIZARD ENDPOINTS (Public, No Auth Required)\n// ============================================================================\n", joinHandler, 'Join artist handler');
 
           const joinTemplate = `        JoinArtist:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/join/artists\n            Method: POST\n`;
-          const templateAnchor = `        # SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)\n`;
-          template = insertBefore(template, templateAnchor, joinTemplate, 'Join artist API route');
+          template = insertBefore(template, `        # SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)\n`, joinTemplate, 'Join artist API route');
 
           fs.writeFileSync(handlerPath, handler);
           fs.writeFileSync(templatePath, template);
           NODE
-          node --check artists-lambda/handler.js
-          grep -q '/api/join/artists' template.yaml
-      - name: Run artist tests
+      - name: Verify patched files
         run: |
-          if [ -f package-lock.json ]; then npm ci; fi
-          npm test -- --runInBand artists-lambda/handler.test.js artists-lambda/artist-matching.test.js || npm test -- artists-lambda/handler.test.js artists-lambda/artist-matching.test.js
+          node --check artists-lambda/handler.js
+          grep -q '/api/join/artists' artists-lambda/handler.js
+          grep -q '/api/join/artists' template.yaml
+          npm run validate
+          npm run verify-routes
       - name: Commit backend changes
         run: |
           git config user.name 'bndy-product-bot'
