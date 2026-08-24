@@ -1,0 +1,159 @@
+{
+  "verifiedAt": "2026-08-24T05:14:43Z",
+  "stateTable": "BndyEnrichmentStack-StateTable9728C7E5-14HR6N3NEWGLM",
+  "sourceWorker": "BndyEnrichmentStack-SourceWorker336FEA29-ghZk2mBRjOks",
+  "lemonrockTaskTotal": 2745,
+  "taskStatus": {
+    "completed": 2743,
+    "failed": 2
+  },
+  "observations": {
+    "lemonrock-new-gigs": 9,
+    "lemonrock-cancellations": 9,
+    "lemonrock-artist-index": 3,
+    "lemonrock-venue-index": 30,
+    "lemonrock-artist-hydration": 53,
+    "lemonrock-venue-hydration": 2477,
+    "lemonrock-gig-hydration": 174,
+    "lemonrock-future-reconcile": 2,
+    "lemonrock-full-reconcile": 0
+  },
+  "queue": {
+    "ApproximateNumberOfMessages": "0",
+    "ApproximateNumberOfMessagesNotVisible": "8",
+    "ApproximateNumberOfMessagesDelayed": "0"
+  },
+  "dlq": {
+    "ApproximateNumberOfMessages": "2",
+    "ApproximateNumberOfMessagesNotVisible": "0"
+  },
+  "lambdaErrorsLastHour": 0.0,
+  "sources": {
+    "lemonrock-new-gigs": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-new-gigs"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-cancellations": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-cancellations"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-artist-index": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-artist-index"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-venue-index": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-venue-index"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-artist-hydration": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-artist-hydration"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-venue-hydration": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-venue-hydration"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-gig-hydration": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-gig-hydration"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-future-reconcile": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-future-reconcile"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    },
+    "lemonrock-full-reconcile": {
+      "enabled": {
+        "BOOL": true
+      },
+      "health": {
+        "S": "unknown"
+      },
+      "id": {
+        "S": "lemonrock-full-reconcile"
+      },
+      "shadow": {
+        "BOOL": true
+      }
+    }
+  }
+}
