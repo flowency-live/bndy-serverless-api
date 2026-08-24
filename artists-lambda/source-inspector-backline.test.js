@@ -11,7 +11,6 @@ const {
 
 function sparse() {
   return {
-    ok: true,
     facebookUrl: 'https://www.facebook.com/ahundredendings',
     facebookKey: 'ahundredendings',
     identityResolved: true,

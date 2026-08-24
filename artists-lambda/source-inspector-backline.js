@@ -17,7 +17,7 @@ const GENRES = [
 let cachedApiKey;
 
 function shouldUseBacklineAssist(result, expectedType) {
-  if (expectedType !== 'artist' || !result?.ok || !result.identityResolved || !result.facebookUrl) return false;
+  if (expectedType !== 'artist' || !result || !result.identityResolved || !result.facebookUrl) return false;
   if (result.existing || result.existingEntity) return false;
   const observed = result.observed || {};
   const evidence = result.evidence || {};
