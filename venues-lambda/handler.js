@@ -22,6 +22,10 @@ const jwt = require('jsonwebtoken');
 const keepAliveAgent = new https.Agent({ keepAlive: true });
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2', httpOptions: { agent: keepAliveAgent } });
 const lambda = new AWS.Lambda({ region: 'eu-west-2' });
+const { publishUserCreatedVenueClaims } = require('./backline-user-claims');
+const { venuePlaceKey } = require('./lib/identity');
+const { releaseUniqueKeys } = require('./lib/unique-gate');
+
 const ssm = new AWS.SSM({ region: 'eu-west-2' });
 
 // JWT Secret - cached after first retrieval
@@ -178,6 +182,8 @@ const requireMcpAuth = (event) => {
   return { user: { userId: 'mcp-service', platformAdmin: true, isService: true } };
 };
 
+const ENTITY_MEMBERSHIPS_TABLE = process.env.ENTITY_MEMBERSHIPS_TABLE || 'bndy-entity-memberships';
+
 // Route handlers
 const {
   handleGetAllVenues,
@@ -256,6 +262,71 @@ function getCorsHeaders(event) {
 // Dependency injection object for handlers
 const deps = { dynamodb, lambda, getCorsHeaders };
 
+
+async function handleJoinVenue(event) {
+  const auth = await requireAuth(event);
+  if (auth.error) return { statusCode: 401, headers: getCorsHeaders(event), body: JSON.stringify({ error: auth.error, code: 'AUTH_REQUIRED' }) };
+
+  let body;
+  try { body = parseBody(event.body); } catch { return { statusCode: 400, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'Invalid JSON body' }) }; }
+  const name = String(body.name || '').trim();
+  const address = String(body.address || '').trim();
+  const googlePlaceId = String(body.googlePlaceId || '').trim();
+  if (!name || !address || !googlePlaceId) return { statusCode: 400, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'Venue name, address and Google Place identity are required' }) };
+
+  // Identity preflight: exact Google Place and normal resolver rules, no writes.
+  const preflight = await handleFindOrCreateVenue(deps, { ...body, name, address, googlePlaceId, canCreate: false, source: 'join_bndy_preflight' }, event);
+  let verdict = {}; try { verdict = JSON.parse(preflight.body || '{}'); } catch {}
+  if (preflight.statusCode !== 200) return preflight;
+  if (verdict.id) {
+    return { statusCode: 409, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'This venue already exists', code: 'EXISTING_ENTITY', venue: verdict }) };
+  }
+  if (verdict.action !== 'review' || verdict.reason !== 'likely-new') {
+    return { statusCode: 422, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'Venue identity is not clear for creation', code: 'IDENTITY_NOT_CLEAR', verdict }) };
+  }
+
+  const created = await handleFindOrCreateVenue(deps, { ...body, name, address, googlePlaceId, canCreate: true, source: 'join_bndy', created_source: 'join_bndy', needs_review: false }, event);
+  let payload = {}; try { payload = JSON.parse(created.body || '{}'); } catch {}
+  if (created.statusCode === 200 && payload.id) return { statusCode: 409, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'This venue was created or resolved by another request first', code: 'EXISTING_ENTITY', venue: payload }) };
+  if (created.statusCode !== 201 || !payload.id) return created;
+
+  const venueId = payload.id;
+  const userId = auth.user.userId;
+  const membershipId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const membership = {
+    membership_id: membershipId, entity_type: 'venue', entity_id: venueId,
+    user_id: userId, role: 'owner', status: 'active', permissions: [],
+    joined_at: now, invited_at: now, invited_by_user_id: userId, created_at: now, updated_at: now
+  };
+
+  try {
+    await dynamodb.transactWrite({ TransactItems: [
+      { Put: { TableName: ENTITY_MEMBERSHIPS_TABLE, Item: membership, ConditionExpression: 'attribute_not_exists(membership_id)' } },
+      { Update: {
+        TableName: 'bndy-venues', Key: { id: venueId },
+        UpdateExpression: 'SET owner_user_id = :uid, claimedBy = :uid, claimedAt = :now, claimVerification = :verification, updated_at = :now',
+        ConditionExpression: 'attribute_exists(id) AND attribute_not_exists(owner_user_id)',
+        ExpressionAttributeValues: { ':uid': userId, ':now': now, ':verification': 'owner_created' }
+      } }
+    ] }).promise();
+  } catch (ownershipError) {
+    console.error('[JOIN_VENUE] ownership failed; compensating', ownershipError);
+    try {
+      await dynamodb.delete({ TableName: 'bndy-venues', Key: { id: venueId } }).promise();
+      await releaseUniqueKeys(dynamodb, [venuePlaceKey(googlePlaceId)], venueId);
+    } catch (cleanupError) { console.error('[JOIN_VENUE] compensation failed', cleanupError); }
+    return { statusCode: 500, headers: getCorsHeaders(event), body: JSON.stringify({ error: 'Could not establish venue ownership', code: 'JOIN_OWNERSHIP_FAILED' }) };
+  }
+
+  try {
+    const persisted = await dynamodb.get({ TableName: 'bndy-venues', Key: { id: venueId } }).promise();
+    if (persisted.Item) await publishUserCreatedVenueClaims(persisted.Item);
+  } catch (e) { console.error('[JOIN_VENUE] Backline write failed; Join remains valid', e); }
+
+  return { statusCode: 201, headers: getCorsHeaders(event), body: JSON.stringify({ action: 'created', venue: { ...payload, ownerUserId: userId }, relationship: { id: membershipId, role: 'owner', status: 'active' } }) };
+}
+
 exports.handler = async (event, context) => {
   // HTTP API v2 payload format compatibility
   const method = event.requestContext?.http?.method || event.httpMethod;
@@ -326,6 +397,11 @@ exports.handler = async (event, context) => {
         };
       }
       return await handleAuditVenueAdmission(deps, event);
+    }
+
+    // Join bndy — authenticated new Venue + initial ownership.
+    if (method === 'POST' && path === '/api/join/venues') {
+      return await handleJoinVenue(event);
     }
 
     // SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)

@@ -71,6 +71,41 @@ Resources:
         AllowCredentials: true
         MaxAge: 86400
 
+  # Generic user-to-entity relationships introduced by Join bndy.
+  # Artist legacy memberships remain in bndy-artist-memberships; new Venue
+  # ownership/delegation uses this table and the model can absorb other entity
+  # types without creating another relationship table.
+  EntityMembershipsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: bndy-entity-memberships
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: membership_id
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: entity_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: membership_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: user_id-index
+          KeySchema:
+            - AttributeName: user_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: entity_id-index
+          KeySchema:
+            - AttributeName: entity_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
   # =============================================================================
   # Lambda Functions - Core
   # =============================================================================
@@ -561,6 +596,7 @@ Resources:
           # Retained production table; it currently exists outside this stack
           # after its DeletionPolicy retained it during the 2026-08-16 rollback.
           VENUE_GROUPS_TABLE: bndy-venue-groups
+          ENTITY_MEMBERSHIPS_TABLE: !Ref EntityMembershipsTable
       Events:
         CuratorUpdateVenue:
           Type: HttpApi
@@ -617,6 +653,12 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/venues/find-or-create/mcp
+            Method: POST
+        JoinVenue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/join/venues
             Method: POST
         # SEC-COMMUNITY: Public wizard namespace (no auth, WAF rate-limited)
         CommunityFindOrCreateVenue:
