@@ -6,10 +6,15 @@ const SOURCE_ID = 'frontstage-user-created-artist';
 const SUBJECT_INDEX_PREFIX = 'SUBJECT';
 const OBSERVATION_INDEX_PREFIX = 'OBS';
 
-const documentClient = new AWS.DynamoDB.DocumentClient({ region: REGION });
-const rawDynamo = new AWS.DynamoDB({ region: REGION });
-
+let documentClient;
+let rawDynamo;
 let cachedStateTableName;
+
+function getClients() {
+  if (!documentClient) documentClient = new AWS.DynamoDB.DocumentClient({ region: REGION });
+  if (!rawDynamo) rawDynamo = new AWS.DynamoDB({ region: REGION });
+  return { documentClient, rawDynamo };
+}
 
 function hasValue(value) {
   if (Array.isArray(value)) return value.length > 0;
@@ -76,7 +81,8 @@ async function getStateTableName() {
 
   let start;
   do {
-    const result = await rawDynamo.listTables({
+    const { rawDynamo: dynamo } = getClients();
+    const result = await dynamo.listTables({
       ExclusiveStartTableName: start,
       Limit: 100,
     }).promise();
@@ -93,6 +99,7 @@ async function getStateTableName() {
 }
 
 async function ensureSource(tableName) {
+  const { documentClient: client } = getClients();
   const source = {
     pk: `SOURCE#${SOURCE_ID}`,
     sk: 'CONFIG',
@@ -115,7 +122,7 @@ async function ensureSource(tableName) {
   };
 
   try {
-    await documentClient.put({
+    await client.put({
       TableName: tableName,
       Item: source,
       ConditionExpression: 'attribute_not_exists(pk)',
@@ -154,7 +161,8 @@ async function publishUserCreatedArtistClaims(artist) {
     GSI1SK: `OBS#${observedAt}#${observationId}`,
   };
 
-  await documentClient.transactWrite({
+  const { documentClient: client } = getClients();
+  await client.transactWrite({
     TransactItems: [
       { Put: { TableName: tableName, Item: observation } },
       ...claims.map((claim) => ({ Put: { TableName: tableName, Item: claim } })),
