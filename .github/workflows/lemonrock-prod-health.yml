@@ -15,6 +15,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ops/lemonrock-prod-deploy
+      - name: Publish probe start
+        run: |
+          set -euo pipefail
+          mkdir -p ops
+          printf '{"phase":"started","runId":"%s","startedAt":"%s"}\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-health-run.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-health-run.json
+          git commit -m 'Record Lemonrock health probe start'
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -29,23 +40,33 @@ jobs:
           QUEUE_URL=$(echo "$STACK" | jq -r '.Outputs[] | select(.OutputKey=="SourceScanQueueUrl") | .OutputValue')
           WORKER=$(echo "$STACK" | jq -r '.Outputs[] | select(.OutputKey=="SourceWorkerFunctionName") | .OutputValue')
           SOURCE_IDS=(lemonrock-new-gigs lemonrock-cancellations lemonrock-artist-index lemonrock-venue-index lemonrock-artist-hydration lemonrock-venue-hydration lemonrock-gig-hydration lemonrock-future-reconcile lemonrock-full-reconcile)
+
           for ID in "${SOURCE_IDS[@]}"; do
             aws dynamodb update-item --table-name "$TABLE" \
               --key "{\"pk\":{\"S\":\"SOURCE#$ID\"},\"sk\":{\"S\":\"CONFIG\"}}" \
               --update-expression 'SET enabled = :e' \
               --expression-attribute-values '{":e":{"BOOL":true}}' >/dev/null
           done
-          TASKS=$(aws dynamodb query --table-name "$TABLE" --key-condition-expression 'pk = :pk' --expression-attribute-values '{":pk":{"S":"BOOTSTRAP#lemonrock"}}')
-          TASK_TOTAL=$(echo "$TASKS" | jq '.Count')
-          TASK_STATUS=$(echo "$TASKS" | jq '[.Items[].status.S // "unknown"] | group_by(.) | map({(.[0]): length}) | add // {}')
+
+          TASKS=$(aws dynamodb query --table-name "$TABLE" \
+            --key-condition-expression 'pk = :pk' \
+            --expression-attribute-values '{":pk":{"S":"BOOTSTRAP#lemonrock"}}' \
+            --projection-expression '#s' \
+            --expression-attribute-names '{"#s":"status"}' \
+            --output json)
+          TASK_TOTAL=$(echo "$TASKS" | jq '.Items | length')
+          TASK_STATUS=$(echo "$TASKS" | jq '[.Items[].status.S // "unknown"] | sort | group_by(.) | map({(.[0]): length}) | add // {}')
+
           OBS='{}'
           for ID in "${SOURCE_IDS[@]}"; do
-            C=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex \
+            Q=$(aws dynamodb query --table-name "$TABLE" --index-name ObservationClaimsIndex \
               --key-condition-expression 'GSI1PK = :pk AND begins_with(GSI1SK, :p)' \
               --expression-attribute-values "{\":pk\":{\"S\":\"SOURCE#$ID\"},\":p\":{\"S\":\"OBS#\"}}" \
-              --select COUNT --query Count --output text)
+              --projection-expression 'pk' --output json)
+            C=$(echo "$Q" | jq '.Items | length')
             OBS=$(echo "$OBS" | jq --arg id "$ID" --argjson c "$C" '. + {($id):$c}')
           done
+
           QUEUE=$(aws sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible ApproximateNumberOfMessagesDelayed)
           DLQ_URL=$(aws sqs list-queues --queue-name-prefix BndyEnrichmentStack-SourceScanDLQ --query 'QueueUrls[0]' --output text)
           if [ "$DLQ_URL" != "None" ]; then
@@ -53,14 +74,21 @@ jobs:
           else
             DLQ='{"Attributes":{}}'
           fi
+
           START=$(date -u -d '60 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
           END=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          ERRORS=$(aws cloudwatch get-metric-statistics --namespace AWS/Lambda --metric-name Errors --dimensions Name=FunctionName,Value="$WORKER" --start-time "$START" --end-time "$END" --period 3600 --statistics Sum)
+          ERRORS=$(aws cloudwatch get-metric-statistics --namespace AWS/Lambda --metric-name Errors \
+            --dimensions Name=FunctionName,Value="$WORKER" \
+            --start-time "$START" --end-time "$END" --period 3600 --statistics Sum)
+
           SOURCES='{}'
           for ID in "${SOURCE_IDS[@]}"; do
-            ITEM=$(aws dynamodb get-item --table-name "$TABLE" --key "{\"pk\":{\"S\":\"SOURCE#$ID\"},\"sk\":{\"S\":\"CONFIG\"}}" --projection-expression 'id,enabled,shadow,health')
+            ITEM=$(aws dynamodb get-item --table-name "$TABLE" \
+              --key "{\"pk\":{\"S\":\"SOURCE#$ID\"},\"sk\":{\"S\":\"CONFIG\"}}" \
+              --projection-expression 'id,enabled,shadow,health')
             SOURCES=$(echo "$SOURCES" | jq --arg id "$ID" --argjson item "$ITEM" '. + {($id):$item.Item}')
           done
+
           mkdir -p ops
           jq -n \
             --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -76,9 +104,17 @@ jobs:
             '{verifiedAt:$verifiedAt,stateTable:$table,sourceWorker:$worker,lemonrockTaskTotal:$taskTotal,taskStatus:$taskStatus,observations:$observations,queue:$queue.Attributes,dlq:$dlq.Attributes,lambdaErrorsLastHour:([ $errors.Datapoints[].Sum ] | add // 0),sources:$sources}' \
             > ops/lemonrock-live-health.json
           cat ops/lemonrock-live-health.json
+      - name: Publish probe result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          printf '{"phase":"finished","status":"%s","runId":"%s","finishedAt":"%s"}\n' "$JOB_STATUS" "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-health-run.json
           git config user.name "bndy-backline-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add ops/lemonrock-live-health.json
-          git commit -m 'Record Lemonrock live production health'
+          git add ops/lemonrock-health-run.json
+          [ ! -f ops/lemonrock-live-health.json ] || git add ops/lemonrock-live-health.json
+          git commit -m 'Record Lemonrock live production health' || true
           git pull --rebase --autostash origin ops/lemonrock-prod-deploy
           git push origin HEAD:ops/lemonrock-prod-deploy
