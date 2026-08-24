@@ -36,6 +36,20 @@ function response(statusCode, body) {
   };
 }
 
+function appendBoundedChunk(chunks, chunk, total, maxBytes) {
+  const remaining = Math.max(0, maxBytes - total);
+  if (chunk.length <= remaining) {
+    chunks.push(chunk);
+    return { total: total + chunk.length, truncated: false };
+  }
+
+  // Facebook pages can exceed the transport cap, but their public Open Graph
+  // and structured metadata is normally near the start of the document. Keep
+  // that bounded prefix instead of discarding every useful byte.
+  if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
+  return { total: maxBytes, truncated: true };
+}
+
 function fetchFacebookPreviewHtml(urlString, options = {}) {
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
   const maxBytes = options.maxBytes || DEFAULT_MAX_BYTES;
@@ -117,15 +131,18 @@ function fetchFacebookPreviewHtml(urlString, options = {}) {
       let total = 0;
       res.on('data', (chunk) => {
         if (settled) return;
-        total += chunk.length;
-        if (total > maxBytes) {
-          const err = new Error('Facebook response exceeded size limit');
-          err.code = 'RESPONSE_TOO_LARGE';
-          done(reject, err);
+        const appended = appendBoundedChunk(chunks, chunk, total, maxBytes);
+        total = appended.total;
+        if (appended.truncated) {
+          done(resolve, {
+            statusCode: status,
+            finalUrl: urlString,
+            contentType,
+            html: Buffer.concat(chunks).toString('utf8'),
+            truncated: true,
+          });
           res.destroy();
-          return;
         }
-        chunks.push(chunk);
       });
       res.on('end', () => {
         if (settled) return;
@@ -175,5 +192,6 @@ async function handler(event) {
 module.exports = {
   handler,
   PREVIEW_USER_AGENT,
+  appendBoundedChunk,
   fetchFacebookPreviewHtml,
 };
