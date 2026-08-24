@@ -1,0 +1,49 @@
+name: Inspect Lemonrock failed production tasks
+
+on:
+  push:
+    branches: [ops/lemonrock-prod-deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    if: contains(github.event.head_commit.message, 'Inspect Lemonrock failed production tasks')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/lemonrock-prod-deploy
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: Inspect failed tasks and DLQ
+        run: |
+          set -euo pipefail
+          STACK=$(aws cloudformation describe-stacks --stack-name BndyEnrichmentStack --query 'Stacks[0]')
+          TABLE=$(echo "$STACK" | jq -r '.Outputs[] | select(.OutputKey=="StateTableName") | .OutputValue')
+          DLQ_URL=$(aws sqs list-queues --queue-name-prefix BndyEnrichmentStack-SourceScanDLQ --query 'QueueUrls[0]' --output text)
+          FAILED=$(aws dynamodb query --table-name "$TABLE" \
+            --key-condition-expression 'pk = :pk' \
+            --filter-expression '#s = :failed' \
+            --expression-attribute-names '{"#s":"status"}' \
+            --expression-attribute-values '{":pk":{"S":"BOOTSTRAP#lemonrock"},":failed":{"S":"failed"}}' \
+            --projection-expression 'sk, sourceId, #s, lastError, updatedAt, task' --output json)
+          MSGS='[]'
+          if [ "$DLQ_URL" != "None" ]; then
+            R=$(aws sqs receive-message --queue-url "$DLQ_URL" --max-number-of-messages 10 --visibility-timeout 0 --wait-time-seconds 0 --attribute-names All --message-attribute-names All)
+            MSGS=$(echo "$R" | jq '[.Messages[]? | {messageId:.MessageId,body:(.Body|fromjson? // .)}]')
+          fi
+          mkdir -p ops
+          jq -n --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson failed "$FAILED" --argjson messages "$MSGS" \
+            '{verifiedAt:$verifiedAt,failedTasks:$failed.Items,dlqMessages:$messages}' > ops/lemonrock-failed-task-inspect.json
+          cat ops/lemonrock-failed-task-inspect.json
+          git config user.name "bndy-backline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/lemonrock-failed-task-inspect.json
+          git commit -m 'Record Lemonrock failed task inspection'
+          git pull --rebase --autostash origin ops/lemonrock-prod-deploy
+          git push origin HEAD:ops/lemonrock-prod-deploy
