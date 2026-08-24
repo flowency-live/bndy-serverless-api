@@ -1,0 +1,62 @@
+name: Add managed venues self route
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Run managed venues self route')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Add current-user managed venue read
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          let h = fs.readFileSync('entity-memberships-lambda/handler.js', 'utf8');
+          let t = fs.readFileSync('template.yaml', 'utf8');
+
+          if (!h.includes('async function listMyManagedEntities')) {
+            const anchor = 'async function listEntity(event, entityId) {';
+            const fn = `async function listMyManagedEntities(event) {\n  const auth = await requireAuth(event);\n  if (auth.error) return response(auth.statusCode, { error: auth.error });\n  const result = await dynamodb.query({ TableName: TABLE, IndexName: 'user_id-index', KeyConditionExpression: 'user_id = :uid', ExpressionAttributeValues: { ':uid': auth.user.userId } }).promise();\n  const memberships = (result.Items || []).filter((item) => item.status === 'active');\n  const entities = await Promise.all(memberships.map(async (membership) => {\n    if (membership.entity_type !== 'venue') return null;\n    const venue = await dynamodb.get({ TableName: 'bndy-venues', Key: { id: membership.entity_id } }).promise();\n    if (!venue.Item) return null;\n    return { id: venue.Item.id, entityType: 'venue', name: venue.Item.name, address: venue.Item.address || '', city: venue.Item.city || '', profileImageUrl: venue.Item.profile_image_url || venue.Item.profileImageUrl || '', role: membership.role, membershipId: membership.membership_id };\n  }));\n  return response(200, { entities: entities.filter(Boolean) });\n}\n\n`;
+            if (!h.includes(anchor)) throw new Error('listEntity anchor missing');
+            h = h.replace(anchor, fn + anchor);
+          }
+          if (!h.includes("path === '/api/managed-entities/me'")) {
+            const anchor = '  try {\n';
+            const pos = h.lastIndexOf(anchor);
+            if (pos < 0) throw new Error('router try anchor missing');
+            h = h.slice(0, pos + anchor.length) + "    if (method === 'GET' && path === '/api/managed-entities/me') return await listMyManagedEntities(event);\n" + h.slice(pos + anchor.length);
+          }
+
+          if (!t.includes('Path: /api/managed-entities/me')) {
+            const anchor = `        ListManagedEntityMembers:\n          Type: HttpApi\n`;
+            const event = `        ListMyManagedEntities:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/managed-entities/me\n            Method: GET\n`;
+            const idx = t.indexOf(anchor, t.indexOf('EntityMembershipsFunction:'));
+            if (idx < 0) throw new Error('entity membership events anchor missing');
+            t = t.slice(0, idx) + event + t.slice(idx);
+          }
+
+          fs.writeFileSync('entity-memberships-lambda/handler.js', h);
+          fs.writeFileSync('template.yaml', t);
+          NODE
+          node --check entity-memberships-lambda/handler.js
+          npm run validate
+          npm run verify-routes
+      - name: Commit
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add entity-memberships-lambda/handler.js template.yaml
+          git commit -m 'Expose current user managed venues'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
