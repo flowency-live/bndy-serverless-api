@@ -6,6 +6,9 @@ Parameters:
   BndyHttpApiId:
     Type: String
     Description: Existing BNDY HTTP API Gateway v2 API ID (output BndyHttpApiId from bndy-serverless-api stack)
+  GeminiSecretArn:
+    Type: String
+    Description: Gemini API key secret exported by BndyEnrichmentStack
 
 Resources:
   SourceInspectorFunction:
@@ -15,8 +18,8 @@ Resources:
       CodeUri: ./artists-lambda/
       Handler: source-inspector-v3.handler
       Runtime: nodejs20.x
-      MemorySize: 256
-      Timeout: 8
+      MemorySize: 512
+      Timeout: 20
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
       Layers:
         - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
@@ -25,6 +28,21 @@ Resources:
           NODE_ENV: production
           UNIQUE_KEYS_TABLE: bndy-unique-keys
           ARTISTS_TABLE: bndy-artists
+          GEMINI_SECRET_ARN: !Ref GeminiSecretArn
+          GEMINI_MODEL: gemini-3.6-flash
+
+  SourceInspectorGeminiSecretPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: bndy-source-inspector-gemini
+      Roles:
+        - bndy-api-instance-role
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: secretsmanager:GetSecretValue
+            Resource: !Ref GeminiSecretArn
 
   # The main SAM stack owns the HttpApi definition and can replace its route set
   # during an unrelated deployment. Keeping an ApiGatewayV2::Route in this
