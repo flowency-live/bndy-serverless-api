@@ -1,0 +1,53 @@
+name: Apply Join Claim Requests v1
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Run Join claims v1')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Add Claim Request table and routes
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const p = 'template.yaml';
+          let t = fs.readFileSync(p, 'utf8');
+          const insert = (src, anchor, text, label) => {
+            if (src.includes(text.trim())) return src;
+            const i = src.indexOf(anchor);
+            if (i < 0) throw new Error(`Missing ${label} anchor`);
+            return src.slice(0, i) + text + src.slice(i);
+          };
+
+          const table = `  EntityClaimsTable:\n    Type: AWS::DynamoDB::Table\n    DeletionPolicy: Retain\n    UpdateReplacePolicy: Retain\n    Properties:\n      TableName: bndy-entity-claims\n      BillingMode: PAY_PER_REQUEST\n      AttributeDefinitions:\n        - AttributeName: claim_id\n          AttributeType: S\n        - AttributeName: user_id\n          AttributeType: S\n        - AttributeName: entity_key\n          AttributeType: S\n      KeySchema:\n        - AttributeName: claim_id\n          KeyType: HASH\n      GlobalSecondaryIndexes:\n        - IndexName: user_id-index\n          KeySchema:\n            - AttributeName: user_id\n              KeyType: HASH\n          Projection:\n            ProjectionType: ALL\n        - IndexName: entity_key-index\n          KeySchema:\n            - AttributeName: entity_key\n              KeyType: HASH\n          Projection:\n            ProjectionType: ALL\n\n`;
+          t = insert(t, "  # =============================================================================\n  # Lambda Functions - Core\n", table, 'claims table');
+
+          const fn = `  ClaimsFunction:\n    Type: AWS::Serverless::Function\n    Properties:\n      Description: BNDY entity Claim Requests created by Join bndy\n      CodeUri: ./claims-lambda/\n      Handler: handler.handler\n      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role\n      Layers:\n        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3\n      Environment:\n        Variables:\n          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'\n          ENTITY_CLAIMS_TABLE: !Ref EntityClaimsTable\n      Events:\n        CreateClaim:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/claims\n            Method: POST\n        GetMyClaims:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/claims/me\n            Method: GET\n        CancelClaim:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /api/claims/{id}\n            Method: DELETE\n\n`;
+          t = insert(t, "  # Auth Lambda\n", fn, 'claims function');
+          fs.writeFileSync(p, t);
+          NODE
+          node --check claims-lambda/handler.js
+          grep -q 'TableName: bndy-entity-claims' template.yaml
+          grep -q 'Path: /api/claims' template.yaml
+          npm run validate
+          npm run verify-routes
+      - name: Commit
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add template.yaml
+          git commit -m 'Add Join bndy Claim Request infrastructure'
+          git pull --rebase --autostash origin master
+          git push origin HEAD:master
