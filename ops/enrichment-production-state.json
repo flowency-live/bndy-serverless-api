@@ -1,0 +1,9 @@
+{
+  "verifiedAt": "2026-08-24T04:06:08Z",
+  "stackStatus": "UPDATE_ROLLBACK_COMPLETE",
+  "table": {
+    "TableName": "BndyEnrichmentStack-StateTable9728C7E5-14HR6N3NEWGLM",
+    "TableStatus": "ACTIVE",
+    "GSIs": null
+  }
+}
