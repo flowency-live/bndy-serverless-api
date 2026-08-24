@@ -51,6 +51,10 @@ jobs:
           }
           console.log(JSON.stringify(out));
           NODE
+          TASK_COUNT=$(jq '.Count // 0' /tmp/tasks.json)
+          TASK_STATUS=$(jq -c '[.Items[]?.status.S] | sort | group_by(.) | map({(.[0]):length}) | add // {}' /tmp/tasks.json)
+          SOURCE_SUMMARY=$(jq -c '[.Items[] | {id:.id.S,enabled:(.enabled.BOOL//false),shadow:(.shadow.BOOL//false),health:(.health.S//"unknown")}]' /tmp/sources.json)
+          OBS=$(cat /tmp/observations.json)
           QUEUE=$(aws sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible ApproximateNumberOfMessagesDelayed)
           INDEXES=$(aws dynamodb describe-table --table-name "$TABLE" --query 'Table.GlobalSecondaryIndexes[].{IndexName:IndexName,IndexStatus:IndexStatus}')
           RULES=$(aws events list-rules --name-prefix BndyEnrichmentStack-Lemonrock --query 'Rules[].{Name:Name,State:State,ScheduleExpression:ScheduleExpression}')
@@ -60,17 +64,15 @@ jobs:
           ERR=$(aws cloudwatch get-metric-statistics --namespace AWS/Lambda --metric-name Errors --dimensions Name=FunctionName,Value="$WORKER" --start-time "$START" --end-time "$END" --period 900 --statistics Sum --query 'Datapoints[0].Sum' --output text 2>/dev/null || echo 0)
           [ "$INV" = "None" ] && INV=0
           [ "$ERR" = "None" ] && ERR=0
-          TASKS=$(cat /tmp/tasks.json)
-          SOURCES=$(cat /tmp/sources.json)
-          OBS=$(cat /tmp/observations.json)
           mkdir -p ops
           jq -n \
             --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg table "$TABLE" --arg worker "$WORKER" \
-            --argjson tasks "$TASKS" --argjson sources "$SOURCES" --argjson observations "$OBS" \
+            --argjson taskCount "$TASK_COUNT" --argjson taskStatus "$TASK_STATUS" \
+            --argjson sources "$SOURCE_SUMMARY" --argjson observations "$OBS" \
             --argjson queue "$QUEUE" --argjson indexes "$INDEXES" --argjson rules "$RULES" \
             --arg inv "$INV" --arg err "$ERR" \
-            '{verifiedAt:$verifiedAt,stateTable:$table,sourceWorker:$worker,indexes:$indexes,taskCount:($tasks.Count//0),taskStatusCounts:([$tasks.Items[]?.status.S] | sort | group_by(.) | map({(.[0]):length}) | add // {}),sources:[$sources.Items[] | {id:.id.S,enabled:(.enabled.BOOL//false),shadow:(.shadow.BOOL//false),health:(.health.S//"unknown")}],observations:$observations,queue:$queue.Attributes,eventRules:$rules,workerInvocations15m:($inv|tonumber),workerErrors15m:($err|tonumber)}' > ops/lemonrock-live-state.json
+            '{verifiedAt:$verifiedAt,stateTable:$table,sourceWorker:$worker,indexes:$indexes,taskCount:$taskCount,taskStatusCounts:$taskStatus,sources:$sources,observations:$observations,queue:$queue.Attributes,eventRules:$rules,workerInvocations15m:($inv|tonumber),workerErrors15m:($err|tonumber)}' > ops/lemonrock-live-state.json
           cat ops/lemonrock-live-state.json
           printf '{"phase":"finished","status":"success","runId":"%s","finishedAt":"%s"}\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/lemonrock-live-inspect-run.json
           git config user.name "bndy-backline-bot"
