@@ -1,21 +1,21 @@
 {
-  "verifiedAt": "2026-08-24T06:25:42Z",
+  "verifiedAt": "2026-08-24T06:35:16Z",
   "stateTable": "BndyEnrichmentStack-StateTable9728C7E5-14HR6N3NEWGLM",
   "sourceWorker": "BndyEnrichmentStack-SourceWorker336FEA29-ghZk2mBRjOks",
-  "lemonrockTaskTotal": 2832,
+  "lemonrockTaskTotal": 2837,
   "taskStatus": {
-    "completed": 2831,
+    "completed": 2836,
     "failed": 1
   },
   "observations": {
-    "lemonrock-new-gigs": 25,
-    "lemonrock-cancellations": 28,
-    "lemonrock-artist-index": 4,
-    "lemonrock-venue-index": 30,
+    "lemonrock-new-gigs": 35,
+    "lemonrock-cancellations": 39,
+    "lemonrock-artist-index": 5,
+    "lemonrock-venue-index": 31,
     "lemonrock-artist-hydration": 53,
     "lemonrock-venue-hydration": 2477,
     "lemonrock-gig-hydration": 261,
-    "lemonrock-future-reconcile": 2,
+    "lemonrock-future-reconcile": 3,
     "lemonrock-full-reconcile": 0
   },
   "queue": {
@@ -24,7 +24,7 @@
     "ApproximateNumberOfMessagesDelayed": "0"
   },
   "dlq": {
-    "ApproximateNumberOfMessages": "11",
+    "ApproximateNumberOfMessages": "0",
     "ApproximateNumberOfMessagesNotVisible": "0"
   },
   "lambdaErrorsLastHour": 0.0,
