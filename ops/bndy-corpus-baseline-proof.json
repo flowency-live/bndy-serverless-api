@@ -1,0 +1,86 @@
+{
+  "verifiedAt": "2026-08-24T07:35:45Z",
+  "enrichmentSha": "e63ba6c1291d2d0281c847efae0e8446c315168d",
+  "baseline": {
+    "snapshotId": "bndy-baseline-2026-08-24-v1",
+    "snapshotAt": "2026-08-24T07:15:00.000Z",
+    "startedAt": "2026-08-24T07:16:37.211Z",
+    "status": "complete",
+    "shadow": true,
+    "canonicalWritesEnabled": false,
+    "tables": {
+      "artist": "bndy-artists",
+      "venue": "bndy-venues",
+      "event": "bndy-events"
+    },
+    "counts": {
+      "artist": {
+        "entities": 3229,
+        "observations": 3229,
+        "claims": 125652,
+        "resolutions": 3229,
+        "evidenceCreated": 3229,
+        "evidenceExisting": 0,
+        "legacyCanonicalEntities": 0,
+        "recoverableSourceEntities": 3229
+      },
+      "venue": {
+        "entities": 3199,
+        "observations": 3199,
+        "claims": 101955,
+        "resolutions": 3199,
+        "evidenceCreated": 3199,
+        "evidenceExisting": 0,
+        "legacyCanonicalEntities": 3188,
+        "recoverableSourceEntities": 11
+      },
+      "event": {
+        "entities": 8844,
+        "observations": 8844,
+        "claims": 288027,
+        "resolutions": 8844,
+        "evidenceCreated": 8844,
+        "evidenceExisting": 0,
+        "legacyCanonicalEntities": 189,
+        "recoverableSourceEntities": 8655
+      },
+      "festival": {
+        "entities": 16,
+        "observations": 16,
+        "claims": 2497,
+        "resolutions": 16,
+        "evidenceCreated": 16,
+        "evidenceExisting": 0,
+        "legacyCanonicalEntities": 0,
+        "recoverableSourceEntities": 16
+      }
+    },
+    "totals": {
+      "entities": 15288,
+      "observations": 15288,
+      "claims": 518131,
+      "resolutions": 15288,
+      "evidenceCreated": 15288,
+      "evidenceExisting": 0,
+      "legacyCanonicalEntities": 3377,
+      "recoverableSourceEntities": 11911
+    },
+    "skippedWithoutId": 0,
+    "errors": [],
+    "completedAt": "2026-08-24T07:34:22.467Z"
+  },
+  "canonicalCounts": {
+    "artist": 3229,
+    "venue": 3199,
+    "event": 8844,
+    "festival": 16,
+    "total": 15288
+  },
+  "parity": {
+    "artist": true,
+    "venue": true,
+    "event": true,
+    "festival": true
+  },
+  "canonicalProjectionWorkItems": 0
+}
