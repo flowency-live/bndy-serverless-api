@@ -984,6 +984,65 @@ Resources:
             Path: /api/managed-entities/{id}/transfer
             Method: POST
 
+  EntityInvitesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: bndy-entity-invites
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: token
+          AttributeType: S
+      KeySchema:
+        - AttributeName: token
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  EntityInvitesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: BNDY expiring delegate invite links for Join-managed entities
+      CodeUri: ./entity-invites-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
+      Environment:
+        Variables:
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          ENTITY_INVITES_TABLE: !Ref EntityInvitesTable
+          ENTITY_MEMBERSHIPS_TABLE: !Ref EntityMembershipsTable
+      Events:
+        CreateManagedEntityInvite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/managed-entities/{id}/invites
+            Method: POST
+        GetEntityInvite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/entity-invites/{token}
+            Method: GET
+        RevokeEntityInvite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/entity-invites/{token}
+            Method: DELETE
+        AcceptEntityInvite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/entity-invites/{token}/accept
+            Method: POST
+
   # Auth Lambda
   AuthFunction:
     Type: AWS::Serverless::Function
