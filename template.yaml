@@ -1152,6 +1152,12 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /auth/google/callback
             Method: GET
+        FacebookOAuthInit:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /auth/facebook
+            Method: GET
         FacebookAuth:
           Type: HttpApi
           Properties:

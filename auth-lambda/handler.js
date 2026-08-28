@@ -268,6 +268,38 @@ const handleGoogleAuth = async (event) => {
   };
 };
 
+const handleFacebookAuth = async (event) => {
+  const state = generateState();
+  const origin = getFrontendUrl();
+  const returnTo = validateReturnTo(event.queryStringParameters?.returnTo);
+  const loginOrigin = returnTo ? new URL(returnTo).origin : origin;
+  const callbackUri = getOAuthCallbackUri(loginOrigin);
+
+  await storeOAuthState(state, loginOrigin, returnTo, callbackUri);
+
+  const authUrl = COGNITO_DOMAIN + '/oauth2/authorize?' +
+    'response_type=code&' +
+    'client_id=' + CLIENT_ID + '&' +
+    'redirect_uri=' + encodeURIComponent(callbackUri) + '&' +
+    'scope=email+openid+profile&' +
+    'state=' + state + '&' +
+    'identity_provider=Facebook';
+
+  console.log('AUTH: Initiating Facebook OAuth flow', {
+    state: state.substring(0, 8) + '...',
+    redirectUri: callbackUri
+  });
+
+  return {
+    statusCode: 302,
+    headers: {
+      Location: authUrl,
+      ...getCorsHeaders()
+    },
+    body: ''
+  };
+};
+
 const handleOAuthCallback = async (event) => {
   const { code, state, error } = event.queryStringParameters || {};
 
@@ -1392,6 +1424,11 @@ exports.handler = async (event, context) => {
     // Check identity route (for dynamic welcome message)
     if (routeKey === 'POST /auth/check-identity') {
       return await handleCheckIdentity(event);
+    }
+
+    // Facebook OAuth route via Cognito. Meta remains an identity provider; BNDY owns the session and Join/Claim flow.
+    if (routeKey === 'GET /auth/facebook') {
+      return await handleFacebookAuth(event);
     }
 
     // Apple OAuth route
