@@ -1,0 +1,63 @@
+name: Apply Facebook Cognito login once
+
+on:
+  push:
+    branches: [feature/facebook-cognito-login]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Trigger Facebook Cognito login patch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/facebook-cognito-login
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Patch Facebook Cognito OAuth initiation route
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const handlerPath = 'auth-lambda/handler.js';
+          const templatePath = 'template.yaml';
+          let handler = fs.readFileSync(handlerPath, 'utf8');
+          let template = fs.readFileSync(templatePath, 'utf8');
+
+          function insertBefore(source, anchor, addition, label) {
+            if (source.includes(addition.trim())) return source;
+            const idx = source.indexOf(anchor);
+            if (idx < 0) throw new Error(`Anchor not found for ${label}`);
+            return source.slice(0, idx) + addition + source.slice(idx);
+          }
+
+          const facebookHandler = `const handleFacebookAuth = async (event) => {\n  const state = generateState();\n  const origin = getFrontendUrl();\n  const returnTo = validateReturnTo(event.queryStringParameters?.returnTo);\n  const loginOrigin = returnTo ? new URL(returnTo).origin : origin;\n  const callbackUri = getOAuthCallbackUri(loginOrigin);\n\n  await storeOAuthState(state, loginOrigin, returnTo, callbackUri);\n\n  const authUrl = \`${COGNITO_DOMAIN}/oauth2/authorize?\` +\n    \`response_type=code&\` +\n    \`client_id=${CLIENT_ID}&\` +\n    \`redirect_uri=${encodeURIComponent(callbackUri)}&\` +\n    \`scope=email+openid+profile&\` +\n    \`state=${state}&\` +\n    \`identity_provider=Facebook\`;\n\n  console.log('AUTH: Initiating Facebook OAuth flow', {\n    state: state.substring(0, 8) + '...',\n    redirectUri: callbackUri\n  });\n\n  return {\n    statusCode: 302,\n    headers: {\n      Location: authUrl,\n      ...getCorsHeaders()\n    },\n    body: ''\n  };\n};\n\n`;
+          handler = insertBefore(handler, 'const handleOAuthCallback = async (event) => {', facebookHandler, 'Facebook OAuth handler');
+
+          const facebookRoute = `    // Facebook OAuth route via Cognito. Meta remains an identity provider; BNDY owns the session and Join/Claim flow.\n    if (routeKey === 'GET /auth/facebook') {\n      return await handleFacebookAuth(event);\n    }\n\n`;
+          handler = insertBefore(handler, "    // Apple OAuth route\n    if (routeKey === 'GET /auth/apple') {", facebookRoute, 'Facebook OAuth router');
+
+          const facebookTemplateRoute = `        FacebookOAuthInit:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /auth/facebook\n            Method: GET\n`;
+          template = insertBefore(template, '        FacebookAuth:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /auth/facebook/callback\n            Method: GET\n', facebookTemplateRoute, 'Facebook OAuth API route');
+
+          fs.writeFileSync(handlerPath, handler);
+          fs.writeFileSync(templatePath, template);
+          NODE
+      - name: Verify patched files
+        run: |
+          node --check auth-lambda/handler.js
+          grep -q "identity_provider=Facebook" auth-lambda/handler.js
+          grep -q "GET /auth/facebook" auth-lambda/handler.js
+          grep -q "Path: /auth/facebook" template.yaml
+          npm run validate
+          npm run verify-routes
+      - name: Commit backend changes
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add auth-lambda/handler.js template.yaml
+          git commit -m 'Add Facebook login through Cognito'
+          git push origin HEAD:feature/facebook-cognito-login
