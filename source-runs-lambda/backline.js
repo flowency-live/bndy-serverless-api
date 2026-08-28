@@ -531,6 +531,7 @@ function publicTrustLoopRun(item) {
     canonicalWrites: item.canonicalWrites || 0,
     enrichment: item.enrichment || {},
     acceptance: item.acceptance || {},
+    providerQualification: item.providerQualification || null,
     status: item.status,
     reviewCases: item.reviewCases || [],
   };

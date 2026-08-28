@@ -41,11 +41,19 @@ test('Trust Loop output is bounded to the read-only decision and health contract
     id: 'trust-loop-1', completedAt: '2026-08-28T12:00:00Z', status: 'needs-review',
     candidatesSeen: 40, candidatesClassified: 40, canonicalWrites: 0,
     classifications: { resolved: 8, unresolved: 30, conflicted: 2 },
+    providerQualification: {
+      gateStatus: 'capture-failed',
+      cases: 20,
+      captureErrors: 17,
+      canonicalWrites: 0,
+    },
     reviewCases: [{ candidateKey: 'artist-1' }],
     decisions: [{ shouldNotLeakThroughSummary: true }],
   });
   assert.equal(value.candidatesClassified, 40);
   assert.equal(value.canonicalWrites, 0);
+  assert.equal(value.providerQualification.gateStatus, 'capture-failed');
+  assert.equal(value.providerQualification.canonicalWrites, 0);
   assert.equal(value.reviewCases.length, 1);
   assert.equal(value.decisions, undefined);
 });
