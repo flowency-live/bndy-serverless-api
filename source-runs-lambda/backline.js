@@ -88,7 +88,11 @@ let stateTableName;
 
 const response = (statusCode, body) => ({
   statusCode,
-  headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+  headers: {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store',
+    'X-Backline-Explorer-Version': 'multi-source-v1',
+  },
   body: JSON.stringify(body),
 });
 
