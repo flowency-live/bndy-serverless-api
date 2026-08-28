@@ -34,56 +34,62 @@ jobs:
             return source.slice(0, idx) + addition + source.slice(idx);
           }
 
-          const facebookHandler = String.raw`const handleFacebookAuth = async (event) => {
-  const state = generateState();
-  const origin = getFrontendUrl();
-  const returnTo = validateReturnTo(event.queryStringParameters?.returnTo);
-  const loginOrigin = returnTo ? new URL(returnTo).origin : origin;
-  const callbackUri = getOAuthCallbackUri(loginOrigin);
-
-  await storeOAuthState(state, loginOrigin, returnTo, callbackUri);
-
-  const authUrl = \`${COGNITO_DOMAIN}/oauth2/authorize?\` +
-    \`response_type=code&\` +
-    \`client_id=${CLIENT_ID}&\` +
-    \`redirect_uri=${encodeURIComponent(callbackUri)}&\` +
-    \`scope=email+openid+profile&\` +
-    \`state=${state}&\` +
-    \`identity_provider=Facebook\`;
-
-  console.log('AUTH: Initiating Facebook OAuth flow', {
-    state: state.substring(0, 8) + '...',
-    redirectUri: callbackUri
-  });
-
-  return {
-    statusCode: 302,
-    headers: {
-      Location: authUrl,
-      ...getCorsHeaders()
-    },
-    body: ''
-  };
-};
-
-`;
+          const facebookHandler = [
+            "const handleFacebookAuth = async (event) => {",
+            "  const state = generateState();",
+            "  const origin = getFrontendUrl();",
+            "  const returnTo = validateReturnTo(event.queryStringParameters?.returnTo);",
+            "  const loginOrigin = returnTo ? new URL(returnTo).origin : origin;",
+            "  const callbackUri = getOAuthCallbackUri(loginOrigin);",
+            "",
+            "  await storeOAuthState(state, loginOrigin, returnTo, callbackUri);",
+            "",
+            "  const authUrl = COGNITO_DOMAIN + '/oauth2/authorize?' +",
+            "    'response_type=code&' +",
+            "    'client_id=' + CLIENT_ID + '&' +",
+            "    'redirect_uri=' + encodeURIComponent(callbackUri) + '&' +",
+            "    'scope=email+openid+profile&' +",
+            "    'state=' + state + '&' +",
+            "    'identity_provider=Facebook';",
+            "",
+            "  console.log('AUTH: Initiating Facebook OAuth flow', {",
+            "    state: state.substring(0, 8) + '...',",
+            "    redirectUri: callbackUri",
+            "  });",
+            "",
+            "  return {",
+            "    statusCode: 302,",
+            "    headers: {",
+            "      Location: authUrl,",
+            "      ...getCorsHeaders()",
+            "    },",
+            "    body: ''",
+            "  };",
+            "};",
+            "",
+            ""
+          ].join('\n');
           handler = insertBefore(handler, 'const handleOAuthCallback = async (event) => {', facebookHandler, 'Facebook OAuth handler');
 
-          const facebookRoute = String.raw`    // Facebook OAuth route via Cognito. Meta remains an identity provider; BNDY owns the session and Join/Claim flow.
-    if (routeKey === 'GET /auth/facebook') {
-      return await handleFacebookAuth(event);
-    }
-
-`;
+          const facebookRoute = [
+            "    // Facebook OAuth route via Cognito. Meta remains an identity provider; BNDY owns the session and Join/Claim flow.",
+            "    if (routeKey === 'GET /auth/facebook') {",
+            "      return await handleFacebookAuth(event);",
+            "    }",
+            "",
+            ""
+          ].join('\n');
           handler = insertBefore(handler, "    // Apple OAuth route\n    if (routeKey === 'GET /auth/apple') {", facebookRoute, 'Facebook OAuth router');
 
-          const facebookTemplateRoute = String.raw`        FacebookOAuthInit:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref BndyHttpApi
-            Path: /auth/facebook
-            Method: GET
-`;
+          const facebookTemplateRoute = [
+            "        FacebookOAuthInit:",
+            "          Type: HttpApi",
+            "          Properties:",
+            "            ApiId: !Ref BndyHttpApi",
+            "            Path: /auth/facebook",
+            "            Method: GET",
+            ""
+          ].join('\n');
           template = insertBefore(template, '        FacebookAuth:\n          Type: HttpApi\n          Properties:\n            ApiId: !Ref BndyHttpApi\n            Path: /auth/facebook/callback\n            Method: GET\n', facebookTemplateRoute, 'Facebook OAuth API route');
 
           fs.writeFileSync(handlerPath, handler);
