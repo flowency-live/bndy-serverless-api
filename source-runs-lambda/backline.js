@@ -517,6 +517,44 @@ async function observationDetail(tableName, event) {
   };
 }
 
+function publicTrustLoopRun(item) {
+  return {
+    id: item.id,
+    startedAt: item.startedAt,
+    completedAt: item.completedAt,
+    sourceIds: item.sourceIds || [],
+    candidatesSeen: item.candidatesSeen || 0,
+    candidatesClassified: item.candidatesClassified || 0,
+    classifications: item.classifications || { resolved: 0, unresolved: 0, conflicted: 0 },
+    entityTypes: item.entityTypes || { artist: 0, venue: 0, event: 0, festival: 0 },
+    noSilentDrops: item.noSilentDrops === true,
+    canonicalWrites: item.canonicalWrites || 0,
+    enrichment: item.enrichment || {},
+    acceptance: item.acceptance || {},
+    status: item.status,
+    reviewCases: item.reviewCases || [],
+  };
+}
+
+async function trustLoop(tableName, event) {
+  const limit = Math.min(Math.max(Number(event.queryStringParameters?.limit || 5), 1), 20);
+  const result = await dynamodb.query({
+    TableName: tableName,
+    KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+    ExpressionAttributeValues: { ':pk': 'TRUST_LOOP', ':prefix': 'RUN#' },
+    ScanIndexForward: false,
+    Limit: limit,
+  }).promise();
+  return {
+    status: 200,
+    body: {
+      runs: (result.Items || []).map(publicTrustLoopRun),
+      readOnly: true,
+      canonicalWritesEnabled: false,
+    },
+  };
+}
+
 exports.handle = async (event, action) => {
   const auth = await requirePlatformAdmin(event);
   if (auth.error) return response(auth.status, { error: auth.error });
@@ -542,6 +580,10 @@ exports.handle = async (event, action) => {
       const result = await observationDetail(tableName, event);
       return response(result.status, result.body);
     }
+    if (action === 'trust-loop') {
+      const result = await trustLoop(tableName, event);
+      return response(result.status, result.body);
+    }
     return response(404, { error: 'Unknown Backline Explorer action' });
   } catch (error) {
     console.error('[BACKLINE] request failed', error);
@@ -549,4 +591,4 @@ exports.handle = async (event, action) => {
   }
 };
 
-exports.__test = { SOURCE_FAMILIES, resolveFamily, taskStats, currentTasks, publicRunMetric };
+exports.__test = { SOURCE_FAMILIES, resolveFamily, taskStats, currentTasks, publicRunMetric, publicTrustLoopRun };

@@ -35,3 +35,17 @@ test('newer task state wins for the same logical source identity', () => {
   assert.equal(current.length, 1);
   assert.deepEqual(stats.gigs, { discovered: 1, hydrated: 1, failed: 0 });
 });
+
+test('Trust Loop output is bounded to the read-only decision and health contract', () => {
+  const value = __test.publicTrustLoopRun({
+    id: 'trust-loop-1', completedAt: '2026-08-28T12:00:00Z', status: 'needs-review',
+    candidatesSeen: 40, candidatesClassified: 40, canonicalWrites: 0,
+    classifications: { resolved: 8, unresolved: 30, conflicted: 2 },
+    reviewCases: [{ candidateKey: 'artist-1' }],
+    decisions: [{ shouldNotLeakThroughSummary: true }],
+  });
+  assert.equal(value.candidatesClassified, 40);
+  assert.equal(value.canonicalWrites, 0);
+  assert.equal(value.reviewCases.length, 1);
+  assert.equal(value.decisions, undefined);
+});
