@@ -64,6 +64,38 @@ describe('managed artist availability', () => {
     expect(result.statusCode).toBe(403);
   });
 
+  test.each(['staff', 'curator'])('allows an unrestricted %s without artist membership', async (role) => {
+    mockDynamoDB.query.mockResolvedValueOnce({ Items: [
+      { id: 'available-1', artistId: 'artist-1', date: '2026-09-05', type: 'available' }
+    ] });
+
+    const result = await handleGetManagedArtistAvailability(deps, {
+      pathParameters: { artistId: 'artist-1' },
+      queryStringParameters: { startDate: '2026-09-01', endDate: '2026-09-30' }
+    }, { userId: 'user-1', platformAdmin: false, role, curatorAccess: null });
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).availability).toHaveLength(1);
+    expect(mockDynamoDB.query).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps a restricted curator inside the existing artist policy', async () => {
+    mockDynamoDB.get.mockResolvedValueOnce({ Item: { id: 'artist-1', createdBy: 'someone-else' } });
+    mockDynamoDB.query.mockResolvedValueOnce({ Items: [] });
+
+    const result = await handleGetManagedArtistAvailability(deps, {
+      pathParameters: { artistId: 'artist-1' },
+      queryStringParameters: { startDate: '2026-09-01', endDate: '2026-09-30' }
+    }, {
+      userId: 'user-1',
+      platformAdmin: false,
+      role: 'curator',
+      curatorAccess: { scope: 'postcode', postcode_prefixes: ['ST'] }
+    });
+
+    expect(result.statusCode).toBe(403);
+  });
+
   test('does not create availability over an existing gig', async () => {
     mockDynamoDB.query
       .mockResolvedValueOnce({ Items: [{ artist_id: 'artist-1', user_id: 'user-1', role: 'admin', status: 'active' }] })

@@ -54,7 +54,8 @@ describe('PATCH /api/artists/{id}/profile', () => {
           publishAvailability: false,
           contactMethod: 'whatsapp',
           phoneNumber: '+441234567890',
-          whatsappNumber: '+447700900000'
+          whatsappNumber: '+447700900000',
+          availabilityMessage: 'Please contact us anyway.'
         } });
       }
       return Promise.resolve({ Item: null });
@@ -80,6 +81,43 @@ describe('PATCH /api/artists/{id}/profile', () => {
     expect(update.ExpressionAttributeValues[':youtubeUrl']).toBe('https://youtu.be/abcdefghijk');
     expect(update.ExpressionAttributeValues[':hidden']).toBeUndefined();
     expect(update.ExpressionAttributeValues[':name']).toBeUndefined();
+  });
+
+  test.each(['staff', 'curator'])('allows an unrestricted %s to manage availability without artist membership', async (role) => {
+    mockDynamoDB.get.mockImplementation((params) => {
+      if (params.TableName === 'bndy-users') {
+        return Promise.resolve({ Item: { cognito_id: 'user-1', platformAdmin: false, role } });
+      }
+      return Promise.resolve({ Item: { id: 'artist-1', name: 'Test Artist', publicationScopes: ['live'] } });
+    });
+
+    const result = await handler(request({ availabilityMessage: '  Contact us anyway.  ' }), {});
+
+    expect(result.statusCode).toBe(200);
+    expect(mockDynamoDB.update.mock.calls[0][0].ExpressionAttributeValues[':availabilityMessage']).toBe('Contact us anyway.');
+    expect(mockDynamoDB.query).not.toHaveBeenCalled();
+  });
+
+  test('keeps a restricted curator inside the existing artist policy', async () => {
+    mockDynamoDB.get.mockImplementation((params) => {
+      if (params.TableName === 'bndy-users') {
+        return Promise.resolve({ Item: {
+          cognito_id: 'user-1',
+          role: 'curator',
+          curator_access: { scope: 'postcode', postcode_prefixes: ['ST'] }
+        } });
+      }
+      if (params.TableName === 'bndy-artists') {
+        return Promise.resolve({ Item: { id: 'artist-1', name: 'Test Artist', createdBy: 'someone-else', publicationScopes: ['live'] } });
+      }
+      return Promise.resolve({ Item: null });
+    });
+    mockDynamoDB.query.mockResolvedValue({ Items: [] });
+
+    const result = await handler(request({ availabilityMessage: 'Not allowed' }), {});
+
+    expect(result.statusCode).toBe(403);
+    expect(mockDynamoDB.update).not.toHaveBeenCalled();
   });
 
   test.each([
@@ -115,7 +153,7 @@ describe('PATCH /api/artists/{id}/profile', () => {
     }, {});
 
     expect(result.statusCode).toBe(200);
-    expect(JSON.parse(result.body)).toMatchObject({ phoneNumber: null, whatsappNumber: null });
+    expect(JSON.parse(result.body)).toMatchObject({ phoneNumber: null, whatsappNumber: null, availabilityMessage: null });
   });
 
   test('returns private booking settings to an active owner through the profile read', async () => {
@@ -132,7 +170,8 @@ describe('PATCH /api/artists/{id}/profile', () => {
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body)).toMatchObject({
       phoneNumber: '+441234567890',
-      whatsappNumber: '+447700900000'
+      whatsappNumber: '+447700900000',
+      availabilityMessage: 'Please contact us anyway.'
     });
   });
 });
