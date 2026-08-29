@@ -114,7 +114,7 @@ describe('GET /api/artists/:artistId/public-availability - Free Weekends Mode', 
 
       // Should NOT include Saturday
       expect(body.availability.some(a => a.date === '2026-08-08')).toBe(false);
-      expect(mockDynamoDB.query).toHaveBeenCalledTimes(3);
+      expect(mockDynamoDB.query).toHaveBeenCalledTimes(2);
     });
 
     it('should filter each day independently - multiple bookings scenario', async () => {
@@ -140,11 +140,13 @@ describe('GET /api/artists/:artistId/public-availability - Free Weekends Mode', 
       expect(body.availability[0]).toMatchObject({ date: '2026-08-08' });
     });
 
-    it('ignores saved availability and cancelled events when calculating busy dates', async () => {
+    it('ignores saved availability, cancelled gigs and non-gig calendar entries when calculating busy dates', async () => {
       mockDynamoDB.query.mockResolvedValue({
         Items: [
           { id: 'saved', artistId: 'artist-1', date: '2026-08-07', type: 'available' },
-          { id: 'cancelled', artistId: 'artist-1', date: '2026-08-08', type: 'public_gig', cancelled: true }
+          { id: 'cancelled', artistId: 'artist-1', date: '2026-08-08', type: 'public_gig', cancelled: true },
+          { id: 'rehearsal', artistId: 'artist-1', date: '2026-08-08', type: 'rehearsal' },
+          { id: 'unavailable', artistId: 'artist-1', date: '2026-08-09', type: 'unavailable' }
         ]
       });
 
@@ -174,8 +176,8 @@ describe('GET /api/artists/:artistId/public-availability - Free Weekends Mode', 
       // Should return empty array (no Fri/Sat/Sun in range)
       expect(body.availability).toEqual([]);
 
-      // The privacy-safe date-state projection still checks artist events and memberships.
-      expect(mockDynamoDB.query).toHaveBeenCalledTimes(3);
+      // The privacy-safe projection checks only artist events.
+      expect(mockDynamoDB.query).toHaveBeenCalledTimes(2);
 
       // Should have called get once for artist lookup
       expect(mockDynamoDB.get).toHaveBeenCalledWith(
@@ -260,7 +262,7 @@ describe('GET /api/artists/:artistId/public-availability - Free Weekends Mode', 
     });
   });
 
-  it('projects public gigs, private bookings, artist commitments and member unavailability without private details', async () => {
+  it('projects only public gigs and private bookings, ignoring rehearsals and member availability', async () => {
     mockDynamoDB.get.mockResolvedValue({
       Item: { id: 'artist-1', publishAvailability: true, availabilityMode: 'selected_dates_only' }
     });
@@ -270,14 +272,9 @@ describe('GET /api/artists/:artistId/public-availability - Free Weekends Mode', 
           { id: 'available-1', artistId: 'artist-1', date: '2026-09-07', type: 'available' },
           { id: 'private-1', artistId: 'artist-1', date: '2026-09-05', type: 'gig', isPublic: false, title: 'Secret client' },
           { id: 'public-1', artistId: 'artist-1', date: '2026-09-06', type: 'gig', isPublic: true, title: 'Public show' },
-          { id: 'rehearsal-1', artistId: 'artist-1', date: '2026-09-08', type: 'rehearsal', isPublic: false }
+          { id: 'rehearsal-1', artistId: 'artist-1', date: '2026-09-08', type: 'rehearsal', isPublic: false },
+          { id: 'unavailable-1', artistId: 'artist-1', date: '2026-09-09', type: 'unavailable', isPublic: false }
         ] };
-      }
-      if (params.IndexName === 'artist_id-index') {
-        return { Items: [{ artist_id: 'artist-1', user_id: 'member-1', status: 'active' }] };
-      }
-      if (params.IndexName === 'ownerUserId-date-index' && params.KeyConditionExpression.includes('BETWEEN')) {
-        return { Items: [{ id: 'unavailable-1', ownerUserId: 'member-1', date: '2026-09-04', endDate: '2026-09-06', type: 'unavailable', title: 'Private holiday' }] };
       }
       return { Items: [] };
     });
@@ -289,12 +286,15 @@ describe('GET /api/artists/:artistId/public-availability - Free Weekends Mode', 
 
     expect(body.availability).toEqual([expect.objectContaining({ date: '2026-09-07' })]);
     expect(body.dateStatuses).toEqual([
-      { date: '2026-09-04', state: 'member_unavailable' },
       { date: '2026-09-05', state: 'private_booking' },
-      { date: '2026-09-06', state: 'public_gig', eventId: 'public-1' },
-      { date: '2026-09-08', state: 'artist_commitment' }
+      { date: '2026-09-06', state: 'public_gig', eventId: 'public-1' }
     ]);
     expect(JSON.stringify(body.dateStatuses)).not.toContain('Secret client');
-    expect(JSON.stringify(body.dateStatuses)).not.toContain('member-1');
+    expect(mockDynamoDB.query).not.toHaveBeenCalledWith(expect.objectContaining({
+      IndexName: 'artist_id-index'
+    }));
+    expect(mockDynamoDB.query).not.toHaveBeenCalledWith(expect.objectContaining({
+      IndexName: 'ownerUserId-date-index'
+    }));
   });
 });
