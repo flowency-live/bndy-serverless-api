@@ -82,25 +82,14 @@ describe('GET /api/artists/:artistId/public-availability - Free Weekends Mode', 
     });
 
     it('should exclude Saturday when booked, but include Friday and Sunday', async () => {
-      // Mock: event query - no events on Fri/Sun, but one on Sat
-      mockDynamoDB.query.mockImplementation((params) => {
-        const date = params.ExpressionAttributeValues[':date'];
-
-        if (date === '2026-08-08') {
-          // Saturday has a booking
-          return Promise.resolve({
-            Items: [{
-              id: 'event-1',
-              artistId: 'artist-1',
-              date: '2026-08-08',
-              type: 'public_gig',
-              title: 'Booked Gig'
-            }]
-          });
-        }
-
-        // Friday and Sunday are free
-        return Promise.resolve({ Items: [] });
+      mockDynamoDB.query.mockResolvedValue({
+        Items: [{
+          id: 'event-1',
+          artistId: 'artist-1',
+          date: '2026-08-08',
+          type: 'public_gig',
+          title: 'Booked Gig'
+        }]
       });
 
       const event = createEvent('artist-1', {
@@ -124,27 +113,15 @@ describe('GET /api/artists/:artistId/public-availability - Free Weekends Mode', 
 
       // Should NOT include Saturday
       expect(body.availability.some(a => a.date === '2026-08-08')).toBe(false);
+      expect(mockDynamoDB.query).toHaveBeenCalledTimes(1);
     });
 
     it('should filter each day independently - multiple bookings scenario', async () => {
-      // Mock: Friday and Sunday booked, Saturday free
-      mockDynamoDB.query.mockImplementation((params) => {
-        const date = params.ExpressionAttributeValues[':date'];
-
-        if (date === '2026-08-07' || date === '2026-08-09') {
-          // Friday and Sunday have bookings
-          return Promise.resolve({
-            Items: [{
-              id: `event-${date}`,
-              artistId: 'artist-1',
-              date,
-              type: 'public_gig'
-            }]
-          });
-        }
-
-        // Saturday is free
-        return Promise.resolve({ Items: [] });
+      mockDynamoDB.query.mockResolvedValue({
+        Items: [
+          { id: 'event-fri', artistId: 'artist-1', date: '2026-08-07', type: 'public_gig' },
+          { id: 'event-sun', artistId: 'artist-1', date: '2026-08-09', type: 'public_gig' }
+        ]
       });
 
       const event = createEvent('artist-1', {
@@ -160,6 +137,24 @@ describe('GET /api/artists/:artistId/public-availability - Free Weekends Mode', 
       // Should return only Saturday
       expect(body.availability).toHaveLength(1);
       expect(body.availability[0]).toMatchObject({ date: '2026-08-08' });
+    });
+
+    it('ignores saved availability and cancelled events when calculating busy dates', async () => {
+      mockDynamoDB.query.mockResolvedValue({
+        Items: [
+          { id: 'saved', artistId: 'artist-1', date: '2026-08-07', type: 'available' },
+          { id: 'cancelled', artistId: 'artist-1', date: '2026-08-08', type: 'public_gig', cancelled: true }
+        ]
+      });
+
+      const result = await handleGetArtistAvailability(deps, createEvent('artist-1', {
+        startDate: '2026-08-07',
+        endDate: '2026-08-09'
+      }));
+
+      expect(JSON.parse(result.body).availability.map((item) => item.date)).toEqual([
+        '2026-08-07', '2026-08-08', '2026-08-09'
+      ]);
     });
 
     it('should not query for weekday dates (Mon-Thu)', async () => {

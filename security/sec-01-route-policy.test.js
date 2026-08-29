@@ -41,6 +41,7 @@ const MUTATION_ROUTE_BASELINE = {
   // === Artists ===
   'POST /api/artists': 'handler-auth',
   'PUT /api/artists/{id}': 'handler-auth',
+  'PATCH /api/artists/{id}/profile': 'handler-auth',
   'PUT /api/artists/{id}/mcp': 'mcp',
   'DELETE /api/artists/{id}/mcp': 'mcp', // SEC-AUD-004: now requires service token auth
   'DELETE /api/artists/{id}': 'handler-auth',

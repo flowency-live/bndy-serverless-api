@@ -251,6 +251,18 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{id}
             Method: PUT
+        UpdateOwnedArtistProfile:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}/profile
+            Method: PATCH
+        GetOwnedArtistProfile:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{id}/profile
+            Method: GET
         UpdateArtistMcp:
           Type: HttpApi
           Properties:
@@ -488,6 +500,12 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/artists/{artistId}/public-availability
+            Method: GET
+        GetManagedAvailability:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/{artistId}/availability
             Method: GET
         # Public gigs (MCP/Admin)
         CreatePublicGig:

@@ -42,7 +42,7 @@ const { handleGetEventByExternalId, handleUpdateEventMcp, handleDeleteEventMcp, 
 const { handleCheckConflicts, handleGetPublicEventsGeo, handleBatchEventsWithJoins, handleGetVenueEvents, handleGetAllPublicEvents, handleGetArtistPublicEvents, handleCreatePublicGig, handleCreateCommunityEvent } = require('./handlers/public');
 
 // Availability handlers (mixed auth)
-const { handleGetArtistAvailability, handleToggleAvailability, handleBulkAvailability } = require('./handlers/availability');
+const { handleGetArtistAvailability, handleGetManagedArtistAvailability, handleToggleAvailability, handleBulkAvailability } = require('./handlers/availability');
 
 // Integration handlers (API key auth)
 const { handleIntegrationFindOrCreateEvent } = require('./handlers/integration');
@@ -209,6 +209,10 @@ exports.handler = async (event, context) => {
     }
 
     // Availability
+    if (routeKey.match(/GET \/api\/artists\/[^/]+\/availability$/)) {
+      return await handleGetManagedArtistAvailability(deps, event, user);
+    }
+
     if (routeKey.match(/POST \/api\/artists\/[^/]+\/events\/toggle-availability/)) {
       return await handleToggleAvailability(deps, event, user);
     }
