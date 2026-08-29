@@ -94,38 +94,45 @@ async function createClaim(event) {
     return response(200, { action: 'already_owned', entityType, entityId, status: 'approved' });
   }
 
+  const requestedRole = ['owner','admin','member'].includes(body.requestedRole) ? body.requestedRole : 'admin';
+  if (entityType === 'venue' && requestedRole === 'member') return response(400, { error: 'Venue claims support owner or admin relationships', code: 'INVALID_ROLE' });
+  const relationshipKind = String(body.relationshipKind || '').trim().slice(0,80);
+  const verificationMethod = body.verificationMethod === 'facebook_page' ? 'facebook_page' : 'manual';
+  const relationshipExplanation = String(body.relationshipExplanation || '').trim().slice(0,2000);
+  const supportingUrl = String(body.supportingUrl || '').trim().slice(0,1000);
+  const officialEmail = String(body.officialEmail || '').trim().slice(0,320);
+  const evidenceHints = body.evidenceHints && typeof body.evidenceHints === 'object' ? body.evidenceHints : {};
+
+  if (verificationMethod === 'manual' && !relationshipExplanation) {
+    return response(400, { error: 'Tell us how you are connected to this artist or venue.', code: 'EVIDENCE_REQUIRED' });
+  }
+  if (verificationMethod === 'facebook_page') {
+    // Never trust client-supplied Page-control assertions. This method remains
+    // closed until a server-side Meta verification flow issues the evidence.
+    return response(409, { error: 'Facebook Page verification is not available until Meta Page access is approved.', code: 'FACEBOOK_PAGE_VERIFICATION_UNAVAILABLE' });
+  }
+
+  const evidence = [{ type: 'manual_explanation', explanation: relationshipExplanation, supporting_url: supportingUrl || null, official_email: officialEmail || null, supplied_at: new Date().toISOString() }];
+  const initialStatus = 'pending_review';
+
   const id = claimId(userId, entityType, entityId);
   const existing = await dynamodb.get({ TableName: CLAIMS_TABLE, Key: { claim_id: id } }).promise();
-  if (existing.Item && ['pending', 'approved'].includes(existing.Item.status)) {
+  if (existing.Item && ['pending','pending_review','verified_pending','approved'].includes(existing.Item.status)) {
     return response(200, { action: 'existing', claim: existing.Item });
   }
 
   const now = new Date().toISOString();
   const item = {
-    claim_id: id,
-    entity_type: entityType,
-    entity_id: entityId,
-    entity_name: entity.name || '',
-    user_id: userId,
-    requested_role: body.requestedRole === 'admin' ? 'admin' : 'owner',
-    status: 'pending',
-    evidence_hints: body.evidenceHints && typeof body.evidenceHints === 'object' ? body.evidenceHints : {},
-    source: 'join_bndy',
-    created_at: now,
-    updated_at: now,
-    entity_key: `${entityType}#${entityId}`,
-    user_key: userId
+    claim_id: id, entity_type: entityType, entity_id: entityId, entity_name: entity.name || '', user_id: userId,
+    requested_role: requestedRole, relationship_kind: relationshipKind || null, status: initialStatus,
+    verification_method: verificationMethod, evidence, evidence_hints: evidenceHints, source: 'join_bndy_v2',
+    created_at: now, updated_at: now, entity_key: entityType+'#'+entityId, user_key: userId
   };
 
-  await dynamodb.put({
-    TableName: CLAIMS_TABLE,
-    Item: item,
+  await dynamodb.put({ TableName: CLAIMS_TABLE, Item: item,
     ConditionExpression: 'attribute_not_exists(claim_id) OR #status IN (:rejected, :cancelled)',
-    ExpressionAttributeNames: { '#status': 'status' },
-    ExpressionAttributeValues: { ':rejected': 'rejected', ':cancelled': 'cancelled' }
-  }).promise().catch(async (error) => {
-    if (error.code !== 'ConditionalCheckFailedException') throw error;
-  });
+    ExpressionAttributeNames: { '#status': 'status' }, ExpressionAttributeValues: { ':rejected': 'rejected', ':cancelled': 'cancelled' }
+  }).promise().catch(async (error) => { if (error.code !== 'ConditionalCheckFailedException') throw error; });
 
   const saved = await dynamodb.get({ TableName: CLAIMS_TABLE, Key: { claim_id: id } }).promise();
   return response(201, { action: 'created', claim: saved.Item || item });
@@ -147,8 +154,9 @@ async function listMyClaims(event) {
 async function listPendingClaims(event) {
   const auth = await requirePlatformAdmin(event);
   if (auth.error) return response(auth.statusCode, { error: auth.error });
-  const result = await dynamodb.scan({ TableName: CLAIMS_TABLE, FilterExpression: '#status = :pending', ExpressionAttributeNames: { '#status': 'status' }, ExpressionAttributeValues: { ':pending': 'pending' } }).promise();
-  return response(200, { claims: (result.Items || []).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))) });
+  const result = await dynamodb.scan({ TableName: CLAIMS_TABLE }).promise();
+  const reviewable = new Set(['pending','pending_review','verified_pending','more_evidence_required','conflict']);
+  return response(200, { claims: (result.Items || []).filter((item) => reviewable.has(item.status)).sort((a,b) => String(a.created_at).localeCompare(String(b.created_at))) });
 }
 
 async function cancelClaim(event, id) {
@@ -157,7 +165,7 @@ async function cancelClaim(event, id) {
   const current = await dynamodb.get({ TableName: CLAIMS_TABLE, Key: { claim_id: id } }).promise();
   if (!current.Item) return response(404, { error: 'Claim not found' });
   if (current.Item.user_id !== auth.user.userId && !auth.user.platformAdmin) return response(403, { error: 'Not allowed' });
-  if (current.Item.status !== 'pending') return response(409, { error: 'Only pending claims can be cancelled', status: current.Item.status });
+  if (!['pending','pending_review','verified_pending','more_evidence_required'].includes(current.Item.status)) return response(409, { error: 'Only reviewable claims can be cancelled', status: current.Item.status });
   const updated = await dynamodb.update({
     TableName: CLAIMS_TABLE,
     Key: { claim_id: id },
@@ -180,7 +188,7 @@ async function approveClaim(claim, reviewerId) {
 
   const now = new Date().toISOString();
   const membershipId = crypto.randomUUID();
-  const role = claim.requested_role === 'admin' ? 'admin' : 'owner';
+  const role = ['owner','admin','member'].includes(claim.requested_role) ? claim.requested_role : 'admin';
   const transactItems = [];
 
   if (claim.entity_type === 'artist') {
@@ -213,9 +221,9 @@ async function approveClaim(claim, reviewerId) {
   transactItems.push({ Update: {
     TableName: CLAIMS_TABLE, Key: { claim_id: claim.claim_id },
     UpdateExpression: 'SET #status = :approved, reviewed_at = :now, reviewed_by = :reviewer, updated_at = :now',
-    ConditionExpression: '#status = :pending',
+    ConditionExpression: '#status IN (:pending, :pendingReview, :verifiedPending, :moreEvidence, :conflict)',
     ExpressionAttributeNames: { '#status': 'status' },
-    ExpressionAttributeValues: { ':approved': 'approved', ':pending': 'pending', ':now': now, ':reviewer': reviewerId }
+    ExpressionAttributeValues: { ':approved': 'approved', ':pending': 'pending', ':pendingReview': 'pending_review', ':verifiedPending': 'verified_pending', ':moreEvidence': 'more_evidence_required', ':conflict': 'conflict', ':now': now, ':reviewer': reviewerId }
   } });
 
   await dynamodb.transactWrite({ TransactItems: transactItems }).promise();
@@ -231,16 +239,16 @@ async function reviewClaim(event, id) {
 
   const current = await dynamodb.get({ TableName: CLAIMS_TABLE, Key: { claim_id: id } }).promise();
   if (!current.Item) return response(404, { error: 'Claim not found' });
-  if (current.Item.status !== 'pending') return response(409, { error: 'Claim has already been reviewed', status: current.Item.status });
+  if (!['pending','pending_review','verified_pending','more_evidence_required','conflict'].includes(current.Item.status)) return response(409, { error: 'Claim has already been reviewed', status: current.Item.status });
 
   if (body.status === 'rejected') {
     const now = new Date().toISOString();
     const updated = await dynamodb.update({
       TableName: CLAIMS_TABLE, Key: { claim_id: id },
       UpdateExpression: 'SET #status = :rejected, reviewed_at = :now, reviewed_by = :reviewer, review_note = :note, updated_at = :now',
-      ConditionExpression: '#status = :pending',
+      ConditionExpression: '#status IN (:pending, :pendingReview, :verifiedPending, :moreEvidence, :conflict)',
       ExpressionAttributeNames: { '#status': 'status' },
-      ExpressionAttributeValues: { ':rejected': 'rejected', ':pending': 'pending', ':now': now, ':reviewer': auth.user.userId, ':note': String(body.note || '') },
+      ExpressionAttributeValues: { ':rejected': 'rejected', ':pending': 'pending', ':pendingReview': 'pending_review', ':verifiedPending': 'verified_pending', ':moreEvidence': 'more_evidence_required', ':conflict': 'conflict', ':now': now, ':reviewer': auth.user.userId, ':note': String(body.note || '') },
       ReturnValues: 'ALL_NEW'
     }).promise();
     return response(200, { claim: updated.Attributes });
