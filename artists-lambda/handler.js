@@ -19,7 +19,7 @@ const { validateArtistData } = require('./lib/data-quality');
 const { deleteArtistEvents } = require('./lib/cascade-delete-events');
 const { hasEventsForArtist, countEventsForArtist } = require('./lib/artist-event-guard');
 const { isPublishedInEdition, hasPrivilegedIngestionFields, validateScopedIngestion, editionMetadata } = require('./lib/edition-domain');
-const { requireRole: requireCuratorRole, logActivity: logCuratorActivity, pickFields: pickCuratorFields, hideEntity: hideArtistEntity, restoreEntity: restoreArtistEntity } = require('./curator-core');
+const { requireRole: requireCuratorRole, logActivity: logCuratorActivity, pickFields: pickCuratorFields, hideEntity: hideArtistEntity, restoreEntity: restoreArtistEntity, normaliseCuratorAccess } = require('./curator-core');
 const { publishUserCreatedArtistClaims } = require('./backline-user-claims');
 const { pickOwnedProfileFields } = require('./lib/owned-profile');
 
@@ -421,13 +421,17 @@ const requireAuth = async (event) => {
       Key: { cognito_id: session.userId }
     }).promise();
 
-    const platformAdmin = userResult.Item?.platformAdmin || false;
+    const dbUser = userResult.Item || {};
+    const platformAdmin = dbUser.platformAdmin || false;
+    const role = dbUser.role || (platformAdmin ? 'staff' : 'user');
 
     return {
       user: {
         ...session,
-        platformAdmin
-      }
+        platformAdmin,
+        role
+      },
+      dbUser
     };
   } catch (error) {
     console.error(' Invalid session token:', error.message);
@@ -665,7 +669,7 @@ async function handleGetAllArtists(event) {
 
   const params = {
     TableName: 'bndy-artists',
-    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, youtubeUrl, spotifyUrl, soundcloudUrl, bandcampUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, availabilityMode, contactMethod, phoneNumber, whatsappNumber, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt, #hidden, enrichment_status, enrichment_data, enrichment_date, publicationScopes',
+    ProjectionExpression: 'id, #name, bio, #location, locationLat, locationLng, locationType, genres, facebookUrl, instagramUrl, websiteUrl, youtubeUrl, spotifyUrl, soundcloudUrl, bandcampUrl, socialMediaUrls, profileImageUrl, isVerified, followerCount, claimedByUserId, allowedEventTypes, displayColour, artist_type, actType, acoustic, publishAvailability, availabilityMode, contactMethod, phoneNumber, whatsappNumber, availabilityMessage, showMemberVotes, autoDiscardThreshold, #source, ai_created, needs_review, owner_user_id, validated, createdAt, #hidden, enrichment_status, enrichment_data, enrichment_date, publicationScopes',
     ExpressionAttributeNames: {
       '#name': 'name',
       '#location': 'location',
@@ -698,6 +702,7 @@ async function handleGetAllArtists(event) {
       contactMethod: artist.contactMethod || 'phone',
       phoneNumber: artist.publishAvailability ? artist.phoneNumber || null : null,
       whatsappNumber: artist.publishAvailability ? artist.whatsappNumber || null : null,
+      availabilityMessage: artist.publishAvailability ? artist.availabilityMessage || null : null,
       showMemberVotes: artist.showMemberVotes || false,
       autoDiscardThreshold: artist.autoDiscardThreshold ?? null,
       facebookUrl: artist.facebookUrl || '',
@@ -791,6 +796,7 @@ async function handleGetArtistById(artistId, event) {
       contactMethod: result.Item.contactMethod || 'phone',
       phoneNumber: includeBookingContact ? result.Item.phoneNumber || null : null,
       whatsappNumber: includeBookingContact ? result.Item.whatsappNumber || null : null,
+      availabilityMessage: includeBookingContact ? result.Item.availabilityMessage || null : null,
       showMemberVotes: result.Item.showMemberVotes || false,
       autoDiscardThreshold: result.Item.autoDiscardThreshold ?? null,
       facebookUrl: result.Item.facebookUrl || '',
@@ -1220,6 +1226,34 @@ async function handleCreateArtist(event) {
   }
 }
 
+async function canManageArtistProfile(authResult, artistId) {
+  const { user, dbUser } = authResult;
+  if (user.platformAdmin || user.role === 'staff') return true;
+
+  if (user.role === 'curator') {
+    const access = normaliseCuratorAccess(dbUser);
+    if (access.scope === 'global' && !access.ownRecordsOnly) return true;
+    const artistResult = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();
+    const artist = artistResult.Item;
+    const creator = artist?.createdBy || artist?.created_by || artist?.created_by_user_id || null;
+    if (creator === user.userId) return true;
+  }
+
+  const membershipResult = await dynamodb.query({
+    TableName: MEMBERSHIPS_TABLE,
+    IndexName: 'user_id-index',
+    KeyConditionExpression: 'user_id = :userId',
+    FilterExpression: 'artist_id = :artistId',
+    ExpressionAttributeValues: {
+      ':userId': user.userId,
+      ':artistId': artistId
+    }
+  }).promise();
+  return (membershipResult.Items || []).some((membership) =>
+    membership.status === 'active' && ['owner', 'admin'].includes(membership.role)
+  );
+}
+
 async function requireOwnedArtistProfileAccess(event, artistId) {
   const authResult = await requireAuth(event);
   if (authResult.error) {
@@ -1232,28 +1266,13 @@ async function requireOwnedArtistProfileAccess(event, artistId) {
     };
   }
 
-  if (authResult.user.platformAdmin) return { authResult };
-
-  const membershipResult = await dynamodb.query({
-    TableName: MEMBERSHIPS_TABLE,
-    IndexName: 'user_id-index',
-    KeyConditionExpression: 'user_id = :userId',
-    FilterExpression: 'artist_id = :artistId',
-    ExpressionAttributeValues: {
-      ':userId': authResult.user.userId,
-      ':artistId': artistId
-    }
-  }).promise();
-
-  const canManage = (membershipResult.Items || []).some((membership) =>
-    membership.status === 'active' && ['owner', 'admin'].includes(membership.role)
-  );
+  const canManage = await canManageArtistProfile(authResult, artistId);
   if (!canManage) {
     return {
       response: {
         statusCode: 403,
         headers: getCorsHeaders(),
-        body: JSON.stringify({ error: 'Active artist owner or admin access required' })
+        body: JSON.stringify({ error: 'Artist management access required' })
       }
     };
   }
@@ -1270,18 +1289,7 @@ async function canReadPrivateArtistFields(event, artistId) {
   if (!hasSessionCookie(event)) return false;
   const authResult = await requireAuth(event);
   if (authResult.error) return false;
-  if (authResult.user.platformAdmin) return true;
-  const membershipResult = await dynamodb.query({
-    TableName: MEMBERSHIPS_TABLE,
-    IndexName: 'user_id-index',
-    KeyConditionExpression: 'user_id = :userId',
-    FilterExpression: 'artist_id = :artistId',
-    ExpressionAttributeValues: {
-      ':userId': authResult.user.userId,
-      ':artistId': artistId
-    }
-  }).promise();
-  return (membershipResult.Items || []).some((membership) => membership.status === 'active');
+  return canManageArtistProfile(authResult, artistId);
 }
 
 async function handleOwnedArtistProfileRead(event) {
@@ -1371,10 +1379,10 @@ async function handleUpdateArtist(event) {
     };
   }
 
-  // Check access - platform admin OR member OR an approved curator wrapper
-  // (feature 4: __curatorApproved is set internally after a role gate — it can
-  // never arrive on an external request object)
-  if (!user.platformAdmin && event.__curatorApproved !== true) {
+  // Check access - platform admin, artist member, or an internally approved
+  // curator/owned-profile wrapper. Approval flags are set only after their
+  // dedicated policy gates and can never arrive through the HTTP body.
+  if (!user.platformAdmin && event.__curatorApproved !== true && event.__ownedProfileApproved !== true) {
     const membershipResult = await dynamodb.query({
       TableName: MEMBERSHIPS_TABLE,
       IndexName: 'user_id-index',
@@ -1396,7 +1404,7 @@ async function handleUpdateArtist(event) {
       };
     }
   } else {
-    console.log('[ARTISTS] Platform admin access granted for artist update');
+    console.log('[ARTISTS] Pre-authorised artist update path');
   }
 
   const now = new Date().toISOString();
@@ -1572,6 +1580,10 @@ async function handleUpdateArtist(event) {
   if (artistData.whatsappNumber !== undefined) {
     updateParts.push('whatsappNumber = :whatsappNumber');
     expressionAttributeValues[':whatsappNumber'] = artistData.whatsappNumber;
+  }
+  if (artistData.availabilityMessage !== undefined) {
+    updateParts.push('availabilityMessage = :availabilityMessage');
+    expressionAttributeValues[':availabilityMessage'] = artistData.availabilityMessage;
   }
 
   // Allow updating needs_review (for admin review workflow)
@@ -4374,7 +4386,7 @@ function getCorsHeaders() {
 // uniqueness sentinels stay coherent.
 
 const CURATOR_ARTIST_FIELDS = [
-  'bio', 'location', 'locationType', 'locationLat', 'locationLng', 'genres', 'actType',
+  'bio', 'location', 'locationType', 'locationLat', 'locationLng', 'genres', 'artistType', 'actType', 'acoustic',
   'facebookUrl', 'instagramUrl', 'websiteUrl', 'youtubeUrl', 'spotifyUrl',
   'soundcloudUrl', 'bandcampUrl', 'socialMediaUrls', 'profileImageUrl'
 ];

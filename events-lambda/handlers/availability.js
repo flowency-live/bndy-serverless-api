@@ -6,6 +6,7 @@
  */
 
 const crypto = require('crypto');
+const { normaliseCuratorAccess } = require('../lib/curator-core');
 
 // Table constants
 const EVENTS_TABLE = 'bndy-events';
@@ -90,8 +91,18 @@ function weekendDates(start, end) {
   return dates;
 }
 
-async function hasActiveMembership(dynamodb, user, artistId) {
-  if (user.platformAdmin) return true;
+async function canManageAvailability(dynamodb, user, artistId) {
+  if (user.platformAdmin || user.role === 'staff') return true;
+
+  if (user.role === 'curator') {
+    const access = normaliseCuratorAccess({ curator_access: user.curatorAccess });
+    if (access.scope === 'global' && !access.ownRecordsOnly) return true;
+    const artistResult = await dynamodb.get({ TableName: 'bndy-artists', Key: { id: artistId } }).promise();
+    const artist = artistResult.Item;
+    const creator = artist?.createdBy || artist?.created_by || artist?.created_by_user_id || null;
+    if (creator === user.userId) return true;
+  }
+
   const result = await dynamodb.query({
     TableName: 'bndy-artist-memberships',
     IndexName: 'user_id-index',
@@ -102,7 +113,9 @@ async function hasActiveMembership(dynamodb, user, artistId) {
       ':artistId': artistId
     }
   }).promise();
-  return (result.Items || []).some((membership) => membership.status === 'active');
+  return (result.Items || []).some((membership) =>
+    membership.status === 'active' && ['owner', 'admin'].includes(membership.role)
+  );
 }
 
 /**
@@ -214,11 +227,11 @@ async function handleGetManagedArtistAvailability(deps, event, user) {
     };
   }
 
-  if (!(await hasActiveMembership(dynamodb, user, artistId))) {
+  if (!(await canManageAvailability(dynamodb, user, artistId))) {
     return {
       statusCode: 403,
       headers: getCorsHeaders(event),
-      body: JSON.stringify({ error: 'Active artist membership required' })
+      body: JSON.stringify({ error: 'Artist management access required' })
     };
   }
 
@@ -268,11 +281,11 @@ async function handleToggleAvailability(deps, event, user) {
 
   console.log('TOGGLE_AVAILABILITY: Request received', { artistId, date, userId: user.userId });
 
-  if (!(await hasActiveMembership(dynamodb, user, artistId))) {
+  if (!(await canManageAvailability(dynamodb, user, artistId))) {
     return {
       statusCode: 403,
       headers: getCorsHeaders(event),
-      body: JSON.stringify({ error: 'Active artist membership required' })
+      body: JSON.stringify({ error: 'Artist management access required' })
     };
   }
 
@@ -395,11 +408,11 @@ async function handleBulkAvailability(deps, event, user) {
 
   console.log('BULK_AVAILABILITY: Request received', { artistId, startDate, endDate, rules, userId: user.userId });
 
-  if (!(await hasActiveMembership(dynamodb, user, artistId))) {
+  if (!(await canManageAvailability(dynamodb, user, artistId))) {
     return {
       statusCode: 403,
       headers: getCorsHeaders(event),
-      body: JSON.stringify({ error: 'Active artist membership required' })
+      body: JSON.stringify({ error: 'Artist management access required' })
     };
   }
 

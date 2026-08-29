@@ -48,4 +48,12 @@ describe('owned artist profile validation', () => {
     expect(result.errors).toEqual([]);
     expect(result.fields).toEqual({ youtubeUrl: '', whatsappNumber: null });
   });
+
+  test('trims an availability message and enforces its public length limit', () => {
+    expect(pickOwnedProfileFields({ availabilityMessage: '  Please contact us anyway.  ' })).toEqual({
+      fields: { availabilityMessage: 'Please contact us anyway.' },
+      errors: []
+    });
+    expect(pickOwnedProfileFields({ availabilityMessage: 'x'.repeat(501) }).errors[0]).toMatch(/500/);
+  });
 });

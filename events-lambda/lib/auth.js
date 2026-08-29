@@ -86,12 +86,16 @@ async function requireAuth(deps, event) {
       Key: { cognito_id: session.userId }
     }).promise();
 
-    const platformAdmin = userResult.Item?.platformAdmin || false;
+    const dbUser = userResult.Item || {};
+    const platformAdmin = dbUser.platformAdmin || false;
+    const role = dbUser.role || (platformAdmin ? 'staff' : 'user');
 
     return {
       user: {
         ...session,
-        platformAdmin
+        platformAdmin,
+        role,
+        curatorAccess: dbUser.curator_access || null
       }
     };
   } catch (error) {

@@ -21,7 +21,8 @@ const OWNED_PROFILE_FIELDS = [
   'availabilityMode',
   'contactMethod',
   'phoneNumber',
-  'whatsappNumber'
+  'whatsappNumber',
+  'availabilityMessage'
 ];
 
 const URL_RULES = {
@@ -102,6 +103,12 @@ function pickOwnedProfileFields(body) {
   }
   if (fields.location !== undefined && (typeof fields.location !== 'string' || fields.location.length > 160)) {
     errors.push('location must be a string of 160 characters or fewer');
+  }
+  if (fields.availabilityMessage !== undefined && fields.availabilityMessage !== null &&
+      (typeof fields.availabilityMessage !== 'string' || fields.availabilityMessage.length > 500)) {
+    errors.push('availabilityMessage must be a string of 500 characters or fewer');
+  } else if (typeof fields.availabilityMessage === 'string') {
+    fields.availabilityMessage = fields.availabilityMessage.trim() || null;
   }
   if (fields.locationType !== undefined && !['city', 'town', 'region', null].includes(fields.locationType)) {
     errors.push('locationType is invalid');
