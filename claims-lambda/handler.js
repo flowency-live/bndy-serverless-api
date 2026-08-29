@@ -112,20 +112,45 @@ async function createClaim(event) {
     return response(409, { error: 'Facebook Page verification is not available until Meta Page access is approved.', code: 'FACEBOOK_PAGE_VERIFICATION_UNAVAILABLE' });
   }
 
-  const evidence = [{ type: 'manual_explanation', explanation: relationshipExplanation, supporting_url: supportingUrl || null, official_email: officialEmail || null, supplied_at: new Date().toISOString() }];
-  const initialStatus = 'pending_review';
+  const now = new Date().toISOString();
+  const evidenceItem = {
+    evidence_id: crypto.randomUUID(), method: 'manual_explanation', status: 'submitted', strength: 'weak',
+    observed_at: now, verifier: null, public_reference: supportingUrl || null,
+    metadata: { explanation: relationshipExplanation, official_email: officialEmail || null }
+  };
+  const currentOwnerUserId = entity.owner_user_id || entity.claimedByUserId || entity.claimedBy || null;
+  const initialStatus = requestedRole === 'owner' && currentOwnerUserId && currentOwnerUserId !== userId ? 'conflict' : 'pending_review';
 
   const id = claimId(userId, entityType, entityId);
   const existing = await dynamodb.get({ TableName: CLAIMS_TABLE, Key: { claim_id: id } }).promise();
-  if (existing.Item && ['pending','pending_review','verified_pending','approved'].includes(existing.Item.status)) {
+  if (existing.Item && ['pending','pending_review','verified_pending','conflict','approved'].includes(existing.Item.status)) {
     return response(200, { action: 'existing', claim: existing.Item });
   }
+  if (existing.Item?.status === 'more_evidence_required') {
+    const nextStatus = requestedRole === 'owner' && currentOwnerUserId && currentOwnerUserId !== userId ? 'conflict' : 'pending_review';
+    const updated = await dynamodb.update({
+      TableName: CLAIMS_TABLE, Key: { claim_id: id },
+      UpdateExpression: 'SET evidence = list_append(if_not_exists(evidence, :empty), :evidence), #status = :status, requested_role = :role, relationship_kind = :kind, evidence_hints = :hints, verification_method = :method, updated_at = :now, evidence_revision = if_not_exists(evidence_revision, :zero) + :one REMOVE reviewed_at',
+      ConditionExpression: '#status = :moreEvidence',
+      ExpressionAttributeNames: { '#status': 'status' },
+      ExpressionAttributeValues: { ':empty': [], ':evidence': [evidenceItem], ':status': nextStatus, ':role': requestedRole, ':kind': relationshipKind || null, ':hints': evidenceHints, ':method': verificationMethod, ':now': now, ':zero': 0, ':one': 1, ':moreEvidence': 'more_evidence_required' },
+      ReturnValues: 'ALL_NEW'
+    }).promise();
+    return response(200, { action: 'evidence_updated', claim: updated.Attributes });
+  }
 
-  const now = new Date().toISOString();
+  if (!existing.Item) {
+    const recent = await dynamodb.query({ TableName: CLAIMS_TABLE, IndexName: 'user_id-index', KeyConditionExpression: 'user_id = :uid', ExpressionAttributeValues: { ':uid': userId } }).promise();
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    const recentCount = (recent.Items || []).filter((claim) => Date.parse(claim.created_at || 0) >= cutoff).length;
+    if (recentCount >= 20) return response(429, { error: 'Too many Claim attempts. Try again later.', code: 'CLAIM_RATE_LIMITED' });
+  }
   const item = {
     claim_id: id, entity_type: entityType, entity_id: entityId, entity_name: entity.name || '', user_id: userId,
     requested_role: requestedRole, relationship_kind: relationshipKind || null, status: initialStatus,
-    verification_method: verificationMethod, evidence, evidence_hints: evidenceHints, source: 'join_bndy_v2',
+    verification_method: verificationMethod, evidence: [evidenceItem], evidence_hints: evidenceHints, source: 'join_bndy_v2',
+    evidence_revision: 1, evidence_summary: { strongest_strength: 'weak', verified_count: 0, methods: ['manual_explanation'] },
+    owner_at_claim_time: currentOwnerUserId, prior_claim_summary: existing.Item ? { status: existing.Item.status, reviewed_at: existing.Item.reviewed_at || null, review_note: existing.Item.review_note || null } : null,
     created_at: now, updated_at: now, entity_key: entityType+'#'+entityId, user_key: userId
   };
 
@@ -156,7 +181,15 @@ async function listPendingClaims(event) {
   if (auth.error) return response(auth.statusCode, { error: auth.error });
   const result = await dynamodb.scan({ TableName: CLAIMS_TABLE }).promise();
   const reviewable = new Set(['pending','pending_review','verified_pending','more_evidence_required','conflict']);
-  return response(200, { claims: (result.Items || []).filter((item) => reviewable.has(item.status)).sort((a,b) => String(a.created_at).localeCompare(String(b.created_at))) });
+  const reviewableClaims = (result.Items || []).filter((item) => reviewable.has(item.status));
+  const counts = reviewableClaims.reduce((map, item) => { map[item.entity_key] = (map[item.entity_key] || 0) + 1; return map; }, {});
+  const claims = await Promise.all(reviewableClaims.map(async (item) => {
+    const table = entityTable(item.entity_type);
+    const entityResult = table ? await dynamodb.get({ TableName: table, Key: { id: item.entity_id } }).promise().catch(() => ({})) : {};
+    const entity = entityResult.Item || {};
+    return { ...item, current_owner_user_id: entity.owner_user_id || entity.claimedByUserId || entity.claimedBy || null, competing_claim_count: counts[item.entity_key] || 1 };
+  }));
+  return response(200, { claims: claims.sort((a,b) => String(a.created_at).localeCompare(String(b.created_at))) });
 }
 
 async function cancelClaim(event, id) {
@@ -235,11 +268,26 @@ async function reviewClaim(event, id) {
   if (auth.error) return response(auth.statusCode, { error: auth.error });
   let body;
   try { body = parseBody(event); } catch { return response(400, { error: 'Invalid JSON body' }); }
-  if (!['approved', 'rejected'].includes(body.status)) return response(400, { error: 'status must be approved or rejected' });
+  if (!['approved', 'rejected', 'more_evidence_required'].includes(body.status)) return response(400, { error: 'status must be approved, rejected or more_evidence_required' });
 
   const current = await dynamodb.get({ TableName: CLAIMS_TABLE, Key: { claim_id: id } }).promise();
   if (!current.Item) return response(404, { error: 'Claim not found' });
   if (!['pending','pending_review','verified_pending','more_evidence_required','conflict'].includes(current.Item.status)) return response(409, { error: 'Claim has already been reviewed', status: current.Item.status });
+
+  if (body.status === 'more_evidence_required') {
+    const note = String(body.note || '').trim();
+    if (!note) return response(400, { error: 'Tell the claimant what additional evidence is needed', code: 'REVIEW_NOTE_REQUIRED' });
+    const now = new Date().toISOString();
+    const updated = await dynamodb.update({
+      TableName: CLAIMS_TABLE, Key: { claim_id: id },
+      UpdateExpression: 'SET #status = :status, reviewed_at = :now, reviewed_by = :reviewer, review_note = :note, updated_at = :now',
+      ConditionExpression: '#status IN (:pending, :pendingReview, :verifiedPending, :conflict)',
+      ExpressionAttributeNames: { '#status': 'status' },
+      ExpressionAttributeValues: { ':status': 'more_evidence_required', ':pending': 'pending', ':pendingReview': 'pending_review', ':verifiedPending': 'verified_pending', ':conflict': 'conflict', ':now': now, ':reviewer': auth.user.userId, ':note': note },
+      ReturnValues: 'ALL_NEW'
+    }).promise();
+    return response(200, { claim: updated.Attributes });
+  }
 
   if (body.status === 'rejected') {
     const now = new Date().toISOString();
