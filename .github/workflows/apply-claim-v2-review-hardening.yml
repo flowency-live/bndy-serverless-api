@@ -1,0 +1,27 @@
+name: Apply Claim V2 review hardening
+on:
+  push:
+    branches: [claim-v2-review-hardening]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, '[claim-v2-review]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: claim-v2-review-hardening }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node scripts/apply-claim-v2-review-hardening.js
+      - run: node --check claims-lambda/handler.js
+      - run: npm ci
+      - run: npm run validate
+      - run: npm run verify-routes
+      - name: Commit
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add claims-lambda/handler.js
+          git commit -m 'Harden Claim V2 evidence review lifecycle'
+          git push origin HEAD:claim-v2-review-hardening
