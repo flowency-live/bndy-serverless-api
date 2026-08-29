@@ -14,6 +14,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: node scripts/apply-claim-v2.js
+      - run: node scripts/harden-claim-v2.js
       - run: node --check claims-lambda/handler.js
       - run: npm ci
       - run: npm run validate
@@ -23,5 +24,5 @@ jobs:
           git config user.name 'bndy-product-bot'
           git config user.email 'actions@users.noreply.github.com'
           git add claims-lambda/handler.js
-          git commit -m 'Implement Claim V2 evidence backend'
+          git commit -m 'Implement hardened Claim V2 evidence backend'
           git push origin HEAD:claim-v2-evidence
