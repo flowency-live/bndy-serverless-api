@@ -1,0 +1,31 @@
+name: Patch Claim authority stream once
+on:
+  push:
+    branches: [claim-v2-backline-transport]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, '[claim-authority-stream]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claim-v2-backline-transport
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/patch-claim-authority-stream.js
+      - name: Validate serverless repository
+        run: |
+          cd scripts
+          npm install
+          node validate-deployment.js
+          node verify-routes.js
+      - name: Commit
+        run: |
+          git config user.name 'bndy-product-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add template.yaml
+          git commit -m 'Enable Claim authority stream for Backline'
+          git push origin HEAD:claim-v2-backline-transport
