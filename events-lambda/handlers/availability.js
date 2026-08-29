@@ -6,10 +6,104 @@
  */
 
 const crypto = require('crypto');
-const { verifyMembership } = require('../lib/auth');
 
 // Table constants
 const EVENTS_TABLE = 'bndy-events';
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const UK_DATE = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/London',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+});
+
+function ukToday() {
+  return UK_DATE.format(new Date());
+}
+
+function addUtcDays(dateString, days) {
+  const date = new Date(`${dateString}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().split('T')[0];
+}
+
+function isValidIsoDate(value) {
+  if (!DATE_PATTERN.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().split('T')[0] === value;
+}
+
+function normaliseRange(startDate, endDate) {
+  const today = ukToday();
+  const start = startDate || today;
+  if (!isValidIsoDate(start)) return { error: 'A valid startDate and endDate are required' };
+  const end = endDate || addUtcDays(start, 180);
+  if (!isValidIsoDate(end) || end < start) {
+    return { error: 'A valid startDate and endDate are required' };
+  }
+  const rangeDays = Math.round((new Date(`${end}T00:00:00.000Z`) - new Date(`${start}T00:00:00.000Z`)) / 86400000);
+  if (rangeDays > 366) return { error: 'Availability range cannot exceed 366 days' };
+  return { start, end };
+}
+
+function isBusyArtistEvent(event) {
+  if (!event || event.type === 'available') return false;
+  if (event.cancelled === true || event.canceled === true) return false;
+  if (event.hidden === true || event.deleted === true) return false;
+  if (['cancelled', 'canceled', 'deleted'].includes(String(event.status || '').toLowerCase())) return false;
+  return true;
+}
+
+async function queryArtistRange(dynamodb, artistId, start, end, availableOnly = false) {
+  const params = {
+    TableName: EVENTS_TABLE,
+    IndexName: 'artistId-date-index',
+    KeyConditionExpression: 'artistId = :artistId AND #date BETWEEN :start AND :end',
+    ExpressionAttributeNames: { '#date': 'date' },
+    ExpressionAttributeValues: {
+      ':artistId': artistId,
+      ':start': start,
+      ':end': end
+    }
+  };
+  if (availableOnly) {
+    params.FilterExpression = '#type = :available';
+    params.ExpressionAttributeNames['#type'] = 'type';
+    params.ExpressionAttributeValues[':available'] = 'available';
+  }
+  const items = [];
+  let lastKey;
+  do {
+    const result = await dynamodb.query({ ...params, ...(lastKey ? { ExclusiveStartKey: lastKey } : {}) }).promise();
+    items.push(...(result.Items || []));
+    lastKey = result.LastEvaluatedKey;
+  } while (lastKey);
+  return items;
+}
+
+function weekendDates(start, end) {
+  const dates = [];
+  for (let date = start; date <= end; date = addUtcDays(date, 1)) {
+    const day = new Date(`${date}T00:00:00.000Z`).getUTCDay();
+    if (day === 0 || day === 5 || day === 6) dates.push(date);
+  }
+  return dates;
+}
+
+async function hasActiveMembership(dynamodb, user, artistId) {
+  if (user.platformAdmin) return true;
+  const result = await dynamodb.query({
+    TableName: 'bndy-artist-memberships',
+    IndexName: 'user_id-index',
+    KeyConditionExpression: 'user_id = :userId',
+    FilterExpression: 'artist_id = :artistId',
+    ExpressionAttributeValues: {
+      ':userId': user.userId,
+      ':artistId': artistId
+    }
+  }).promise();
+  return (result.Items || []).some((membership) => membership.status === 'active');
+}
 
 /**
  * GET /api/artists/:artistId/public-availability - Get artist availability (NO AUTH)
@@ -31,12 +125,18 @@ async function handleGetArtistAvailability(deps, event) {
   }
 
   const { artistId } = event.pathParameters;
-  const { startDate, endDate } = event.queryStringParameters || {};
-
-  // Default to today if no startDate provided
-  const today = new Date().toISOString().split('T')[0];
-  const start = startDate || today;
-  const end = endDate || '2099-12-31';
+  const range = normaliseRange(
+    event.queryStringParameters?.startDate,
+    event.queryStringParameters?.endDate
+  );
+  if (range.error) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: range.error })
+    };
+  }
+  const { start, end } = range;
 
   console.log('ARTIST_AVAILABILITY: Query received', { artistId, startDate: start, endDate: end });
 
@@ -64,66 +164,23 @@ async function handleGetArtistAvailability(deps, event) {
     let availability = [];
 
     if (availabilityMode === 'free_weekends') {
-      // Generate all Fri/Sat/Sun dates in range
-      const weekendDates = [];
-      let currentDate = new Date(start);
-      const endDateObj = new Date(end);
-
-      while (currentDate <= endDateObj) {
-        const dayOfWeek = currentDate.getDay();
-        // Friday (5), Saturday (6), Sunday (0)
-        if (dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6) {
-          const dateStr = currentDate.toISOString().split('T')[0];
-          weekendDates.push(dateStr);
-        }
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      console.log('ARTIST_AVAILABILITY: Generated weekend dates', { count: weekendDates.length });
-
-      // For each weekend date, check if any events exist (each day evaluated independently)
-      for (const date of weekendDates) {
-        const eventsOnDate = await dynamodb.query({
-          TableName: EVENTS_TABLE,
-          IndexName: 'artistId-date-index',
-          KeyConditionExpression: 'artistId = :artistId AND #date = :date',
-          ExpressionAttributeNames: { '#date': 'date' },
-          ExpressionAttributeValues: {
-            ':artistId': artistId,
-            ':date': date
-          }
-        }).promise();
-
-        // Include date only if no events exist
-        if (!eventsOnDate.Items || eventsOnDate.Items.length === 0) {
-          availability.push({
+      const candidates = weekendDates(start, end);
+      if (candidates.length > 0) {
+        const rangeEvents = await queryArtistRange(dynamodb, artistId, start, end);
+        const busyDates = new Set(rangeEvents.filter(isBusyArtistEvent).map((item) => item.date));
+        availability = candidates
+          .filter((date) => !busyDates.has(date))
+          .map((date) => ({
             id: `free-${date}`,
             artistId,
             date,
             type: 'free_weekend',
             notes: 'Free weekend day'
-          });
-        }
+          }));
       }
-
       console.log('ARTIST_AVAILABILITY: Free weekends found', { artistId, count: availability.length });
     } else {
-      // Selected dates only mode - query for type="available" events
-      const result = await dynamodb.query({
-        TableName: EVENTS_TABLE,
-        IndexName: 'artistId-date-index',
-        KeyConditionExpression: 'artistId = :artistId AND #date BETWEEN :start AND :end',
-        FilterExpression: '#type = :available',
-        ExpressionAttributeNames: { '#date': 'date', '#type': 'type' },
-        ExpressionAttributeValues: {
-          ':artistId': artistId,
-          ':start': start,
-          ':end': end,
-          ':available': 'available'
-        }
-      }).promise();
-
-      availability = result.Items || [];
+      availability = await queryArtistRange(dynamodb, artistId, start, end, true);
       console.log('ARTIST_AVAILABILITY: Selected dates found', { artistId, count: availability.length });
     }
 
@@ -134,6 +191,62 @@ async function handleGetArtistAvailability(deps, event) {
     };
   } catch (error) {
     console.error('ARTIST_AVAILABILITY: Error:', error);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'Failed to fetch artist availability' })
+    };
+  }
+}
+
+/**
+ * GET /api/artists/:artistId/availability - Get saved availability for editing
+ * even when the public publishing switch is off.
+ */
+async function handleGetManagedArtistAvailability(deps, event, user) {
+  const { dynamodb, getCorsHeaders } = deps;
+  const artistId = event.pathParameters?.artistId;
+  if (!artistId) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'artistId is required' })
+    };
+  }
+
+  if (!(await hasActiveMembership(dynamodb, user, artistId))) {
+    return {
+      statusCode: 403,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'Active artist membership required' })
+    };
+  }
+
+  const range = normaliseRange(
+    event.queryStringParameters?.startDate,
+    event.queryStringParameters?.endDate
+  );
+  if (range.error) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: range.error })
+    };
+  }
+
+  try {
+    const events = await queryArtistRange(dynamodb, artistId, range.start, range.end);
+    const availability = events
+      .filter((item) => item.type === 'available')
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const busyDates = [...new Set(events.filter(isBusyArtistEvent).map((item) => item.date))].sort();
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ availability, busyDates })
+    };
+  } catch (error) {
+    console.error('MANAGED_ARTIST_AVAILABILITY: Error:', error);
     return {
       statusCode: 500,
       headers: getCorsHeaders(event),
@@ -155,22 +268,16 @@ async function handleToggleAvailability(deps, event, user) {
 
   console.log('TOGGLE_AVAILABILITY: Request received', { artistId, date, userId: user.userId });
 
-  // Check access - platform admin OR member
-  if (!user.platformAdmin) {
-    const membership = await verifyMembership(dynamodb, user.userId, artistId);
-    if (!membership) {
-      return {
-        statusCode: 403,
-        headers: getCorsHeaders(event),
-        body: JSON.stringify({ error: 'Not a member of this artist' })
-      };
-    }
-  } else {
-    console.log('[AVAILABILITY] Platform admin access granted');
+  if (!(await hasActiveMembership(dynamodb, user, artistId))) {
+    return {
+      statusCode: 403,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'Active artist membership required' })
+    };
   }
 
   // Validate date is provided
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  if (!date || !isValidIsoDate(date)) {
     return {
       statusCode: 400,
       headers: getCorsHeaders(event),
@@ -179,7 +286,7 @@ async function handleToggleAvailability(deps, event, user) {
   }
 
   // Validate date is in the future or today
-  const today = new Date().toISOString().split('T')[0];
+  const today = ukToday();
   if (date < today) {
     return {
       statusCode: 400,
@@ -189,21 +296,21 @@ async function handleToggleAvailability(deps, event, user) {
   }
 
   try {
-    // Check if availability event already exists for this artist + date
+    // Read every artist event on the date. Existing availability toggles off;
+    // a real booking blocks a new availability marker.
     const existingResult = await dynamodb.query({
       TableName: EVENTS_TABLE,
       IndexName: 'artistId-date-index',
       KeyConditionExpression: 'artistId = :artistId AND #date = :date',
-      FilterExpression: '#type = :available',
-      ExpressionAttributeNames: { '#date': 'date', '#type': 'type' },
+      ExpressionAttributeNames: { '#date': 'date' },
       ExpressionAttributeValues: {
         ':artistId': artistId,
-        ':date': date,
-        ':available': 'available'
+        ':date': date
       }
     }).promise();
 
-    const existing = (existingResult.Items || [])[0];
+    const dateEvents = existingResult.Items || [];
+    const existing = dateEvents.find((item) => item.type === 'available');
 
     if (existing) {
       // Delete existing availability (toggle off)
@@ -223,6 +330,14 @@ async function handleToggleAvailability(deps, event, user) {
         })
       };
     } else {
+      if (dateEvents.some(isBusyArtistEvent)) {
+        return {
+          statusCode: 409,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({ error: 'This date already has an artist event', code: 'DATE_BUSY' })
+        };
+      }
+
       // Create new availability event (toggle on)
       const eventId = crypto.randomUUID();
       const now = new Date().toISOString();
@@ -280,22 +395,16 @@ async function handleBulkAvailability(deps, event, user) {
 
   console.log('BULK_AVAILABILITY: Request received', { artistId, startDate, endDate, rules, userId: user.userId });
 
-  // Check access - platform admin OR member
-  if (!user.platformAdmin) {
-    const membership = await verifyMembership(dynamodb, user.userId, artistId);
-    if (!membership) {
-      return {
-        statusCode: 403,
-        headers: getCorsHeaders(event),
-        body: JSON.stringify({ error: 'Not a member of this artist' })
-      };
-    }
-  } else {
-    console.log('[AVAILABILITY] Platform admin access granted for bulk set');
+  if (!(await hasActiveMembership(dynamodb, user, artistId))) {
+    return {
+      statusCode: 403,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: 'Active artist membership required' })
+    };
   }
 
   // Validate required fields
-  if (!startDate || !endDate || !rules || !Array.isArray(rules) || rules.length === 0) {
+  if (!isValidIsoDate(startDate) || !isValidIsoDate(endDate) || !rules || !Array.isArray(rules) || rules.length === 0) {
     return {
       statusCode: 400,
       headers: getCorsHeaders(event),
@@ -304,7 +413,7 @@ async function handleBulkAvailability(deps, event, user) {
   }
 
   // Validate date range
-  const today = new Date().toISOString().split('T')[0];
+  const today = ukToday();
   if (startDate < today) {
     return {
       statusCode: 400,
@@ -440,7 +549,11 @@ async function handleBulkAvailability(deps, event, user) {
 
 module.exports = {
   handleGetArtistAvailability,
+  handleGetManagedArtistAvailability,
   handleToggleAvailability,
   handleBulkAvailability,
+  isBusyArtistEvent,
+  normaliseRange,
+  weekendDates,
   EVENTS_TABLE
 };
