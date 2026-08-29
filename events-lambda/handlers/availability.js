@@ -7,10 +7,19 @@
 
 const crypto = require('crypto');
 const { normaliseCuratorAccess } = require('../lib/curator-core');
+const { generateOccurrences } = require('../lib/event-data');
 
 // Table constants
 const EVENTS_TABLE = 'bndy-events';
+const MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const GIG_TYPES = new Set(['gig', 'public_gig', 'gig-public', 'gig-private', 'private_booking', 'festival']);
+const DATE_STATUS_PRIORITY = {
+  artist_commitment: 1,
+  member_unavailable: 2,
+  private_booking: 3,
+  public_gig: 4
+};
 const UK_DATE = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Europe/London',
   year: 'numeric',
@@ -75,11 +84,138 @@ async function queryArtistRange(dynamodb, artistId, start, end, availableOnly = 
   const items = [];
   let lastKey;
   do {
-    const result = await dynamodb.query({ ...params, ...(lastKey ? { ExclusiveStartKey: lastKey } : {}) }).promise();
+    const result = await dynamodb.query({ ...params, ...(lastKey ? { ExclusiveStartKey: lastKey } : {}) }).promise() || {};
     items.push(...(result.Items || []));
     lastKey = result.LastEvaluatedKey;
   } while (lastKey);
   return items;
+}
+
+async function queryAll(dynamodb, params) {
+  const items = [];
+  let lastKey;
+  do {
+    const result = await dynamodb.query({ ...params, ...(lastKey ? { ExclusiveStartKey: lastKey } : {}) }).promise() || {};
+    items.push(...(result.Items || []));
+    lastKey = result.LastEvaluatedKey;
+  } while (lastKey);
+  return items;
+}
+
+async function queryArtistCalendarRange(dynamodb, artistId, start, end) {
+  const [inRange, carried] = await Promise.all([
+    queryArtistRange(dynamodb, artistId, start, end),
+    queryAll(dynamodb, {
+      TableName: EVENTS_TABLE,
+      IndexName: 'artistId-date-index',
+      KeyConditionExpression: 'artistId = :artistId AND #date < :start',
+      FilterExpression: '(attribute_exists(#endDate) AND #endDate >= :start) OR attribute_exists(recurring)',
+      ExpressionAttributeNames: { '#date': 'date', '#endDate': 'endDate' },
+      ExpressionAttributeValues: { ':artistId': artistId, ':start': start }
+    })
+  ]);
+  const byId = new Map();
+  [...inRange, ...carried].forEach((item) => byId.set(item.id, item));
+  return [...byId.values()];
+}
+
+async function queryActiveMemberIds(dynamodb, artistId) {
+  const memberships = await queryAll(dynamodb, {
+    TableName: MEMBERSHIPS_TABLE,
+    IndexName: 'artist_id-index',
+    KeyConditionExpression: 'artist_id = :artistId',
+    ExpressionAttributeValues: { ':artistId': artistId }
+  });
+  return [...new Set(memberships
+    .filter((membership) => !membership.status || membership.status === 'active')
+    .map((membership) => membership.user_id)
+    .filter(Boolean))];
+}
+
+async function queryMemberUnavailabilityRange(dynamodb, artistId, start, end) {
+  const memberUserIds = await queryActiveMemberIds(dynamodb, artistId);
+  if (memberUserIds.length === 0) return [];
+
+  const results = await Promise.all(memberUserIds.flatMap((userId) => [
+    queryAll(dynamodb, {
+      TableName: EVENTS_TABLE,
+      IndexName: 'ownerUserId-date-index',
+      KeyConditionExpression: 'ownerUserId = :userId AND #date BETWEEN :start AND :end',
+      FilterExpression: '#type = :unavailable',
+      ExpressionAttributeNames: { '#date': 'date', '#type': 'type' },
+      ExpressionAttributeValues: { ':userId': userId, ':start': start, ':end': end, ':unavailable': 'unavailable' }
+    }),
+    queryAll(dynamodb, {
+      TableName: EVENTS_TABLE,
+      IndexName: 'ownerUserId-date-index',
+      KeyConditionExpression: 'ownerUserId = :userId AND #date < :start',
+      FilterExpression: '#type = :unavailable AND ((attribute_exists(#endDate) AND #endDate >= :start) OR attribute_exists(recurring))',
+      ExpressionAttributeNames: { '#date': 'date', '#type': 'type', '#endDate': 'endDate' },
+      ExpressionAttributeValues: { ':userId': userId, ':start': start, ':unavailable': 'unavailable' }
+    })
+  ]));
+
+  const byId = new Map();
+  results.flat().forEach((item) => byId.set(item.id, item));
+  return [...byId.values()];
+}
+
+function eventDateSpan(event, rangeStart, rangeEnd) {
+  const duration = event.endDate && event.endDate >= event.date
+    ? Math.round((new Date(`${event.endDate}T00:00:00.000Z`) - new Date(`${event.date}T00:00:00.000Z`)) / 86400000)
+    : 0;
+  const occurrences = event.recurring ? generateOccurrences(event, rangeStart, rangeEnd) : [event];
+  const dates = [];
+
+  for (const occurrence of occurrences) {
+    const start = occurrence.date;
+    const end = occurrence.isRecurringInstance
+      ? addUtcDays(start, duration)
+      : (occurrence.endDate || start);
+    const first = start < rangeStart ? rangeStart : start;
+    const last = end > rangeEnd ? rangeEnd : end;
+    if (last < first) continue;
+    for (let date = first; date <= last; date = addUtcDays(date, 1)) dates.push(date);
+  }
+  return dates;
+}
+
+function artistEventDateStatus(event) {
+  if (!isBusyArtistEvent(event)) return null;
+  const type = String(event.type || '').toLowerCase();
+  if (event.isPublic === true) return { state: 'public_gig', eventId: event.id };
+  if (GIG_TYPES.has(type)) return { state: 'private_booking' };
+  return { state: 'artist_commitment' };
+}
+
+function setPreferredDateStatus(statuses, date, status) {
+  const current = statuses.get(date);
+  if (!current || DATE_STATUS_PRIORITY[status.state] > DATE_STATUS_PRIORITY[current.state]) {
+    statuses.set(date, { date, ...status });
+  }
+}
+
+async function buildAvailabilityProjection(dynamodb, artistId, start, end) {
+  const [artistEvents, memberUnavailability] = await Promise.all([
+    queryArtistCalendarRange(dynamodb, artistId, start, end),
+    queryMemberUnavailabilityRange(dynamodb, artistId, start, end)
+  ]);
+  const statuses = new Map();
+
+  artistEvents.forEach((event) => {
+    const status = artistEventDateStatus(event);
+    if (!status) return;
+    eventDateSpan(event, start, end).forEach((date) => setPreferredDateStatus(statuses, date, status));
+  });
+  memberUnavailability.filter(isBusyArtistEvent).forEach((event) => {
+    eventDateSpan(event, start, end).forEach((date) => setPreferredDateStatus(statuses, date, { state: 'member_unavailable' }));
+  });
+
+  return {
+    artistEvents,
+    memberUnavailability,
+    dateStatuses: [...statuses.values()].sort((a, b) => a.date.localeCompare(b.date))
+  };
 }
 
 function weekendDates(start, end) {
@@ -170,37 +306,37 @@ async function handleGetArtistAvailability(deps, event) {
       return {
         statusCode: 200,
         headers: getCorsHeaders(event),
-        body: JSON.stringify({ availability: [] })
+        body: JSON.stringify({ availability: [], dateStatuses: [] })
       };
     }
 
+    const projection = await buildAvailabilityProjection(dynamodb, artistId, start, end);
+    const blockedDates = new Set(projection.dateStatuses.map((item) => item.date));
     let availability = [];
 
     if (availabilityMode === 'free_weekends') {
       const candidates = weekendDates(start, end);
-      if (candidates.length > 0) {
-        const rangeEvents = await queryArtistRange(dynamodb, artistId, start, end);
-        const busyDates = new Set(rangeEvents.filter(isBusyArtistEvent).map((item) => item.date));
-        availability = candidates
-          .filter((date) => !busyDates.has(date))
-          .map((date) => ({
-            id: `free-${date}`,
-            artistId,
-            date,
-            type: 'free_weekend',
-            notes: 'Free weekend day'
-          }));
-      }
+      availability = candidates
+        .filter((date) => !blockedDates.has(date))
+        .map((date) => ({
+          id: `free-${date}`,
+          artistId,
+          date,
+          type: 'free_weekend',
+          notes: 'Free weekend day'
+        }));
       console.log('ARTIST_AVAILABILITY: Free weekends found', { artistId, count: availability.length });
     } else {
-      availability = await queryArtistRange(dynamodb, artistId, start, end, true);
+      availability = projection.artistEvents
+        .filter((item) => item.type === 'available' && item.date >= start && item.date <= end && !blockedDates.has(item.date))
+        .sort((a, b) => a.date.localeCompare(b.date));
       console.log('ARTIST_AVAILABILITY: Selected dates found', { artistId, count: availability.length });
     }
 
     return {
       statusCode: 200,
       headers: getCorsHeaders(event),
-      body: JSON.stringify({ availability })
+      body: JSON.stringify({ availability, dateStatuses: projection.dateStatuses })
     };
   } catch (error) {
     console.error('ARTIST_AVAILABILITY: Error:', error);
@@ -248,15 +384,15 @@ async function handleGetManagedArtistAvailability(deps, event, user) {
   }
 
   try {
-    const events = await queryArtistRange(dynamodb, artistId, range.start, range.end);
-    const availability = events
+    const projection = await buildAvailabilityProjection(dynamodb, artistId, range.start, range.end);
+    const availability = projection.artistEvents
       .filter((item) => item.type === 'available')
       .sort((a, b) => a.date.localeCompare(b.date));
-    const busyDates = [...new Set(events.filter(isBusyArtistEvent).map((item) => item.date))].sort();
+    const busyDates = projection.dateStatuses.map((item) => item.date);
     return {
       statusCode: 200,
       headers: getCorsHeaders(event),
-      body: JSON.stringify({ availability, busyDates })
+      body: JSON.stringify({ availability, busyDates, dateStatuses: projection.dateStatuses })
     };
   } catch (error) {
     console.error('MANAGED_ARTIST_AVAILABILITY: Error:', error);
@@ -348,6 +484,15 @@ async function handleToggleAvailability(deps, event, user) {
           statusCode: 409,
           headers: getCorsHeaders(event),
           body: JSON.stringify({ error: 'This date already has an artist event', code: 'DATE_BUSY' })
+        };
+      }
+
+      const memberUnavailability = await queryMemberUnavailabilityRange(dynamodb, artistId, date, date);
+      if (memberUnavailability.some((item) => eventDateSpan(item, date, date).includes(date))) {
+        return {
+          statusCode: 409,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({ error: 'An artist member is unavailable on this date', code: 'DATE_BUSY' })
         };
       }
 
@@ -489,24 +634,18 @@ async function handleBulkAvailability(deps, event, user) {
 
     console.log('BULK_AVAILABILITY: Generated dates to mark', { count: datesToMark.length });
 
-    // For each date, check if any event already exists
+    const projection = await buildAvailabilityProjection(dynamodb, artistId, startDate, endDate);
+    const occupiedDates = new Set(projection.dateStatuses.map((item) => item.date));
+    projection.artistEvents
+      .filter((item) => item.type === 'available')
+      .forEach((item) => occupiedDates.add(item.date));
+
+    // Create only dates that are not already available or blocked.
     const created = [];
     const skipped = [];
 
     for (const date of datesToMark) {
-      // Check if ANY event exists on this date
-      const existingEventsResult = await dynamodb.query({
-        TableName: EVENTS_TABLE,
-        IndexName: 'artistId-date-index',
-        KeyConditionExpression: 'artistId = :artistId AND #date = :date',
-        ExpressionAttributeNames: { '#date': 'date' },
-        ExpressionAttributeValues: {
-          ':artistId': artistId,
-          ':date': date
-        }
-      }).promise();
-
-      if (existingEventsResult.Items && existingEventsResult.Items.length > 0) {
+      if (occupiedDates.has(date)) {
         skipped.push(date);
         console.log('BULK_AVAILABILITY: Skipping date with existing events', { date });
         continue;
@@ -568,5 +707,8 @@ module.exports = {
   isBusyArtistEvent,
   normaliseRange,
   weekendDates,
+  artistEventDateStatus,
+  eventDateSpan,
+  buildAvailabilityProjection,
   EVENTS_TABLE
 };

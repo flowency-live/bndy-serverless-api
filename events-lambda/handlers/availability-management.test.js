@@ -28,16 +28,25 @@ const deps = {
 };
 
 describe('managed artist availability', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDynamoDB.query.mockResolvedValue({ Items: [] });
+  });
 
   test('returns saved and busy dates while public publishing is irrelevant', async () => {
-    mockDynamoDB.query
-      .mockResolvedValueOnce({ Items: [{ artist_id: 'artist-1', user_id: 'user-1', role: 'owner', status: 'active' }] })
-      .mockResolvedValueOnce({ Items: [
-        { id: 'available-1', artistId: 'artist-1', date: '2026-09-05', type: 'available' },
-        { id: 'gig-1', artistId: 'artist-1', date: '2026-09-06', type: 'public_gig' },
-        { id: 'gig-2', artistId: 'artist-1', date: '2026-09-07', type: 'public_gig', cancelled: true }
-      ] });
+    mockDynamoDB.query.mockImplementation(async (params) => {
+      if (params.IndexName === 'artist_id-index' || params.IndexName === 'user_id-index') {
+        return { Items: [{ artist_id: 'artist-1', user_id: 'user-1', role: 'owner', status: 'active' }] };
+      }
+      if (params.IndexName === 'artistId-date-index' && params.KeyConditionExpression.includes('BETWEEN')) {
+        return { Items: [
+          { id: 'available-1', artistId: 'artist-1', date: '2026-09-05', type: 'available' },
+          { id: 'gig-1', artistId: 'artist-1', date: '2026-09-06', type: 'public_gig', isPublic: true },
+          { id: 'gig-2', artistId: 'artist-1', date: '2026-09-07', type: 'public_gig', cancelled: true }
+        ] };
+      }
+      return { Items: [] };
+    });
 
     const result = await handleGetManagedArtistAvailability(deps, {
       pathParameters: { artistId: 'artist-1' },
@@ -47,7 +56,8 @@ describe('managed artist availability', () => {
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body)).toEqual({
       availability: [expect.objectContaining({ id: 'available-1', date: '2026-09-05' })],
-      busyDates: ['2026-09-06']
+      busyDates: ['2026-09-06'],
+      dateStatuses: [{ date: '2026-09-06', state: 'public_gig', eventId: 'gig-1' }]
     });
   });
 
@@ -76,7 +86,7 @@ describe('managed artist availability', () => {
 
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).availability).toHaveLength(1);
-    expect(mockDynamoDB.query).toHaveBeenCalledTimes(1);
+    expect(mockDynamoDB.query).toHaveBeenCalledTimes(3);
   });
 
   test('keeps a restricted curator inside the existing artist policy', async () => {
@@ -108,6 +118,27 @@ describe('managed artist availability', () => {
 
     expect(result.statusCode).toBe(409);
     expect(JSON.parse(result.body).code).toBe('DATE_BUSY');
+    expect(mockDynamoDB.put).not.toHaveBeenCalled();
+  });
+
+  test('does not create availability when an active artist member is unavailable', async () => {
+    mockDynamoDB.query.mockImplementation(async (params) => {
+      if (params.IndexName === 'user_id-index' || params.IndexName === 'artist_id-index') {
+        return { Items: [{ artist_id: 'artist-1', user_id: 'user-1', role: 'admin', status: 'active' }] };
+      }
+      if (params.IndexName === 'ownerUserId-date-index' && params.KeyConditionExpression.includes('BETWEEN')) {
+        return { Items: [{ id: 'unavailable-1', ownerUserId: 'user-1', date: '2026-09-05', type: 'unavailable' }] };
+      }
+      return { Items: [] };
+    });
+
+    const result = await handleToggleAvailability(deps, {
+      pathParameters: { artistId: 'artist-1' },
+      body: JSON.stringify({ date: '2026-09-05' })
+    }, { userId: 'user-1', platformAdmin: false });
+
+    expect(result.statusCode).toBe(409);
+    expect(JSON.parse(result.body)).toMatchObject({ code: 'DATE_BUSY' });
     expect(mockDynamoDB.put).not.toHaveBeenCalled();
   });
 
