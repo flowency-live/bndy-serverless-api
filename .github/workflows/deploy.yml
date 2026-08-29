@@ -30,10 +30,8 @@ jobs:
 
       - name: Run Lambda Tests
         run: |
-          # Run tests for each lambda that has both test files AND a valid test script
           for dir in *-lambda/; do
             if [[ -d "$dir" && -f "$dir/package.json" ]]; then
-              # Check if package.json has a real test script (not placeholder)
               if grep -q '"test":' "$dir/package.json" && ! grep -q 'no test specified' "$dir/package.json"; then
                 if ls "$dir"/*.test.js 1> /dev/null 2>&1; then
                   echo "Running tests in $dir"
@@ -71,10 +69,6 @@ jobs:
 
       - name: Run Pre-Deployment Validation
         run: |
-          # SAM CLI 1.165 now fails validation on the estate-wide Node 20
-          # deprecation warning. The deploy job still runs `sam build` before
-          # `sam deploy`, so malformed SAM templates cannot be deployed. Keep
-          # the repo's route/config validators as the pre-deploy gate here.
           cd scripts
           npm install
           echo "=== Pre-Deployment Validation ==="
@@ -87,7 +81,6 @@ jobs:
     name: Deploy to AWS
     needs: [test, validate]
     runs-on: ubuntu-latest
-    # Only deploy on push to master (not on PRs)
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
 
     steps:
@@ -112,7 +105,6 @@ jobs:
 
       - name: Install Lambda Dependencies
         run: |
-          # Install production dependencies for each lambda
           for dir in *-lambda/; do
             if [[ -d "$dir" && -f "$dir/package.json" ]]; then
               echo "Installing dependencies in $dir"
@@ -153,22 +145,22 @@ jobs:
             --query "Stacks[0].Outputs" \
             --output table
 
-  capture_acceptance:
-    name: One-shot Facebook Event Capture acceptance
+  enrichment_gsi_recovery:
+    name: One-shot bndy-enrichment staged GSI recovery
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && contains(github.event.head_commit.message, 'Run Capture acceptance via deploy workflow')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && contains(github.event.head_commit.message, 'Run Enrichment GSI recovery')
 
     steps:
-      - name: Checkout serverless API
+      - name: Checkout result repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Checkout Capture implementation under test
+      - name: Checkout bndy-enrichment main
         uses: actions/checkout@v4
         with:
           repository: flowency-live/bndy-enrichment
-          ref: fix-staged-gsi-deploy
+          ref: main
           path: enrichment
 
       - uses: actions/setup-node@v4
@@ -182,162 +174,171 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
 
-      - name: Verify Capture implementation
-        id: verify
+      - name: Inspect current enrichment table
+        id: inspect
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATE_TABLE=$(aws cloudformation describe-stacks \
+            --stack-name BndyEnrichmentStack --region eu-west-2 \
+            --query "Stacks[0].Outputs[?OutputKey=='StateTableName'].OutputValue | [0]" \
+            --output text)
+          if [ -z "$STATE_TABLE" ] || [ "$STATE_TABLE" = "None" ]; then
+            STATE_TABLE=$(aws cloudformation list-stack-resources \
+              --stack-name BndyEnrichmentStack --region eu-west-2 \
+              --query "StackResourceSummaries[?ResourceType=='AWS::DynamoDB::Table'].PhysicalResourceId | [0]" \
+              --output text)
+          fi
+          test -n "$STATE_TABLE" && test "$STATE_TABLE" != "None"
+          echo "STATE_TABLE=$STATE_TABLE" >> "$GITHUB_ENV"
+          aws dynamodb describe-table --region eu-west-2 --table-name "$STATE_TABLE" \
+            --query 'Table.GlobalSecondaryIndexes[].IndexName' --output json > /tmp/gsi-before.json
+          cat /tmp/gsi-before.json
+
+      - name: Install enrichment dependencies
+        id: install
+        if: steps.inspect.outcome == 'success'
+        continue-on-error: true
+        working-directory: enrichment
+        run: npm install
+
+      - name: Add missing GSIs one CloudFormation update at a time
+        id: recover
+        if: steps.inspect.outcome == 'success' && steps.install.outcome == 'success'
         continue-on-error: true
         working-directory: enrichment
         shell: bash
         run: |
           set -euo pipefail
-          npm install
-          npm run check
+          cp lib/bndy-enrichment-stack.ts /tmp/bndy-enrichment-stack.original.ts
 
-      - name: Bundle Capture processor
-        id: bundle
-        if: steps.verify.outcome == 'success'
-        continue-on-error: true
-        working-directory: enrichment
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf /tmp/capture-lambda /tmp/capture-processor.zip
-          mkdir -p /tmp/capture-lambda
-          npx esbuild src/handlers/capture-processor.ts \
-            --bundle --platform=node --target=node22 --format=cjs \
-            --outfile=/tmp/capture-lambda/index.js
-          cd /tmp/capture-lambda
-          zip -q /tmp/capture-processor.zip index.js
+          python - <<'PY'
+          import json
+          before = set(json.load(open('/tmp/gsi-before.json')) or [])
+          expected = ['SourceScheduleIndex', 'ObservationClaimsIndex', 'SubjectClaimsIndex']
+          unknown = sorted(before - set(expected))
+          if unknown:
+              raise SystemExit(f'Unexpected GSI(s) on enrichment state table: {unknown}')
+          if 'ObservationClaimsIndex' in before and 'SourceScheduleIndex' not in before:
+              raise SystemExit('Unexpected GSI order: ObservationClaimsIndex exists without SourceScheduleIndex')
+          if 'SubjectClaimsIndex' in before and 'ObservationClaimsIndex' not in before:
+              raise SystemExit('Unexpected GSI order: SubjectClaimsIndex exists without ObservationClaimsIndex')
+          print('Current expected GSIs:', sorted(before))
+          PY
 
-      - name: Resolve production Capture credentials
-        id: capture_auth
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          CAPTURE_FN=$(aws cloudformation describe-stacks \
-            --stack-name bndy-capture --region eu-west-2 \
-            --query "Stacks[0].Outputs[?OutputKey=='CaptureFunctionName'].OutputValue | [0]" --output text)
-          CAPTURE_TOKEN=$(aws lambda get-function-configuration --region eu-west-2 \
-            --function-name "$CAPTURE_FN" \
-            --query 'Environment.Variables.CAPTURE_TOKEN' --output text)
-          test -n "$CAPTURE_TOKEN" && test "$CAPTURE_TOKEN" != "None"
-          echo "::add-mask::$CAPTURE_TOKEN"
-          echo "CAPTURE_TOKEN=$CAPTURE_TOKEN" >> "$GITHUB_ENV"
-          curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" \
-            'https://capture.bndy.co.uk/v1/captures/48c4ae2b-05be-4693-abea-b2dd126a1042' \
-            > /tmp/capture-before.json
+          stage_file() {
+            local stage="$1"
+            cp /tmp/bndy-enrichment-stack.original.ts lib/bndy-enrichment-stack.ts
+            STAGE="$stage" python - <<'PY'
+          import os, re, pathlib
+          stage = int(os.environ['STAGE'])
+          path = pathlib.Path('lib/bndy-enrichment-stack.ts')
+          text = path.read_text()
+          order = [
+              ('SourceScheduleIndex', 1),
+              ('ObservationClaimsIndex', 2),
+              ('SubjectClaimsIndex', 3),
+          ]
+          for name, required_stage in order:
+              if required_stage <= stage:
+                  continue
+              pattern = re.compile(
+                  r"\n    table\.addGlobalSecondaryIndex\(\{\n"
+                  r"      indexName: '" + re.escape(name) + r"',.*?\n"
+                  r"    \}\);\n",
+                  re.S,
+              )
+              text, count = pattern.subn('\n', text, count=1)
+              if count != 1:
+                  raise SystemExit(f'Could not remove exactly one {name} block; removed {count}')
+          path.write_text(text)
+          PY
+          }
 
-      - name: Hot-deploy processor code only
-        id: hotdeploy
-        if: steps.bundle.outcome == 'success' && steps.capture_auth.outcome == 'success'
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          aws lambda update-function-code --region eu-west-2 \
-            --function-name bndy-capture-processor \
-            --zip-file fileb:///tmp/capture-processor.zip \
-            > /tmp/update-code.json
-          aws lambda wait function-updated --region eu-west-2 \
-            --function-name bndy-capture-processor
-          aws lambda get-function-configuration --region eu-west-2 \
-            --function-name bndy-capture-processor \
-            --query '{LastModified:LastModified,CodeSha256:CodeSha256,Runtime:Runtime,State:State,LastUpdateStatus:LastUpdateStatus}' \
-            --output json > /tmp/processor-config.json
+          has_gsi() {
+            jq -e --arg name "$1" 'index($name) != null' /tmp/gsi-before.json >/dev/null
+          }
 
-      - name: Replay exact Facebook Event Capture
-        id: replay
-        if: steps.hotdeploy.outcome == 'success'
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          CAPTURE_ID='48c4ae2b-05be-4693-abea-b2dd126a1042'
+          if ! has_gsi SourceScheduleIndex; then
+            echo '=== Stage 1: SourceScheduleIndex ==='
+            stage_file 1
+            npx cdk deploy BndyEnrichmentStack --require-approval never
+            aws dynamodb wait table-exists --region eu-west-2 --table-name "$STATE_TABLE"
+          fi
 
-          GEMINI_SECRET_ARN=$(aws lambda get-function-configuration --region eu-west-2 \
-            --function-name bndy-capture-processor \
-            --query 'Environment.Variables.GEMINI_SECRET_ARN' --output text)
-          test -n "$GEMINI_SECRET_ARN" && test "$GEMINI_SECRET_ARN" != "None"
-          SECRET_STRING=$(aws secretsmanager get-secret-value --region eu-west-2 \
-            --secret-id "$GEMINI_SECRET_ARN" --query SecretString --output text)
-          node -e 'const s=JSON.parse(process.argv[1]); if(!(s.apiKey||s.GEMINI_API_KEY)) process.exit(1)' "$SECRET_STRING"
-          unset SECRET_STRING
+          aws dynamodb describe-table --region eu-west-2 --table-name "$STATE_TABLE" \
+            --query 'Table.GlobalSecondaryIndexes[].IndexName' --output json > /tmp/gsi-stage1.json
+          cp /tmp/gsi-stage1.json /tmp/gsi-before.json
 
-          curl -fsS -X PATCH \
-            -H 'Content-Type: application/json' \
-            -H "Authorization: Bearer $CAPTURE_TOKEN" \
-            -d '{"status":"unprocessed"}' \
-            "https://capture.bndy.co.uk/v1/captures/$CAPTURE_ID/status" > /tmp/reset.json
+          if ! jq -e 'index("ObservationClaimsIndex") != null' /tmp/gsi-stage1.json >/dev/null; then
+            echo '=== Stage 2: ObservationClaimsIndex ==='
+            stage_file 2
+            npx cdk deploy BndyEnrichmentStack --require-approval never
+            aws dynamodb wait table-exists --region eu-west-2 --table-name "$STATE_TABLE"
+          fi
 
-          aws lambda invoke --region eu-west-2 \
-            --function-name bndy-capture-scan \
-            --cli-binary-format raw-in-base64-out --payload '{}' \
-            /tmp/scanner.json >/tmp/scanner-meta.json
+          aws dynamodb describe-table --region eu-west-2 --table-name "$STATE_TABLE" \
+            --query 'Table.GlobalSecondaryIndexes[].IndexName' --output json > /tmp/gsi-stage2.json
 
-          for i in $(seq 1 42); do
-            curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" \
-              "https://capture.bndy.co.uk/v1/captures/$CAPTURE_ID" > /tmp/capture-after.json
-            STATUS=$(jq -r '.capture.status // .status // empty' /tmp/capture-after.json)
-            echo "poll=$i status=$STATUS"
-            if [ -n "$STATUS" ] && [ "$STATUS" != "unprocessed" ] && [ "$STATUS" != "processing" ]; then
-              break
-            fi
-            sleep 10
-          done
+          if ! jq -e 'index("SubjectClaimsIndex") != null' /tmp/gsi-stage2.json >/dev/null; then
+            echo '=== Stage 3: SubjectClaimsIndex and full desired stack ==='
+            stage_file 3
+            npx cdk deploy BndyEnrichmentStack --require-approval never
+            aws dynamodb wait table-exists --region eu-west-2 --table-name "$STATE_TABLE"
+          else
+            echo '=== All GSIs already present; deploy full desired stack once ==='
+            stage_file 3
+            npx cdk deploy BndyEnrichmentStack --require-approval never
+          fi
 
-      - name: Record sanitized result on non-triggering branch
+          cp /tmp/bndy-enrichment-stack.original.ts lib/bndy-enrichment-stack.ts
+          aws dynamodb describe-table --region eu-west-2 --table-name "$STATE_TABLE" \
+            --query 'Table.GlobalSecondaryIndexes[].{name:IndexName,status:IndexStatus}' \
+            --output json > /tmp/gsi-after.json
+          cat /tmp/gsi-after.json
+
+          jq -e '
+            (map(select(.status == "ACTIVE")) | map(.name) | sort) ==
+            (["ObservationClaimsIndex","SourceScheduleIndex","SubjectClaimsIndex"] | sort)
+          ' /tmp/gsi-after.json >/dev/null
+
+      - name: Record GSI recovery result on non-triggering branch
         if: always()
         env:
-          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
-          BUNDLE_OUTCOME: ${{ steps.bundle.outcome }}
-          AUTH_OUTCOME: ${{ steps.capture_auth.outcome }}
-          HOTDEPLOY_OUTCOME: ${{ steps.hotdeploy.outcome }}
-          REPLAY_OUTCOME: ${{ steps.replay.outcome }}
+          INSPECT_OUTCOME: ${{ steps.inspect.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          RECOVER_OUTCOME: ${{ steps.recover.outcome }}
         shell: bash
         run: |
           set -u
           mkdir -p diagnostics
-          CAPTURE_ID='48c4ae2b-05be-4693-abea-b2dd126a1042'
-
-          if [ -n "${CAPTURE_TOKEN:-}" ]; then
-            curl -fsS -H "Authorization: Bearer $CAPTURE_TOKEN" \
-              "https://capture.bndy.co.uk/v1/captures/$CAPTURE_ID" > /tmp/capture-final.json || true
-          fi
-          [ -s /tmp/capture-before.json ] || echo '{}' > /tmp/capture-before.json
-          [ -s /tmp/capture-final.json ] || cp /tmp/capture-after.json /tmp/capture-final.json 2>/dev/null || cp /tmp/capture-before.json /tmp/capture-final.json 2>/dev/null || echo '{}' > /tmp/capture-final.json
-          [ -s /tmp/processor-config.json ] || aws lambda get-function-configuration --region eu-west-2 \
-            --function-name bndy-capture-processor \
-            --query '{LastModified:LastModified,CodeSha256:CodeSha256,Runtime:Runtime,State:State,LastUpdateStatus:LastUpdateStatus}' \
-            --output json > /tmp/processor-config.json 2>/dev/null || echo '{}' > /tmp/processor-config.json
-
-          if command -v aws >/dev/null 2>&1; then
-            aws logs filter-log-events --region eu-west-2 \
-              --log-group-name '/aws/lambda/bndy-capture-processor' \
-              --start-time "$(( ($(date +%s) - 3600) * 1000 ))" \
-              --filter-pattern "$CAPTURE_ID" \
-              --query 'events[].message' --output json \
-              > /tmp/processor-logs.json 2>/dev/null || echo '[]' > /tmp/processor-logs.json
+          [ -s /tmp/gsi-before.json ] || echo '[]' > /tmp/gsi-before.json
+          if [ -n "${STATE_TABLE:-}" ]; then
+            aws dynamodb describe-table --region eu-west-2 --table-name "$STATE_TABLE" \
+              --query 'Table.GlobalSecondaryIndexes[].{name:IndexName,status:IndexStatus}' \
+              --output json > /tmp/gsi-final.json 2>/dev/null || echo '[]' > /tmp/gsi-final.json
+            STACK_STATUS=$(aws cloudformation describe-stacks --region eu-west-2 \
+              --stack-name BndyEnrichmentStack --query 'Stacks[0].StackStatus' --output text 2>/dev/null || true)
           else
-            echo '[]' > /tmp/processor-logs.json
+            echo '[]' > /tmp/gsi-final.json
+            STACK_STATUS='unknown'
           fi
 
           jq -n \
             --arg inspectedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg captureId "$CAPTURE_ID" \
-            --arg verify "$VERIFY_OUTCOME" \
-            --arg bundle "$BUNDLE_OUTCOME" \
-            --arg auth "$AUTH_OUTCOME" \
-            --arg hotdeploy "$HOTDEPLOY_OUTCOME" \
-            --arg replay "$REPLAY_OUTCOME" \
-            --argjson before "$(jq '.capture // .' /tmp/capture-before.json)" \
-            --argjson final "$(jq '.capture // .' /tmp/capture-final.json)" \
-            --argjson processor "$(cat /tmp/processor-config.json)" \
-            --argjson processorLogs "$(cat /tmp/processor-logs.json)" \
-            '{result:"CAPTURE_ACCEPTANCE_VIA_DEPLOY",inspectedAt:$inspectedAt,captureId:$captureId,steps:{verify:$verify,bundle:$bundle,auth:$auth,hotdeploy:$hotdeploy,replay:$replay},before:{status:$before.status,sharedUrl:$before.sharedUrl,note:$before.note,processingAttempt:$before.processingAttempt},final:{status:$final.status,sharedUrl:$final.sharedUrl,note:$final.note,processingAttempt:$final.processingAttempt},processor:$processor,processorLogs:$processorLogs}' \
-            > diagnostics/capture-facebook-event-via-deploy.json
+            --arg table "${STATE_TABLE:-unknown}" \
+            --arg stackStatus "$STACK_STATUS" \
+            --arg inspect "$INSPECT_OUTCOME" \
+            --arg install "$INSTALL_OUTCOME" \
+            --arg recover "$RECOVER_OUTCOME" \
+            --argjson before "$(cat /tmp/gsi-before.json)" \
+            --argjson final "$(cat /tmp/gsi-final.json)" \
+            '{result:"ENRICHMENT_GSI_RECOVERY",inspectedAt:$inspectedAt,stateTable:$table,stackStatus:$stackStatus,steps:{inspect:$inspect,install:$install,recover:$recover},before:$before,final:$final}' \
+            > diagnostics/enrichment-gsi-recovery.json
 
           git config user.name 'bndy-bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add diagnostics/capture-facebook-event-via-deploy.json
-          git commit -m 'Record Capture Facebook Event acceptance result' || exit 0
-          git push --force origin HEAD:capture-acceptance-results
+          git add diagnostics/enrichment-gsi-recovery.json
+          git commit -m 'Record enrichment GSI recovery result' || exit 0
+          git push --force origin HEAD:enrichment-gsi-recovery-results
