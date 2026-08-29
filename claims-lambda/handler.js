@@ -102,20 +102,18 @@ async function createClaim(event) {
   const supportingUrl = String(body.supportingUrl || '').trim().slice(0,1000);
   const officialEmail = String(body.officialEmail || '').trim().slice(0,320);
   const evidenceHints = body.evidenceHints && typeof body.evidenceHints === 'object' ? body.evidenceHints : {};
-  const facebookEvidence = body.facebookEvidence && typeof body.facebookEvidence === 'object' ? body.facebookEvidence : null;
 
   if (verificationMethod === 'manual' && !relationshipExplanation) {
     return response(400, { error: 'Tell us how you are connected to this artist or venue.', code: 'EVIDENCE_REQUIRED' });
   }
-  if (verificationMethod === 'facebook_page' && !facebookEvidence?.verifiedPageId) {
-    return response(400, { error: 'Facebook Page control has not been verified.', code: 'FACEBOOK_PAGE_NOT_VERIFIED' });
+  if (verificationMethod === 'facebook_page') {
+    // Never trust client-supplied Page-control assertions. This method remains
+    // closed until a server-side Meta verification flow issues the evidence.
+    return response(409, { error: 'Facebook Page verification is not available until Meta Page access is approved.', code: 'FACEBOOK_PAGE_VERIFICATION_UNAVAILABLE' });
   }
 
-  const evidence = [];
-  if (verificationMethod === 'manual') evidence.push({ type: 'manual_explanation', explanation: relationshipExplanation, supporting_url: supportingUrl || null, official_email: officialEmail || null, supplied_at: new Date().toISOString() });
-  if (verificationMethod === 'facebook_page') evidence.push({ type: 'facebook_page_control', page_id: String(facebookEvidence.verifiedPageId), page_name: String(facebookEvidence.pageName || ''), page_url: String(facebookEvidence.pageUrl || ''), verified_at: String(facebookEvidence.verifiedAt || new Date().toISOString()), reconciliation: String(facebookEvidence.reconciliation || 'unresolved') });
-  const strongFacebook = evidence.some((item) => item.type === 'facebook_page_control' && item.reconciliation === 'exact');
-  const initialStatus = strongFacebook ? 'verified_pending' : 'pending_review';
+  const evidence = [{ type: 'manual_explanation', explanation: relationshipExplanation, supporting_url: supportingUrl || null, official_email: officialEmail || null, supplied_at: new Date().toISOString() }];
+  const initialStatus = 'pending_review';
 
   const id = claimId(userId, entityType, entityId);
   const existing = await dynamodb.get({ TableName: CLAIMS_TABLE, Key: { claim_id: id } }).promise();
