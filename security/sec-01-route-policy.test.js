@@ -11,6 +11,7 @@
  *   - handler-auth: Auth checked in Lambda handler (SEC-04)
  *   - sam-auth: SAM-level authorizer declared
  *   - community: Public routes with app-level controls (rate-limit, honeypot)
+ *   - anonymous-telemetry: Privacy-minimised, allowlisted telemetry with no auth
  *   - auth-flow: Auth endpoints that handle their own authentication
  *   - mcp: MCP routes (machine-to-machine, internal)
  *
@@ -64,6 +65,24 @@ const MUTATION_ROUTE_BASELINE = {
   'POST /api/artists/community': 'community',
   'POST /api/events/community': 'community',
   'POST /api/events/community/mcp': 'mcp',
+
+  // === Join, Claims and managed entity ownership ===
+  'POST /api/join/artists': 'handler-auth',
+  'POST /api/join/venues': 'handler-auth',
+  'POST /api/claims': 'handler-auth',
+  'DELETE /api/claims/{id}': 'handler-auth',
+  'PATCH /api/admin/claims/{id}': 'handler-auth',
+  'POST /api/managed-entities/{id}/members': 'handler-auth',
+  'PATCH /api/entity-memberships/{id}': 'handler-auth',
+  'POST /api/managed-entities/{id}/transfer': 'handler-auth',
+  'POST /api/managed-entities/{id}/invites': 'handler-auth',
+  'DELETE /api/entity-invites/{token}': 'handler-auth',
+  'POST /api/entity-invites/{token}/accept': 'handler-auth',
+  'POST /api/managed-entities/{entityType}/{id}/relinquish': 'handler-auth',
+
+  // Intentionally anonymous. The handler accepts only allowlisted event names,
+  // bounded strings and privacy-minimised fields, and expires records after 90 days.
+  'POST /api/join/analytics': 'anonymous-telemetry',
 
   // === Events ===
   'POST /api/events': 'handler-auth',
@@ -142,6 +161,8 @@ const MUTATION_ROUTE_BASELINE = {
   'PUT /users/profile': 'handler-auth',
   'POST /users/favourites/toggle': 'handler-auth',
   'PUT /users/{userId}/role': 'handler-auth',
+  'PUT /api/users/profile': 'handler-auth',
+  'POST /api/users/favourites/toggle': 'handler-auth',
 
   // === Community Flags (public - rate-limited) ===
   'POST /api/community/flags': 'community',
@@ -166,6 +187,7 @@ const MUTATION_ROUTE_BASELINE = {
 
   // === Uploads ===
   'POST /uploads/presigned-url': 'handler-auth',
+  'POST /api/uploads/presigned-url': 'handler-auth',
 
   // === Invites ===
   'POST /api/invites': 'handler-auth',
@@ -289,7 +311,7 @@ test('SEC-01: All mutation routes must be in the baseline', () => {
       `Unclassified routes:\n${details}\n\n` +
       `To fix:\n` +
       `  1. Add to MUTATION_ROUTE_BASELINE in security/sec-01-route-policy.test.js\n` +
-      `  2. Specify auth method: handler-auth, sam-auth, community, auth-flow, or mcp\n` +
+      `  2. Specify auth method: handler-auth, sam-auth, community, anonymous-telemetry, auth-flow, or mcp\n` +
       `  3. Ensure auth is actually implemented\n` +
       `  4. Get security review before merging`
     );
@@ -333,6 +355,7 @@ test('SEC-01: Auth method values must be valid', () => {
     'handler-auth',
     'sam-auth',
     'community',
+    'anonymous-telemetry',
     'auth-flow',
     'mcp'
   ]);

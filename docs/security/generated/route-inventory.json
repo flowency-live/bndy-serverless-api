@@ -1,15 +1,37 @@
 {
-  "generatedAt": "2026-08-09T19:07:42.438Z",
+  "generatedAt": "2026-08-30T17:37:53.908Z",
   "source": "template.yaml",
   "status": "baseline-unenforced",
   "summary": {
-    "totalRoutes": 208,
-    "mutationRoutes": 127,
-    "unauthenticatedMutationRoutes": 127,
-    "httpMcpRoutes": 7,
+    "totalRoutes": 270,
+    "mutationRoutes": 170,
+    "unauthenticatedMutationRoutes": 170,
+    "httpMcpRoutes": 10,
     "duplicateRouteKeys": 0
   },
   "routes": [
+    {
+      "resource": "ClaimsFunction",
+      "event": "ListPendingClaims",
+      "method": "GET",
+      "path": "/api/admin/claims",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 978,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "ClaimsFunction",
+      "event": "ReviewClaim",
+      "method": "PATCH",
+      "path": "/api/admin/claims/{id}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 984,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
     {
       "resource": "ArtistsFunction",
       "event": "GetAllArtists",
@@ -17,7 +39,7 @@
       "path": "/api/artists",
       "authorizer": null,
       "authDeclared": false,
-      "line": 92,
+      "line": 206,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -28,9 +50,20 @@
       "path": "/api/artists",
       "authorizer": null,
       "authDeclared": false,
-      "line": 98,
+      "line": 212,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EventsFunction",
+      "event": "GetManagedAvailability",
+      "method": "GET",
+      "path": "/api/artists/{artistId}/availability",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 516,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
     },
     {
       "resource": "CalendarFunction",
@@ -39,7 +72,7 @@
       "path": "/api/artists/{artistId}/calendar",
       "authorizer": null,
       "authDeclared": false,
-      "line": 397,
+      "line": 615,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -50,7 +83,7 @@
       "path": "/api/artists/{artistId}/calendar/subscribe",
       "authorizer": null,
       "authDeclared": false,
-      "line": 403,
+      "line": 621,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -61,7 +94,7 @@
       "path": "/api/artists/{artistId}/calendar/subscriptions",
       "authorizer": null,
       "authDeclared": false,
-      "line": 409,
+      "line": 627,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -72,7 +105,7 @@
       "path": "/api/artists/{artistId}/calendar/subscriptions/{subscriptionId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 415,
+      "line": 633,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -83,7 +116,7 @@
       "path": "/api/artists/{artistId}/check-vote-reminders",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1298,
+      "line": 1910,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -94,7 +127,7 @@
       "path": "/api/artists/{artistId}/crm/venues",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1333,
+      "line": 1945,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -105,7 +138,7 @@
       "path": "/api/artists/{artistId}/crm/venues",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1339,
+      "line": 1951,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -116,7 +149,7 @@
       "path": "/api/artists/{artistId}/crm/venues/{venueId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1351,
+      "line": 1963,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -127,7 +160,7 @@
       "path": "/api/artists/{artistId}/crm/venues/{venueId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1345,
+      "line": 1957,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -138,7 +171,7 @@
       "path": "/api/artists/{artistId}/crm/venues/{venueId}/contacts",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1357,
+      "line": 1969,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -149,7 +182,7 @@
       "path": "/api/artists/{artistId}/crm/venues/{venueId}/contacts",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1363,
+      "line": 1975,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -160,7 +193,7 @@
       "path": "/api/artists/{artistId}/crm/venues/{venueId}/contacts/{contactId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1375,
+      "line": 1987,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -171,7 +204,7 @@
       "path": "/api/artists/{artistId}/crm/venues/{venueId}/contacts/{contactId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1369,
+      "line": 1981,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -182,7 +215,7 @@
       "path": "/api/artists/{artistId}/crm/venues/{venueId}/gigs",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1381,
+      "line": 1993,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -193,7 +226,7 @@
       "path": "/api/artists/{artistId}/crm/venues/{venueId}/notes",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1387,
+      "line": 1999,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -204,7 +237,7 @@
       "path": "/api/artists/{artistId}/crm/venues/{venueId}/notes",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1393,
+      "line": 2005,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -215,7 +248,7 @@
       "path": "/api/artists/{artistId}/crm/venues/{venueId}/notes/{noteId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1405,
+      "line": 2017,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -226,7 +259,7 @@
       "path": "/api/artists/{artistId}/crm/venues/{venueId}/notes/{noteId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1399,
+      "line": 2011,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -237,7 +270,7 @@
       "path": "/api/artists/{artistId}/events",
       "authorizer": null,
       "authDeclared": false,
-      "line": 188,
+      "line": 334,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -248,7 +281,7 @@
       "path": "/api/artists/{artistId}/events",
       "authorizer": null,
       "authDeclared": false,
-      "line": 273,
+      "line": 428,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -259,7 +292,7 @@
       "path": "/api/artists/{artistId}/events/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 291,
+      "line": 446,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -270,7 +303,7 @@
       "path": "/api/artists/{artistId}/events/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 279,
+      "line": 434,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -281,7 +314,7 @@
       "path": "/api/artists/{artistId}/events/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 285,
+      "line": 440,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -292,7 +325,7 @@
       "path": "/api/artists/{artistId}/events/{id}/ical",
       "authorizer": null,
       "authDeclared": false,
-      "line": 421,
+      "line": 639,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -303,7 +336,7 @@
       "path": "/api/artists/{artistId}/events/{id}/leave",
       "authorizer": null,
       "authDeclared": false,
-      "line": 297,
+      "line": 452,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -314,7 +347,7 @@
       "path": "/api/artists/{artistId}/events/bulk-availability",
       "authorizer": null,
       "authDeclared": false,
-      "line": 343,
+      "line": 498,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -325,7 +358,7 @@
       "path": "/api/artists/{artistId}/events/check-conflicts",
       "authorizer": null,
       "authDeclared": false,
-      "line": 349,
+      "line": 504,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -336,7 +369,7 @@
       "path": "/api/artists/{artistId}/events/toggle-availability",
       "authorizer": null,
       "authDeclared": false,
-      "line": 337,
+      "line": 492,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -347,7 +380,7 @@
       "path": "/api/artists/{artistId}/expenses",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1514,
+      "line": 2126,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -358,7 +391,7 @@
       "path": "/api/artists/{artistId}/expenses",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1508,
+      "line": 2120,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -369,7 +402,7 @@
       "path": "/api/artists/{artistId}/expenses/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1526,
+      "line": 2138,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -380,7 +413,7 @@
       "path": "/api/artists/{artistId}/expenses/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1520,
+      "line": 2132,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -391,7 +424,7 @@
       "path": "/api/artists/{artistId}/finances",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1533,
+      "line": 2145,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -402,7 +435,7 @@
       "path": "/api/artists/{artistId}/income",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1546,
+      "line": 2158,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -413,7 +446,7 @@
       "path": "/api/artists/{artistId}/income",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1540,
+      "line": 2152,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -424,7 +457,7 @@
       "path": "/api/artists/{artistId}/income/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1552,
+      "line": 2164,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -435,7 +468,7 @@
       "path": "/api/artists/{artistId}/invites",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1001,
+      "line": 1613,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -446,7 +479,7 @@
       "path": "/api/artists/{artistId}/invites/general",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1007,
+      "line": 1619,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -457,7 +490,7 @@
       "path": "/api/artists/{artistId}/invites/phone",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1013,
+      "line": 1625,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -468,7 +501,7 @@
       "path": "/api/artists/{artistId}/members",
       "authorizer": null,
       "authDeclared": false,
-      "line": 831,
+      "line": 1435,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -479,7 +512,7 @@
       "path": "/api/artists/{artistId}/members",
       "authorizer": null,
       "authDeclared": false,
-      "line": 837,
+      "line": 1441,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -490,7 +523,7 @@
       "path": "/api/artists/{artistId}/pipeline",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1250,
+      "line": 1862,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -501,7 +534,7 @@
       "path": "/api/artists/{artistId}/pipeline/{artistSongId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1268,
+      "line": 1880,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -512,7 +545,7 @@
       "path": "/api/artists/{artistId}/pipeline/{artistSongId}/comment",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1292,
+      "line": 1904,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -523,7 +556,7 @@
       "path": "/api/artists/{artistId}/pipeline/{artistSongId}/rag",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1274,
+      "line": 1886,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -534,7 +567,7 @@
       "path": "/api/artists/{artistId}/pipeline/{artistSongId}/rag-status",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1280,
+      "line": 1892,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -545,7 +578,7 @@
       "path": "/api/artists/{artistId}/pipeline/{artistSongId}/status",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1286,
+      "line": 1898,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -556,7 +589,7 @@
       "path": "/api/artists/{artistId}/pipeline/{artistSongId}/vote",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1262,
+      "line": 1874,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -567,7 +600,7 @@
       "path": "/api/artists/{artistId}/pipeline/suggestions",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1256,
+      "line": 1868,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -578,7 +611,7 @@
       "path": "/api/artists/{artistId}/playbook",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1225,
+      "line": 1837,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -589,7 +622,7 @@
       "path": "/api/artists/{artistId}/playbook",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1231,
+      "line": 1843,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -600,7 +633,7 @@
       "path": "/api/artists/{artistId}/playbook/{artistSongId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1243,
+      "line": 1855,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -611,7 +644,7 @@
       "path": "/api/artists/{artistId}/playbook/{artistSongId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1237,
+      "line": 1849,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -622,7 +655,7 @@
       "path": "/api/artists/{artistId}/public-availability",
       "authorizer": null,
       "authDeclared": false,
-      "line": 355,
+      "line": 510,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -633,7 +666,7 @@
       "path": "/api/artists/{artistId}/public-events",
       "authorizer": null,
       "authDeclared": false,
-      "line": 323,
+      "line": 478,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -644,7 +677,7 @@
       "path": "/api/artists/{artistId}/public-gigs",
       "authorizer": null,
       "authDeclared": false,
-      "line": 362,
+      "line": 523,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -655,7 +688,7 @@
       "path": "/api/artists/{artistId}/setlists",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1130,
+      "line": 1742,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -666,7 +699,7 @@
       "path": "/api/artists/{artistId}/setlists",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1136,
+      "line": 1748,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -677,7 +710,7 @@
       "path": "/api/artists/{artistId}/setlists/{setlistId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1154,
+      "line": 1766,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -688,7 +721,7 @@
       "path": "/api/artists/{artistId}/setlists/{setlistId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1142,
+      "line": 1754,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -699,7 +732,7 @@
       "path": "/api/artists/{artistId}/setlists/{setlistId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1148,
+      "line": 1760,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -710,7 +743,7 @@
       "path": "/api/artists/{artistId}/songs",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1200,
+      "line": 1812,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -721,7 +754,7 @@
       "path": "/api/artists/{artistId}/songs",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1206,
+      "line": 1818,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -732,7 +765,7 @@
       "path": "/api/artists/{artistId}/songs/{songId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1218,
+      "line": 1830,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -743,7 +776,7 @@
       "path": "/api/artists/{artistId}/songs/{songId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1212,
+      "line": 1824,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -754,7 +787,7 @@
       "path": "/api/artists/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 151,
+      "line": 290,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -765,7 +798,7 @@
       "path": "/api/artists/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 127,
+      "line": 253,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -776,7 +809,18 @@
       "path": "/api/artists/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 133,
+      "line": 259,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "ArtistsFunction",
+      "event": "ArtistEnrichmentAction",
+      "method": "PATCH",
+      "path": "/api/artists/{id}/enrichment",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 327,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -787,7 +831,7 @@
       "path": "/api/artists/{id}/mcp",
       "authorizer": null,
       "authDeclared": false,
-      "line": 145,
+      "line": 284,
       "baselineZone": "deprecated",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -798,8 +842,30 @@
       "path": "/api/artists/{id}/mcp",
       "authorizer": null,
       "authDeclared": false,
-      "line": 139,
+      "line": 277,
       "baselineZone": "deprecated",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "ArtistsFunction",
+      "event": "GetOwnedArtistProfile",
+      "method": "GET",
+      "path": "/api/artists/{id}/profile",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 271,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "ArtistsFunction",
+      "event": "UpdateOwnedArtistProfile",
+      "method": "PATCH",
+      "path": "/api/artists/{id}/profile",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 265,
+      "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
     {
@@ -809,7 +875,7 @@
       "path": "/api/artists/{id}/refresh-facebook-image",
       "authorizer": null,
       "authDeclared": false,
-      "line": 181,
+      "line": 320,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -820,7 +886,7 @@
       "path": "/api/artists/by-external-id",
       "authorizer": null,
       "authDeclared": false,
-      "line": 163,
+      "line": 302,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -831,7 +897,7 @@
       "path": "/api/artists/check-name",
       "authorizer": null,
       "authDeclared": false,
-      "line": 175,
+      "line": 314,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -842,7 +908,7 @@
       "path": "/api/artists/community",
       "authorizer": null,
       "authDeclared": false,
-      "line": 121,
+      "line": 247,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -853,8 +919,19 @@
       "path": "/api/artists/find-or-create",
       "authorizer": null,
       "authDeclared": false,
-      "line": 108,
+      "line": 222,
       "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "ArtistsFunction",
+      "event": "FindOrCreateArtistMcp",
+      "method": "POST",
+      "path": "/api/artists/find-or-create/mcp",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 228,
+      "baselineZone": "deprecated",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
     {
@@ -864,7 +941,7 @@
       "path": "/api/artists/list",
       "authorizer": null,
       "authDeclared": false,
-      "line": 169,
+      "line": 308,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -875,7 +952,7 @@
       "path": "/api/artists/search",
       "authorizer": null,
       "authDeclared": false,
-      "line": 157,
+      "line": 296,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -886,7 +963,7 @@
       "path": "/api/builders",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1586,
+      "line": 2198,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -897,7 +974,7 @@
       "path": "/api/builders",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1592,
+      "line": 2204,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -908,7 +985,7 @@
       "path": "/api/builders/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1604,
+      "line": 2216,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -919,7 +996,7 @@
       "path": "/api/builders/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1598,
+      "line": 2210,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -930,7 +1007,7 @@
       "path": "/api/builders/{id}/publish",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1610,
+      "line": 2222,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -941,7 +1018,7 @@
       "path": "/api/builders/{id}/venues",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1617,
+      "line": 2229,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -952,7 +1029,7 @@
       "path": "/api/builders/{id}/venues",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1623,
+      "line": 2235,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -963,7 +1040,7 @@
       "path": "/api/builders/{id}/venues/{venueId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1635,
+      "line": 2247,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -974,7 +1051,7 @@
       "path": "/api/builders/{id}/venues/{venueId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1629,
+      "line": 2241,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -985,7 +1062,7 @@
       "path": "/api/builders/by-subdomain/{slug}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1579,
+      "line": 2191,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -996,7 +1073,40 @@
       "path": "/api/calendar/ical/{token}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 391,
+      "line": 609,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "ClaimsFunction",
+      "event": "CreateClaim",
+      "method": "POST",
+      "path": "/api/claims",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 960,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "ClaimsFunction",
+      "event": "CancelClaim",
+      "method": "DELETE",
+      "path": "/api/claims/{id}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 972,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "ClaimsFunction",
+      "event": "GetMyClaims",
+      "method": "GET",
+      "path": "/api/claims/me",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 966,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1007,7 +1117,7 @@
       "path": "/api/community/artists/find-or-create",
       "authorizer": null,
       "authDeclared": false,
-      "line": 115,
+      "line": 241,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1018,7 +1128,18 @@
       "path": "/api/community/events",
       "authorizer": null,
       "authDeclared": false,
-      "line": 231,
+      "line": 385,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "UsersFunction",
+      "event": "CreateCommunityFlag",
+      "method": "POST",
+      "path": "/api/community/flags",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1340,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1029,7 +1150,7 @@
       "path": "/api/community/places/autocomplete",
       "authorizer": null,
       "authDeclared": false,
-      "line": 496,
+      "line": 749,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1040,7 +1161,7 @@
       "path": "/api/community/places/details",
       "authorizer": null,
       "authDeclared": false,
-      "line": 502,
+      "line": 755,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1051,7 +1172,216 @@
       "path": "/api/community/venues/find-or-create",
       "authorizer": null,
       "authDeclared": false,
-      "line": 490,
+      "line": 743,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "ArtistsFunction",
+      "event": "CuratorUpdateArtist",
+      "method": "PUT",
+      "path": "/api/curator/artists/{id}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 187,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "ArtistsFunction",
+      "event": "CuratorHideArtist",
+      "method": "POST",
+      "path": "/api/curator/artists/{id}/hide",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 193,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "ArtistsFunction",
+      "event": "CuratorRestoreArtist",
+      "method": "POST",
+      "path": "/api/curator/artists/{id}/restore",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 199,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EventsCuratorFunction",
+      "event": "CuratorUpdateEvent",
+      "method": "PUT",
+      "path": "/api/curator/events/{id}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 557,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EventsCuratorFunction",
+      "event": "CuratorCancelEvent",
+      "method": "POST",
+      "path": "/api/curator/events/{id}/cancel",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 575,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EventsCuratorFunction",
+      "event": "CuratorHideEvent",
+      "method": "POST",
+      "path": "/api/curator/events/{id}/hide",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 563,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EventsCuratorFunction",
+      "event": "CuratorRestoreEvent",
+      "method": "POST",
+      "path": "/api/curator/events/{id}/restore",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 569,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EventsCuratorFunction",
+      "event": "CuratorUncancelEvent",
+      "method": "POST",
+      "path": "/api/curator/events/{id}/uncancel",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 581,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EventsCuratorFunction",
+      "event": "CuratorFestivalTag",
+      "method": "POST",
+      "path": "/api/curator/events/festival-tag",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 587,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "FestivalsFunction",
+      "event": "CuratorCreateFestival",
+      "method": "POST",
+      "path": "/api/curator/festivals",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 911,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "FestivalsFunction",
+      "event": "CuratorGetFestival",
+      "method": "GET",
+      "path": "/api/curator/festivals/{id}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 917,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "FestivalsFunction",
+      "event": "CuratorUpdateFestival",
+      "method": "PATCH",
+      "path": "/api/curator/festivals/{id}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 923,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "VenuesFunction",
+      "event": "CuratorUpdateVenue",
+      "method": "PUT",
+      "path": "/api/curator/venues/{id}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 680,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "VenuesFunction",
+      "event": "CuratorHideVenue",
+      "method": "POST",
+      "path": "/api/curator/venues/{id}/hide",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 686,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "VenuesFunction",
+      "event": "CuratorRestoreVenue",
+      "method": "POST",
+      "path": "/api/curator/venues/{id}/restore",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 692,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EntityInvitesFunction",
+      "event": "RevokeEntityInvite",
+      "method": "DELETE",
+      "path": "/api/entity-invites/{token}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1084,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EntityInvitesFunction",
+      "event": "GetEntityInvite",
+      "method": "GET",
+      "path": "/api/entity-invites/{token}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1078,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "EntityInvitesFunction",
+      "event": "AcceptEntityInvite",
+      "method": "POST",
+      "path": "/api/entity-invites/{token}/accept",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1090,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EntityMembershipsFunction",
+      "event": "UpdateEntityMembership",
+      "method": "PATCH",
+      "path": "/api/entity-memberships/{id}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1024,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1062,7 +1392,7 @@
       "path": "/api/events",
       "authorizer": null,
       "authDeclared": false,
-      "line": 212,
+      "line": 360,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1073,7 +1403,7 @@
       "path": "/api/events",
       "authorizer": null,
       "authDeclared": false,
-      "line": 218,
+      "line": 366,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1084,7 +1414,7 @@
       "path": "/api/events/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 267,
+      "line": 422,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1095,7 +1425,7 @@
       "path": "/api/events/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 237,
+      "line": 391,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1106,7 +1436,7 @@
       "path": "/api/events/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 243,
+      "line": 397,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1117,7 +1447,7 @@
       "path": "/api/events/{id}/mcp",
       "authorizer": null,
       "authDeclared": false,
-      "line": 261,
+      "line": 416,
       "baselineZone": "deprecated",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1128,7 +1458,7 @@
       "path": "/api/events/{id}/mcp",
       "authorizer": null,
       "authDeclared": false,
-      "line": 255,
+      "line": 409,
       "baselineZone": "deprecated",
       "currentRisk": null
     },
@@ -1139,7 +1469,7 @@
       "path": "/api/events/{id}/mcp",
       "authorizer": null,
       "authDeclared": false,
-      "line": 249,
+      "line": 403,
       "baselineZone": "deprecated",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1150,7 +1480,7 @@
       "path": "/api/events/batch",
       "authorizer": null,
       "authDeclared": false,
-      "line": 369,
+      "line": 530,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1161,7 +1491,7 @@
       "path": "/api/events/by-external-id",
       "authorizer": null,
       "authDeclared": false,
-      "line": 303,
+      "line": 458,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1172,8 +1502,19 @@
       "path": "/api/events/community",
       "authorizer": null,
       "authDeclared": false,
-      "line": 224,
+      "line": 372,
       "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EventsFunction",
+      "event": "CreateCommunityEventMcp",
+      "method": "POST",
+      "path": "/api/events/community/mcp",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 378,
+      "baselineZone": "deprecated",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
     {
@@ -1183,7 +1524,7 @@
       "path": "/api/events/public",
       "authorizer": null,
       "authDeclared": false,
-      "line": 310,
+      "line": 465,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1194,7 +1535,29 @@
       "path": "/api/events/public/geo",
       "authorizer": null,
       "authDeclared": false,
-      "line": 316,
+      "line": 471,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "FestivalsFunction",
+      "event": "GetFestival",
+      "method": "GET",
+      "path": "/api/festivals/{id}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 937,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "FestivalsFunction",
+      "event": "GetFestivalEvents",
+      "method": "GET",
+      "path": "/api/festivals/{id}/events",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 930,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1205,7 +1568,7 @@
       "path": "/api/festivals/by-external-id",
       "authorizer": null,
       "authDeclared": false,
-      "line": 609,
+      "line": 904,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1216,7 +1579,7 @@
       "path": "/api/festivals/public",
       "authorizer": null,
       "authDeclared": false,
-      "line": 597,
+      "line": 892,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1227,7 +1590,7 @@
       "path": "/api/festivals/slug/{slug}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 603,
+      "line": 898,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1238,7 +1601,7 @@
       "path": "/api/ingest/bulk-import",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1434,
+      "line": 2046,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1249,7 +1612,7 @@
       "path": "/api/ingest/enrich-venue-facebook",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1470,
+      "line": 2082,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1260,7 +1623,7 @@
       "path": "/api/ingest/extract-from-html",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1440,
+      "line": 2052,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1271,7 +1634,7 @@
       "path": "/api/ingest/extract-from-url",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1446,
+      "line": 2058,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1282,7 +1645,7 @@
       "path": "/api/ingest/extract-venues",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1452,
+      "line": 2064,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1293,7 +1656,7 @@
       "path": "/api/ingest/load-poc",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1482,
+      "line": 2094,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1304,7 +1667,7 @@
       "path": "/api/ingest/queue",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1428,
+      "line": 2040,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1315,7 +1678,7 @@
       "path": "/api/ingest/queue/{id}/approve",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1458,
+      "line": 2070,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1326,7 +1689,7 @@
       "path": "/api/ingest/queue/{id}/reject",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1464,
+      "line": 2076,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1337,7 +1700,7 @@
       "path": "/api/ingest/update-venue-placeid",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1476,
+      "line": 2088,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1348,7 +1711,7 @@
       "path": "/api/integration/events",
       "authorizer": null,
       "authDeclared": false,
-      "line": 434,
+      "line": 652,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1359,7 +1722,7 @@
       "path": "/api/integration/venues",
       "authorizer": null,
       "authDeclared": false,
-      "line": 556,
+      "line": 817,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1370,7 +1733,7 @@
       "path": "/api/invites",
       "authorizer": null,
       "authDeclared": false,
-      "line": 976,
+      "line": 1588,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1381,7 +1744,7 @@
       "path": "/api/invites",
       "authorizer": null,
       "authDeclared": false,
-      "line": 982,
+      "line": 1594,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1392,7 +1755,7 @@
       "path": "/api/invites/{token}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1019,
+      "line": 1631,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1403,7 +1766,7 @@
       "path": "/api/invites/{token}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1025,
+      "line": 1637,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1414,7 +1777,7 @@
       "path": "/api/invites/{token}/accept",
       "authorizer": null,
       "authDeclared": false,
-      "line": 988,
+      "line": 1600,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1425,7 +1788,7 @@
       "path": "/api/invites/{token}/decline",
       "authorizer": null,
       "authDeclared": false,
-      "line": 994,
+      "line": 1606,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1436,7 +1799,7 @@
       "path": "/api/issues",
       "authorizer": null,
       "authDeclared": false,
-      "line": 908,
+      "line": 1512,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1447,7 +1810,7 @@
       "path": "/api/issues",
       "authorizer": null,
       "authDeclared": false,
-      "line": 914,
+      "line": 1518,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1458,7 +1821,7 @@
       "path": "/api/issues/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 932,
+      "line": 1536,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1469,7 +1832,7 @@
       "path": "/api/issues/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 926,
+      "line": 1530,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1480,9 +1843,108 @@
       "path": "/api/issues/batch",
       "authorizer": null,
       "authDeclared": false,
-      "line": 920,
+      "line": 1524,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "JoinAnalyticsFunction",
+      "event": "RecordJoinAnalytics",
+      "method": "POST",
+      "path": "/api/join/analytics",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1109,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "ArtistsFunction",
+      "event": "JoinArtist",
+      "method": "POST",
+      "path": "/api/join/artists",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 234,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "VenuesFunction",
+      "event": "JoinVenue",
+      "method": "POST",
+      "path": "/api/join/venues",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 736,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "OwnershipFunction",
+      "event": "RelinquishManagedEntity",
+      "method": "POST",
+      "path": "/api/managed-entities/{entityType}/{id}/relinquish",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1132,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EntityInvitesFunction",
+      "event": "CreateManagedEntityInvite",
+      "method": "POST",
+      "path": "/api/managed-entities/{id}/invites",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1072,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EntityMembershipsFunction",
+      "event": "ListManagedEntityMembers",
+      "method": "GET",
+      "path": "/api/managed-entities/{id}/members",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1012,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "EntityMembershipsFunction",
+      "event": "AddManagedEntityMember",
+      "method": "POST",
+      "path": "/api/managed-entities/{id}/members",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1018,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EntityMembershipsFunction",
+      "event": "TransferManagedEntity",
+      "method": "POST",
+      "path": "/api/managed-entities/{id}/transfer",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1030,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "EntityMembershipsFunction",
+      "event": "ListMyManagedEntities",
+      "method": "GET",
+      "path": "/api/managed-entities/me",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1006,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
     },
     {
       "resource": "AuthFunction",
@@ -1491,7 +1953,7 @@
       "path": "/api/me",
       "authorizer": null,
       "authDeclared": false,
-      "line": 632,
+      "line": 1156,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1502,7 +1964,7 @@
       "path": "/api/memberships",
       "authorizer": null,
       "authDeclared": false,
-      "line": 812,
+      "line": 1416,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1513,7 +1975,7 @@
       "path": "/api/memberships/{membershipId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 824,
+      "line": 1428,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1524,7 +1986,7 @@
       "path": "/api/memberships/{membershipId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 818,
+      "line": 1422,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1535,7 +1997,7 @@
       "path": "/api/memberships/all",
       "authorizer": null,
       "authDeclared": false,
-      "line": 800,
+      "line": 1404,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1546,7 +2008,7 @@
       "path": "/api/memberships/artist/{artistId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 806,
+      "line": 1410,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1557,7 +2019,7 @@
       "path": "/api/memberships/me",
       "authorizer": null,
       "authDeclared": false,
-      "line": 794,
+      "line": 1398,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1568,7 +2030,7 @@
       "path": "/api/notifications",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1047,
+      "line": 1659,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1579,7 +2041,7 @@
       "path": "/api/notifications",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1053,
+      "line": 1665,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1590,7 +2052,7 @@
       "path": "/api/notifications/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1071,
+      "line": 1683,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1601,7 +2063,7 @@
       "path": "/api/notifications/{id}/dismiss",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1065,
+      "line": 1677,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1612,7 +2074,7 @@
       "path": "/api/notifications/{id}/read",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1059,
+      "line": 1671,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1623,7 +2085,7 @@
       "path": "/api/notifications/mark-all-read",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1077,
+      "line": 1689,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1634,7 +2096,7 @@
       "path": "/api/places/details",
       "authorizer": null,
       "authDeclared": false,
-      "line": 470,
+      "line": 711,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1645,7 +2107,7 @@
       "path": "/api/places/suggest",
       "authorizer": null,
       "authDeclared": false,
-      "line": 464,
+      "line": 705,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1656,7 +2118,7 @@
       "path": "/api/review-items",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1698,
+      "line": 2310,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1667,7 +2129,7 @@
       "path": "/api/setlists",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1099,
+      "line": 1711,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1678,7 +2140,7 @@
       "path": "/api/setlists",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1105,
+      "line": 1717,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1689,7 +2151,7 @@
       "path": "/api/setlists/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1123,
+      "line": 1735,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1700,7 +2162,7 @@
       "path": "/api/setlists/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1111,
+      "line": 1723,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1711,7 +2173,7 @@
       "path": "/api/setlists/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1117,
+      "line": 1729,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1722,7 +2184,7 @@
       "path": "/api/songs",
       "authorizer": null,
       "authDeclared": false,
-      "line": 858,
+      "line": 1462,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1733,7 +2195,7 @@
       "path": "/api/songs",
       "authorizer": null,
       "authDeclared": false,
-      "line": 864,
+      "line": 1468,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1744,7 +2206,7 @@
       "path": "/api/songs/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 882,
+      "line": 1486,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1755,7 +2217,7 @@
       "path": "/api/songs/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 870,
+      "line": 1474,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1766,7 +2228,7 @@
       "path": "/api/songs/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 876,
+      "line": 1480,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1777,7 +2239,7 @@
       "path": "/api/source-runs",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1656,
+      "line": 2268,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1788,7 +2250,7 @@
       "path": "/api/source-runs/{sourceId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1680,
+      "line": 2292,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1799,7 +2261,7 @@
       "path": "/api/source-runs/{sourceId}/{runId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1686,
+      "line": 2298,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1810,7 +2272,7 @@
       "path": "/api/source-runs/{sourceId}/{runId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1692,
+      "line": 2304,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1821,7 +2283,7 @@
       "path": "/api/source-runs/coverage",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1668,
+      "line": 2280,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1832,7 +2294,7 @@
       "path": "/api/source-runs/summaries",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1662,
+      "line": 2274,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1843,7 +2305,7 @@
       "path": "/api/source-runs/timeseries",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1674,
+      "line": 2286,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1854,9 +2316,42 @@
       "path": "/api/spotify/search",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1178,
+      "line": 1790,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
+    },
+    {
+      "resource": "UploadsFunction",
+      "event": "ApiGetPresignedUrl",
+      "method": "POST",
+      "path": "/api/uploads/presigned-url",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1566,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "UsersFunction",
+      "event": "ApiGetUserFavourites",
+      "method": "GET",
+      "path": "/api/users/favourites",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1371,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "UsersFunction",
+      "event": "ApiToggleUserFavourite",
+      "method": "POST",
+      "path": "/api/users/favourites/toggle",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1377,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
     {
       "resource": "CalendarFunction",
@@ -1865,7 +2360,29 @@
       "path": "/api/users/me/unavailability",
       "authorizer": null,
       "authDeclared": false,
-      "line": 428,
+      "line": 646,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "UsersFunction",
+      "event": "ApiGetUserProfile",
+      "method": "GET",
+      "path": "/api/users/profile",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1359,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "UsersFunction",
+      "event": "ApiUpdateUserProfile",
+      "method": "PUT",
+      "path": "/api/users/profile",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1365,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1876,7 +2393,7 @@
       "path": "/api/venue-crm",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1320,
+      "line": 1932,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1887,9 +2404,53 @@
       "path": "/api/venue-crm",
       "authorizer": null,
       "authDeclared": false,
-      "line": 1326,
+      "line": 1938,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "VenuesFunction",
+      "event": "ListVenueGroups",
+      "method": "GET",
+      "path": "/api/venue-groups",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 826,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "VenuesFunction",
+      "event": "CreateVenueGroup",
+      "method": "POST",
+      "path": "/api/venue-groups",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 838,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "VenuesFunction",
+      "event": "UpdateVenueGroup",
+      "method": "PUT",
+      "path": "/api/venue-groups/{id}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 844,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "VenuesFunction",
+      "event": "GetVenueGroup",
+      "method": "GET",
+      "path": "/api/venue-groups/{slug}",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 832,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
     },
     {
       "resource": "VenuesFunction",
@@ -1898,7 +2459,7 @@
       "path": "/api/venues",
       "authorizer": null,
       "authDeclared": false,
-      "line": 457,
+      "line": 698,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1909,7 +2470,7 @@
       "path": "/api/venues",
       "authorizer": null,
       "authDeclared": false,
-      "line": 476,
+      "line": 717,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1920,7 +2481,7 @@
       "path": "/api/venues/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 520,
+      "line": 773,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1931,7 +2492,7 @@
       "path": "/api/venues/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 508,
+      "line": 761,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1942,7 +2503,7 @@
       "path": "/api/venues/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 514,
+      "line": 767,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1953,7 +2514,29 @@
       "path": "/api/venues/{id}/enrich",
       "authorizer": null,
       "authDeclared": false,
-      "line": 538,
+      "line": 792,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "VenuesFunction",
+      "event": "VenueEnrichmentAction",
+      "method": "PATCH",
+      "path": "/api/venues/{id}/enrichment",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 799,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "VenuesFunction",
+      "event": "SetVenueGroup",
+      "method": "PUT",
+      "path": "/api/venues/{id}/group",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 850,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1964,7 +2547,7 @@
       "path": "/api/venues/{id}/mcp",
       "authorizer": null,
       "authDeclared": false,
-      "line": 526,
+      "line": 780,
       "baselineZone": "deprecated",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1975,7 +2558,7 @@
       "path": "/api/venues/{id}/mcp",
       "authorizer": null,
       "authDeclared": false,
-      "line": 532,
+      "line": 786,
       "baselineZone": "deprecated",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -1986,7 +2569,7 @@
       "path": "/api/venues/{venueId}/events",
       "authorizer": null,
       "authDeclared": false,
-      "line": 330,
+      "line": 485,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -1997,7 +2580,7 @@
       "path": "/api/venues/by-external-id",
       "authorizer": null,
       "authDeclared": false,
-      "line": 544,
+      "line": 805,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -2008,8 +2591,19 @@
       "path": "/api/venues/find-or-create",
       "authorizer": null,
       "authDeclared": false,
-      "line": 483,
+      "line": 724,
       "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "VenuesFunction",
+      "event": "FindOrCreateVenueMcp",
+      "method": "POST",
+      "path": "/api/venues/find-or-create/mcp",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 730,
+      "baselineZone": "deprecated",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
     {
@@ -2019,7 +2613,7 @@
       "path": "/api/venues/list",
       "authorizer": null,
       "authDeclared": false,
-      "line": 550,
+      "line": 811,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -2030,7 +2624,7 @@
       "path": "/auth/apple",
       "authorizer": null,
       "authDeclared": false,
-      "line": 680,
+      "line": 1210,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -2041,7 +2635,7 @@
       "path": "/auth/callback",
       "authorizer": null,
       "authDeclared": false,
-      "line": 686,
+      "line": 1216,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -2052,7 +2646,7 @@
       "path": "/auth/check-identity",
       "authorizer": null,
       "authDeclared": false,
-      "line": 716,
+      "line": 1246,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2063,9 +2657,20 @@
       "path": "/auth/email/request-magic",
       "authorizer": null,
       "authDeclared": false,
-      "line": 710,
+      "line": 1240,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "AuthFunction",
+      "event": "FacebookOAuthInit",
+      "method": "GET",
+      "path": "/auth/facebook",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1192,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
     },
     {
       "resource": "AuthFunction",
@@ -2074,7 +2679,7 @@
       "path": "/auth/facebook/callback",
       "authorizer": null,
       "authDeclared": false,
-      "line": 668,
+      "line": 1198,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -2085,7 +2690,7 @@
       "path": "/auth/google",
       "authorizer": null,
       "authDeclared": false,
-      "line": 674,
+      "line": 1204,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -2096,7 +2701,7 @@
       "path": "/auth/google/callback",
       "authorizer": null,
       "authDeclared": false,
-      "line": 662,
+      "line": 1186,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -2107,7 +2712,7 @@
       "path": "/auth/login",
       "authorizer": null,
       "authDeclared": false,
-      "line": 638,
+      "line": 1162,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2118,7 +2723,7 @@
       "path": "/auth/logout",
       "authorizer": null,
       "authDeclared": false,
-      "line": 644,
+      "line": 1168,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2129,7 +2734,7 @@
       "path": "/auth/magic/{token}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 722,
+      "line": 1252,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -2140,7 +2745,7 @@
       "path": "/auth/phone/request-otp",
       "authorizer": null,
       "authDeclared": false,
-      "line": 692,
+      "line": 1222,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2151,7 +2756,7 @@
       "path": "/auth/phone/verify-and-onboard",
       "authorizer": null,
       "authDeclared": false,
-      "line": 704,
+      "line": 1234,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2162,7 +2767,7 @@
       "path": "/auth/phone/verify-otp",
       "authorizer": null,
       "authDeclared": false,
-      "line": 698,
+      "line": 1228,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2173,7 +2778,7 @@
       "path": "/auth/refresh",
       "authorizer": null,
       "authDeclared": false,
-      "line": 650,
+      "line": 1174,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2184,7 +2789,7 @@
       "path": "/auth/register",
       "authorizer": null,
       "authDeclared": false,
-      "line": 656,
+      "line": 1180,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2195,7 +2800,7 @@
       "path": "/festivals",
       "authorizer": null,
       "authDeclared": false,
-      "line": 590,
+      "line": 885,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -2206,7 +2811,7 @@
       "path": "/festivals",
       "authorizer": null,
       "authDeclared": false,
-      "line": 578,
+      "line": 873,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2217,7 +2822,7 @@
       "path": "/festivals/{id}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 584,
+      "line": 879,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2228,7 +2833,7 @@
       "path": "/uploads/presigned-url",
       "authorizer": null,
       "authDeclared": false,
-      "line": 954,
+      "line": 1559,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2239,7 +2844,7 @@
       "path": "/users",
       "authorizer": null,
       "authDeclared": false,
-      "line": 761,
+      "line": 1292,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -2250,7 +2855,7 @@
       "path": "/users/{userId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 755,
+      "line": 1286,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2261,7 +2866,7 @@
       "path": "/users/{userId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 743,
+      "line": 1274,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -2272,7 +2877,84 @@
       "path": "/users/{userId}",
       "authorizer": null,
       "authDeclared": false,
-      "line": 749,
+      "line": 1280,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "UsersFunction",
+      "event": "SetUserRole",
+      "method": "PUT",
+      "path": "/users/{userId}/role",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1334,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "UsersFunction",
+      "event": "GetUserActivity",
+      "method": "GET",
+      "path": "/users/activity",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1322,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "UsersFunction",
+      "event": "GetAllUserActivity",
+      "method": "GET",
+      "path": "/users/activity/all",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1328,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "UsersFunction",
+      "event": "GetUserFavourites",
+      "method": "GET",
+      "path": "/users/favourites",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1310,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "UsersFunction",
+      "event": "ToggleUserFavourite",
+      "method": "POST",
+      "path": "/users/favourites/toggle",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1316,
+      "baselineZone": "admin",
+      "currentRisk": "unauthenticated-mutation-declared-in-sam"
+    },
+    {
+      "resource": "UsersFunction",
+      "event": "GetFlags",
+      "method": "GET",
+      "path": "/users/flags",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1346,
+      "baselineZone": "public-read-review-required",
+      "currentRisk": null
+    },
+    {
+      "resource": "UsersFunction",
+      "event": "ResolveFlag",
+      "method": "PUT",
+      "path": "/users/flags/{flagId}/resolve",
+      "authorizer": null,
+      "authDeclared": false,
+      "line": 1352,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     },
@@ -2283,7 +2965,7 @@
       "path": "/users/profile",
       "authorizer": null,
       "authDeclared": false,
-      "line": 767,
+      "line": 1298,
       "baselineZone": "public-read-review-required",
       "currentRisk": null
     },
@@ -2294,7 +2976,7 @@
       "path": "/users/profile",
       "authorizer": null,
       "authDeclared": false,
-      "line": 773,
+      "line": 1304,
       "baselineZone": "admin",
       "currentRisk": "unauthenticated-mutation-declared-in-sam"
     }
