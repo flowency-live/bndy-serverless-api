@@ -5,13 +5,19 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  workflow_dispatch:
+    inputs:
+      confirm_deploy:
+        description: 'Type "deploy" to confirm deployment'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 env:
   AWS_REGION: eu-west-2
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
   SAM_CLI_TELEMETRY: '0'
 
 jobs:
@@ -33,9 +39,10 @@ jobs:
           # Run tests for each lambda that has both test files AND a valid test script
           for dir in *-lambda/; do
             if [[ -d "$dir" && -f "$dir/package.json" ]]; then
-              # Check if package.json has a real test script (not placeholder)
+              # Check if package.json has a real test script (not placeholder).
+              # Discover tests recursively so __tests__/ suites are not silently skipped.
               if grep -q '"test":' "$dir/package.json" && ! grep -q 'no test specified' "$dir/package.json"; then
-                if ls "$dir"/*.test.js 1> /dev/null 2>&1; then
+                if find "$dir" -type f \( -name '*.test.js' -o -path '*/__tests__/*.js' \) -print -quit | grep -q .; then
                   echo "Running tests in $dir"
                   cd "$dir"
                   npm install --legacy-peer-deps
@@ -69,6 +76,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
       - name: Run Pre-Deployment Validation
         run: |
           # SAM CLI 1.165 now fails validation on the estate-wide Node 20
@@ -83,12 +95,21 @@ jobs:
           echo "=== Critical Route Verification ==="
           node verify-routes.js
 
+      - name: Clean SAM Build
+        run: sam build --no-cached --parallel
+
   deploy:
     name: Deploy to AWS
     needs: [test, validate]
     runs-on: ubuntu-latest
-    # Only deploy on push to master (not on PRs)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # Deployment requires ALL of:
+    # 1. Manual workflow_dispatch trigger
+    # 2. Explicit confirmation input = "deploy"
+    # 3. Repository variable BNDY_SERVERLESS_DEPLOY_ENABLED = "true" (unset by default)
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm_deploy == 'deploy' &&
+      vars.BNDY_SERVERLESS_DEPLOY_ENABLED == 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -156,7 +177,9 @@ jobs:
   capture_acceptance:
     name: One-shot Facebook Event Capture acceptance
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && contains(github.event.head_commit.message, 'Run Capture acceptance via deploy workflow')
+    # Explicitly frozen during infrastructure ownership reconciliation.
+    # This job hot-deploys Capture code and must be redesigned as a separate reviewed workflow.
+    if: ${{ false }}
 
     steps:
       - name: Checkout serverless API

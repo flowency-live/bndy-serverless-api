@@ -38,7 +38,10 @@ function methodOf(event) {
 }
 
 function pathOf(event) {
-  return event.requestContext?.http?.path || event.rawPath || event.path || '';
+  const raw = event.requestContext?.http?.path || event.rawPath || event.path || '';
+  // Normalise /api/users/* to /users/* so both prefixes hit identical logic.
+  // CloudFront on bndy.live routes /api/* to API Gateway; backstage uses /users/*.
+  return raw.replace(/^\/api(?=\/users(\/|$))/, '');
 }
 
 function response(statusCode, body, headers = {}) {

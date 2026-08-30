@@ -257,7 +257,10 @@ exports.handler = async (event, context) => {
   currentEvent = event;
 
   const method = event.requestContext?.http?.method || event.httpMethod;
-  const path = event.requestContext?.http?.path || event.rawPath || event.path;
+  const rawPath = event.requestContext?.http?.path || event.rawPath || event.path;
+  // Normalise /api/uploads/* to /uploads/* so both prefixes hit identical logic.
+  // CloudFront on bndy.live routes /api/* to API Gateway; backstage uses /uploads/*.
+  const path = rawPath.replace(/^\/api(?=\/uploads(\/|$))/, '');
   const routeKey = `${method} ${path}`;
 
   console.log('UPLOADS: Request received', {
