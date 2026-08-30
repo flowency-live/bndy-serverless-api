@@ -161,23 +161,6 @@ function familyFromEvent(event) {
   return resolveFamily(event.queryStringParameters?.family);
 }
 
-async function queryAllTasks(tableName, family) {
-  if (!family.taskPartition) return [];
-  const rows = [];
-  let start;
-  do {
-    const result = await dynamodb.query({
-      TableName: tableName,
-      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-      ExpressionAttributeValues: { ':pk': family.taskPartition, ':prefix': 'TASK#' },
-      ExclusiveStartKey: start,
-    }).promise();
-    rows.push(...(result.Items || []));
-    start = result.LastEvaluatedKey;
-  } while (start);
-  return rows;
-}
-
 function logicalIdentity(task) {
   const nativeId = task.task?.nativeId;
   return `${task.sourceId}|${typeof nativeId === 'string' ? nativeId : (task.sourceUrl || task.logicalTaskKey || task.taskKey)}`;
@@ -218,6 +201,21 @@ function taskStats(rows) {
     if (task.status === 'failed') bucket.failed += 1;
   }
   return { stats, current };
+}
+
+function taskLedgerStatus(family) {
+  const taskLedgerAvailable = Boolean(family.taskPartition);
+  return {
+    taskLedgerAvailable,
+    taskStatsAvailable: false,
+    taskStatsReason: taskLedgerAvailable
+      ? 'Full-ledger aggregation is disabled on interactive requests. Use the paginated tasks endpoint.'
+      : 'This source family has no task ledger.',
+    stats: null,
+    taskHistoryRows: null,
+    uniqueCurrentTasks: null,
+    failures: [],
+  };
 }
 
 function publicSource(config, state) {
@@ -342,28 +340,18 @@ async function getRunMetrics(tableName, family, limit = 20) {
 async function summary(tableName, event) {
   const family = familyFromEvent(event);
   if (!family) return { status: 400, body: { error: 'Unknown Backline source family' } };
-  const [taskRows, sources, runMetrics, families] = await Promise.all([
-    queryAllTasks(tableName, family),
+  const [sources, runMetrics, families] = await Promise.all([
     getSources(tableName, family),
     getRunMetrics(tableName, family),
     getFamilyCards(tableName),
   ]);
-  const { stats, current } = taskStats(taskRows);
-  const failures = current
-    .filter((task) => task.status === 'failed')
-    .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
-    .slice(0, 20)
-    .map(publicTask);
   return {
     status: 200,
     body: {
       sourceFamily: family.id,
       family: families.find((item) => item.id === family.id),
       families,
-      stats,
-      taskHistoryRows: taskRows.length,
-      uniqueCurrentTasks: current.length,
-      failures,
+      ...taskLedgerStatus(family),
       sources,
       runMetrics,
       readOnly: true,
@@ -592,4 +580,4 @@ exports.handle = async (event, action) => {
   }
 };
 
-exports.__test = { SOURCE_FAMILIES, resolveFamily, taskStats, currentTasks, publicRunMetric, publicTrustLoopRun };
+exports.__test = { SOURCE_FAMILIES, resolveFamily, taskStats, currentTasks, taskLedgerStatus, publicRunMetric, publicTrustLoopRun };
