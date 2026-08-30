@@ -173,6 +173,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: BNDY Artists API - handles /api/artists endpoints
+      Runtime: nodejs22.x
       CodeUri: ./artists-lambda/
       Handler: handler.handler
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
@@ -342,6 +343,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: BNDY Events API - handles /api/events endpoints
+      Runtime: nodejs22.x
       CodeUri: ./events-lambda/
       Handler: handler.handler
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
@@ -659,6 +661,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: BNDY Venues API - handles /api/venues endpoints
+      Runtime: nodejs22.x
       CodeUri: ./venues-lambda/
       Handler: handler.handler
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
@@ -942,6 +945,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: BNDY entity Claim Requests created by Join bndy
+      Runtime: nodejs22.x
       CodeUri: ./claims-lambda/
       Handler: handler.handler
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
@@ -988,6 +992,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: BNDY owner/admin/delegate relationships for Join-managed entities
+      Runtime: nodejs22.x
       CodeUri: ./entity-memberships-lambda/
       Handler: handler.handler
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
@@ -1052,6 +1057,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: BNDY expiring delegate invite links for Join-managed entities
+      Runtime: nodejs22.x
       CodeUri: ./entity-invites-lambda/
       Handler: handler.handler
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
@@ -1092,6 +1098,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: Privacy-minimised Join bndy funnel telemetry
+      Runtime: nodejs22.x
       CodeUri: ./join-analytics-lambda/
       Handler: handler.handler
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
@@ -1110,6 +1117,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: Explicit owner-only relinquish/disown actions for Join-managed Artists and Venues
+      Runtime: nodejs22.x
       CodeUri: ./ownership-lambda/
       Handler: handler.handler
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
@@ -1133,6 +1141,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: BNDY Authentication API - handles OAuth and sessions
+      Runtime: nodejs22.x
       CodeUri: ./auth-lambda/
       Handler: handler.handler
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
@@ -1252,6 +1261,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: BNDY Users API - handles user profile endpoints
+      Runtime: nodejs22.x
       CodeUri: ./users-lambda/
       Handler: handler.handler
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
@@ -1345,6 +1355,31 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /users/flags/{flagId}/resolve
             Method: PUT
+        # /api prefixed aliases for bndy.live (CloudFront routes /api/* to API Gateway)
+        ApiGetUserProfile:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/users/profile
+            Method: GET
+        ApiUpdateUserProfile:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/users/profile
+            Method: PUT
+        ApiGetUserFavourites:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/users/favourites
+            Method: GET
+        ApiToggleUserFavourite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/users/favourites/toggle
+            Method: POST
 
   # Memberships Lambda
   MembershipsFunction:
@@ -1511,6 +1546,7 @@ Resources:
     Properties:
       # FunctionName removed - SAM will manage
       Description: BNDY Uploads API - S3 presigned URLs for file uploads
+      Runtime: nodejs22.x
       CodeUri: ./uploads-lambda/
       Handler: handler.handler
       Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
@@ -1525,6 +1561,13 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /uploads/presigned-url
+            Method: POST
+        # /api prefixed alias for bndy.live (CloudFront routes /api/* to API Gateway)
+        ApiGetPresignedUrl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/uploads/presigned-url
             Method: POST
 
   # Invites Lambda

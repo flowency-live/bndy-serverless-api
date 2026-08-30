@@ -5,6 +5,12 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  workflow_dispatch:
+    inputs:
+      confirm_deploy:
+        description: 'Type "deploy" to confirm deployment'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -87,8 +93,14 @@ jobs:
     name: Deploy to AWS
     needs: [test, validate]
     runs-on: ubuntu-latest
-    # Only deploy on push to master (not on PRs)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # Deployment requires ALL of:
+    # 1. Manual workflow_dispatch trigger
+    # 2. Explicit confirmation input = "deploy"
+    # 3. Repository variable BNDY_SERVERLESS_DEPLOY_ENABLED = "true" (unset by default)
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm_deploy == 'deploy' &&
+      vars.BNDY_SERVERLESS_DEPLOY_ENABLED == 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -156,7 +168,13 @@ jobs:
   capture_acceptance:
     name: One-shot Facebook Event Capture acceptance
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && contains(github.event.head_commit.message, 'Run Capture acceptance via deploy workflow')
+    # Requires workflow_dispatch with deploy confirmation AND repo variable enabled
+    # Plus explicit commit message trigger for capture acceptance
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm_deploy == 'deploy' &&
+      vars.BNDY_SERVERLESS_DEPLOY_ENABLED == 'true' &&
+      contains(github.event.head_commit.message, 'Run Capture acceptance via deploy workflow')
 
     steps:
       - name: Checkout serverless API

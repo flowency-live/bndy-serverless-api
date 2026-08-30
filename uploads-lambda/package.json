@@ -4,11 +4,14 @@
   "description": "BNDY Uploads Lambda - Presigned URLs for S3 image uploads",
   "main": "handler.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "dependencies": {
     "aws-sdk": "^2.1000.0",
     "jsonwebtoken": "^9.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   },
   "author": "BNDY Platform",
   "license": "ISC"
