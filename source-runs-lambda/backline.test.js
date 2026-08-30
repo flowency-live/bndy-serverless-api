@@ -36,6 +36,19 @@ test('newer task state wins for the same logical source identity', () => {
   assert.deepEqual(stats.gigs, { discovered: 1, hydrated: 1, failed: 0 });
 });
 
+test('interactive summary never claims to aggregate the full task ledger', () => {
+  assert.deepEqual(__test.taskLedgerStatus(__test.resolveFamily('lemonrock')), {
+    taskLedgerAvailable: true,
+    taskStatsAvailable: false,
+    taskStatsReason: 'Full-ledger aggregation is disabled on interactive requests. Use the paginated tasks endpoint.',
+    stats: null,
+    taskHistoryRows: null,
+    uniqueCurrentTasks: null,
+    failures: [],
+  });
+  assert.equal(__test.taskLedgerStatus(__test.resolveFamily('klma')).taskLedgerAvailable, false);
+});
+
 test('Trust Loop output is bounded to the read-only decision and health contract', () => {
   const value = __test.publicTrustLoopRun({
     id: 'trust-loop-1', completedAt: '2026-08-28T12:00:00Z', status: 'needs-review',
