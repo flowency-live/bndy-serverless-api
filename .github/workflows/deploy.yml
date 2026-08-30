@@ -45,7 +45,7 @@ jobs:
                 if find "$dir" -type f \( -name '*.test.js' -o -path '*/__tests__/*.js' \) -print -quit | grep -q .; then
                   echo "Running tests in $dir"
                   cd "$dir"
-                  npm ci --legacy-peer-deps
+                  npm install --legacy-peer-deps
                   npm test || exit 1
                   cd ..
                 else
