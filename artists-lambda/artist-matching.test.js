@@ -45,6 +45,8 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     jest.clearAllMocks();
   });
 
+  // Work Order 2026-08-30: location is now required for confident matching
+  // Tests must provide matching locations to avoid forced review
   const createFindOrCreateRequest = (name, options = {}) => ({
     requestContext: {
       http: {
@@ -55,7 +57,7 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ name, ...options }),
+    body: JSON.stringify({ name, location: options.location || 'Stoke-on-Trent', ...options }),
   });
 
   describe('Leading article normalization', () => {
@@ -87,7 +89,7 @@ describe('Artist Find-or-Create Matching (#50)', () => {
         if (params.ExpressionAttributeValues[':prefix'] === 'gr') {
           return Promise.resolve({
             Items: [
-              { id: 'artist-456', name: 'Great Band', location: '' },
+              { id: 'artist-456', name: 'Great Band', location: 'Staffordshire' },
             ],
           });
         }
@@ -108,7 +110,7 @@ describe('Artist Find-or-Create Matching (#50)', () => {
       mockDynamoDB.query.mockImplementation((params) => {
         return Promise.resolve({
           Items: [
-            { id: 'artist-789', name: 'Circa81', location: '' },
+            { id: 'artist-789', name: 'Circa81', location: 'Staffordshire' },
           ],
         });
       });
@@ -126,7 +128,7 @@ describe('Artist Find-or-Create Matching (#50)', () => {
       mockDynamoDB.query.mockImplementation((params) => {
         return Promise.resolve({
           Items: [
-            { id: 'artist-duo', name: 'Rock Stars', location: '' },
+            { id: 'artist-duo', name: 'Rock Stars', location: 'Staffordshire' },
           ],
         });
       });
@@ -159,7 +161,7 @@ describe('Artist Find-or-Create Matching (#50)', () => {
       // Artist appears in both prefix searches
       mockDynamoDB.query.mockResolvedValue({
         Items: [
-          { id: 'same-artist', name: 'Some Artist', location: '' },
+          { id: 'same-artist', name: 'Some Artist', location: 'Staffordshire' },
         ],
       });
 
@@ -186,14 +188,14 @@ describe('Artist Find-or-Create Matching (#50)', () => {
         if (params.ExpressionAttributeValues[':prefix'] === 'th') {
           return Promise.resolve({
             Items: [
-              { id: 'artist-variant', name: 'The Magnetic Jellyfish', location: '' },
+              { id: 'artist-variant', name: 'The Magnetic Jellyfish', location: 'Staffordshire' },
             ],
           });
         }
         if (params.ExpressionAttributeValues[':prefix'] === 'ma') {
           return Promise.resolve({
             Items: [
-              { id: 'artist-canonical', name: 'Magnetic Jellyfish', location: '' },
+              { id: 'artist-canonical', name: 'Magnetic Jellyfish', location: 'Staffordshire' },
             ],
           });
         }
@@ -344,9 +346,11 @@ describe('Artist Find-or-Create Matching (#50)', () => {
         if (params.TableName === 'bndy-artists') {
           return Promise.resolve({
             Items: [
-              { id: 'ahm-burton', name: 'Ant Hill Mob', location: 'Burton' },
+              // Burton-upon-Trent is in Staffordshire; using 'Staffordshire' for west-midlands region
+              { id: 'ahm-burton', name: 'Ant Hill Mob', location: 'Staffordshire' },
               { id: 'ahm-northwich', name: 'The Ant Hill Mob Band', location: 'Northwich' },
-              { id: 'ahm-midlands', name: 'Anthill Mob', location: 'Midlands' },
+              // 'Midlands' alone is NON_LOCATION; use 'Derby' for east-midlands region
+              { id: 'ahm-midlands', name: 'Anthill Mob', location: 'Derby' },
             ],
           });
         }
@@ -404,7 +408,8 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     it('Derby listing should match Midlands Ant Hill Mob (Derbyshire footprint)', async () => {
       setupAntHillMobMocks();
 
-      const event = createFindOrCreateRequest('Ant Hill Mob', { venueRegion: 'Derbyshire' });
+      // Input location must be in same region (east-midlands) as target candidate (Derby)
+      const event = createFindOrCreateRequest('Ant Hill Mob', { venueRegion: 'Derbyshire', location: 'Derbyshire' });
       const result = await handler(event, {});
       const body = JSON.parse(result.body);
 
@@ -425,7 +430,8 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     it('Northwich listing should match NW Ant Hill Mob (Cheshire footprint)', async () => {
       setupAntHillMobMocks();
 
-      const event = createFindOrCreateRequest('The Ant Hill Mob', { venueRegion: 'Cheshire' });
+      // Input location must be in same region (north-west) as target candidate (Northwich)
+      const event = createFindOrCreateRequest('The Ant Hill Mob', { venueRegion: 'Cheshire', location: 'Cheshire' });
       const result = await handler(event, {});
       const body = JSON.parse(result.body);
 
@@ -438,7 +444,8 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     it('Staffordshire listing should match Burton Ant Hill Mob', async () => {
       setupAntHillMobMocks();
 
-      const event = createFindOrCreateRequest('Ant Hill Mob', { venueRegion: 'Staffordshire' });
+      // Default location 'Stoke-on-Trent' is west-midlands, same as ahm-burton (Staffordshire)
+      const event = createFindOrCreateRequest('Ant Hill Mob', { venueRegion: 'Staffordshire', location: 'Staffordshire' });
       const result = await handler(event, {});
       const body = JSON.parse(result.body);
 
@@ -452,7 +459,8 @@ describe('Artist Find-or-Create Matching (#50)', () => {
       setupAntHillMobMocks();
 
       // London has no footprint overlap with any candidate → all score 0 → near-tie
-      const event = createFindOrCreateRequest('Ant Hill Mob', { venueRegion: 'London' });
+      // Using location 'London' which is different region from all candidates (triggers review)
+      const event = createFindOrCreateRequest('Ant Hill Mob', { venueRegion: 'London', location: 'London' });
       const result = await handler(event, {});
       const body = JSON.parse(result.body);
 

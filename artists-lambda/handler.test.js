@@ -592,3 +592,89 @@ describe('edition-scoped artist find-or-create', () => {
     expect(mockDynamoDB.transactWrite).not.toHaveBeenCalled();
   });
 });
+
+describe('location-based artist resolution (Work Order 2026-08-30)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDynamoDB.get.mockResolvedValue({});
+    mockDynamoDB.transactWrite.mockResolvedValue({});
+  });
+
+  const createFindOrCreateEvent = (body) => ({
+    requestContext: { http: { method: 'POST', path: '/api/artists/find-or-create' } },
+    headers: { origin: 'https://backstage.bndy.co.uk' },
+    body: JSON.stringify(body)
+  });
+
+  const existingArtist = {
+    id: 'rewired-staffs',
+    name: 'ReWired',
+    location: 'Staffordshire',
+    name_slug: 'rewired'
+  };
+
+  it('returns review with locationConflict when name matches but location differs', async () => {
+    // Mock candidate query returns artist in Staffordshire
+    mockDynamoDB.query.mockResolvedValue({ Items: [existingArtist] });
+
+    const event = createFindOrCreateEvent({ name: 'ReWired', location: 'Essex' });
+    const res = await handler(event, {});
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.action).toBe('review');
+    expect(body.locationConflict).toBe(true);
+    expect(body.inputLocation).toBe('Essex');
+    expect(body.candidates[0].location).toBe('Staffordshire');
+  });
+
+  it('returns matched when name matches and location is same region', async () => {
+    const artistInSameRegion = { ...existingArtist, location: 'Stoke-on-Trent' };
+    mockDynamoDB.query.mockResolvedValue({ Items: [artistInSameRegion] });
+
+    // Staffordshire and Stoke-on-Trent are both in West Midlands
+    const event = createFindOrCreateEvent({ name: 'ReWired', location: 'Staffordshire' });
+    const res = await handler(event, {});
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.action).toBe('matched');
+    expect(body.locationConflict).toBeUndefined();
+  });
+
+  it('returns review with warning when input has no location', async () => {
+    mockDynamoDB.query.mockResolvedValue({ Items: [existingArtist] });
+
+    const event = createFindOrCreateEvent({ name: 'ReWired' }); // no location
+    const res = await handler(event, {});
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.action).toBe('review');
+    expect(body.warning).toContain('Location');
+  });
+
+  it('returns review when candidate has no location', async () => {
+    const artistNoLocation = { ...existingArtist, location: '' };
+    mockDynamoDB.query.mockResolvedValue({ Items: [artistNoLocation] });
+
+    const event = createFindOrCreateEvent({ name: 'ReWired', location: 'Essex' });
+    const res = await handler(event, {});
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.action).toBe('review');
+  });
+
+  it('returns created when no name match exists', async () => {
+    mockDynamoDB.query.mockResolvedValue({ Items: [] });
+    mockDynamoDB.transactWrite.mockResolvedValue({});
+
+    const event = createFindOrCreateEvent({ name: 'NewBandNobodyHas', location: 'Essex' });
+    const res = await handler(event, {});
+
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.action).toBe('created');
+  });
+});

@@ -22,6 +22,7 @@ const { isPublishedInEdition, hasPrivilegedIngestionFields, validateScopedIngest
 const { requireRole: requireCuratorRole, logActivity: logCuratorActivity, pickFields: pickCuratorFields, hideEntity: hideArtistEntity, restoreEntity: restoreArtistEntity, normaliseCuratorAccess } = require('./curator-core');
 const { publishUserCreatedArtistClaims } = require('./backline-user-claims');
 const { pickOwnedProfileFields } = require('./lib/owned-profile');
+const { areLocationsCompatible, calculateLocationScore, buildResolutionAuditLog } = require('./lib/location-resolution');
 
 /**
  * Sentinel keys for an artist record (2026-07-27 gate plan):
@@ -3409,6 +3410,82 @@ async function handleFindOrCreateArtist(event) {
   }
 
   if (isConfidentMatch) {
+    // Work Order 2026-08-30: Location-based resolution
+    // Check location compatibility before confirming match
+    const inputLocation = body.location || '';
+    const candidateLocation = best.location || '';
+    const locationCompat = areLocationsCompatible(inputLocation, candidateLocation);
+    const locationScore = calculateLocationScore(locationCompat);
+
+    // Audit log for resolution decision
+    const auditLog = buildResolutionAuditLog({
+      inputName: name,
+      inputLocation,
+      candidateId: best.id,
+      candidateName: best.name,
+      candidateLocation,
+      nameScore: matchScore / 100,
+      locationScore,
+      result: locationScore === 0 ? 'review' : 'matched',
+      matchedBy: matchMethod
+    });
+    console.log('[find-or-create artist] AUDIT:', JSON.stringify(auditLog));
+
+    // Location conflict → force review (same name, different region)
+    if (locationScore === 0) {
+      console.log(`[find-or-create artist] LOCATION_CONFLICT: "${name}" in ${inputLocation || '(none)'} vs candidate "${best.name}" in ${candidateLocation || '(none)'}`);
+      return {
+        statusCode: 200,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          action: 'review',
+          reason: 'Name matched but location differs - possible same-name collision',
+          locationConflict: true,
+          inputLocation: inputLocation || null,
+          candidates: [{
+            id: best.id,
+            name: best.name,
+            location: candidateLocation,
+            nameVariants: best.nameVariants || [],
+            confidence: Math.round(matchScore * locationScore) / 100,
+            nameScore: Math.round(matchScore) / 100,
+            locationScore
+          }]
+        })
+      };
+    }
+
+    // Missing location → force review with warning
+    if (locationCompat.reason === 'input_missing' || locationCompat.reason === 'candidate_missing' || locationCompat.reason === 'both_missing') {
+      const warning = locationCompat.reason === 'input_missing'
+        ? 'Location recommended for accurate matching'
+        : locationCompat.reason === 'candidate_missing'
+        ? 'Candidate has no location - verify match carefully'
+        : 'Neither input nor candidate has location - verify match carefully';
+
+      console.log(`[find-or-create artist] LOCATION_MISSING: "${name}" - ${warning}`);
+      return {
+        statusCode: 200,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          action: 'review',
+          reason: 'Missing location data - needs human verification',
+          warning,
+          inputLocation: inputLocation || null,
+          candidates: [{
+            id: best.id,
+            name: best.name,
+            location: candidateLocation,
+            nameVariants: best.nameVariants || [],
+            confidence: Math.round(matchScore * locationScore) / 100,
+            nameScore: Math.round(matchScore) / 100,
+            locationScore
+          }]
+        })
+      };
+    }
+
+    // Location compatible → proceed with match
     console.log(`[find-or-create artist] MATCH "${name}" -> "${best.name}" (${matchScore.toFixed(0)}% via ${matchMethod})${extractedAct ? ` + act "${extractedAct}"` : ''}`);
     return {
       statusCode: 200,
