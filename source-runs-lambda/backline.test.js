@@ -11,9 +11,33 @@ test('Backline Explorer exposes every known source family', () => {
     'gigs-news',
     'sceniceye',
     'insangel',
+    'livebandphotos',
+    'fizgig',
   ]);
   assert.equal(__test.resolveFamily('klma').sourceIds[0], 'klma-stoke-gig-list');
   assert.equal(__test.resolveFamily('missing'), null);
+});
+
+test('Backline graph accepts only bounded typed node references', () => {
+  assert.deepEqual(__test.parseGraphNodeRef('source:klma-stoke-gig-list'), {
+    kind: 'source', id: 'klma-stoke-gig-list',
+  });
+  assert.deepEqual(__test.parseGraphNodeRef('candidate:event-candidate:2026-09-01:artist:venue'), {
+    kind: 'candidate',
+    subjectType: 'event-candidate',
+    subjectKey: '2026-09-01:artist:venue',
+  });
+  assert.deepEqual(__test.parseGraphNodeRef('entity:venue:venue-123'), {
+    kind: 'entity', entityType: 'venue', entityId: 'venue-123',
+  });
+  assert.throws(() => __test.parseGraphNodeRef('table:scan-all'), /Unknown node ref/);
+  assert.throws(() => __test.parseGraphNodeRef('entity:user:user-123'), /Invalid node ref/);
+});
+
+test('Backline graph labels Claims without leaking unbounded values', () => {
+  const label = __test.graphClaimLabel({ predicate: 'description', value: 'x'.repeat(100) });
+  assert.equal(label, `description = ${'x'.repeat(60)}`);
+  assert.equal(__test.shortGraphKey('x'.repeat(60)), `${'x'.repeat(45)}...`);
 });
 
 test('On The Case band hydrations count as Artist activity', () => {
