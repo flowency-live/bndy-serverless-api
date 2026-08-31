@@ -665,7 +665,35 @@ exports.handler = async (event, context) => {
 };
 
 async function handleGetAllArtists(event) {
-  console.log(' Artists Lambda: Scanning all artists from DynamoDB...');
+  const { gigging } = event.queryStringParameters || {};
+  const filterGigging = gigging === 'true';
+
+  console.log(` Artists Lambda: Scanning artists (gigging=${filterGigging})...`);
+
+  // If gigging filter requested, first get artist IDs with upcoming public events
+  let giggingArtistIds = null;
+  if (filterGigging) {
+    const today = new Date().toISOString().split('T')[0];
+    const twoYearsOut = new Date(Date.now() + 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const eventsParams = {
+      TableName: 'bndy-events',
+      ProjectionExpression: 'artistId, collaboratingArtistIds',
+      FilterExpression: 'isPublic = :true AND #date BETWEEN :start AND :end AND #hidden <> :true',
+      ExpressionAttributeNames: { '#date': 'date', '#hidden': 'hidden' },
+      ExpressionAttributeValues: { ':true': true, ':start': today, ':end': twoYearsOut }
+    };
+
+    const events = await scanAll(dynamodb, eventsParams);
+    giggingArtistIds = new Set();
+    events.forEach(e => {
+      if (e.artistId) giggingArtistIds.add(e.artistId);
+      if (Array.isArray(e.collaboratingArtistIds)) {
+        e.collaboratingArtistIds.forEach(id => giggingArtistIds.add(id));
+      }
+    });
+    console.log(` Artists Lambda: Found ${giggingArtistIds.size} gigging artists from ${events.length} events`);
+  }
 
   const params = {
     TableName: 'bndy-artists',
@@ -681,7 +709,12 @@ async function handleGetAllArtists(event) {
   try {
     const scannedItems = await scanAll(dynamodb, params);
     // Feature 4: hidden artists never reach a public list.
-    const allItems = scannedItems.filter(a => a.hidden !== true && isPublishedInEdition(a, 'live'));
+    let allItems = scannedItems.filter(a => a.hidden !== true && isPublishedInEdition(a, 'live'));
+
+    // Apply gigging filter if requested
+    if (giggingArtistIds) {
+      allItems = allItems.filter(a => giggingArtistIds.has(a.id));
+    }
 
     // Transform to match expected API format
     const formattedArtists = allItems.map(artist => ({
@@ -733,11 +766,11 @@ async function handleGetAllArtists(event) {
       enrichmentDate: artist.enrichment_date || null
     }));
 
-    console.log(` Artists Lambda: Served ${formattedArtists.length} artists`);
+    console.log(` Artists Lambda: Served ${formattedArtists.length} artists${filterGigging ? ' (gigging only)' : ''}`);
 
     return jsonResponse(event, 200, formattedArtists, {
       corsHeaders: getCorsHeaders(),
-      cacheControl: 'public, max-age=300'
+      cacheControl: filterGigging ? 'public, max-age=120' : 'public, max-age=300'
     });
   } catch (error) {
     console.error(' DynamoDB scan failed:', error);
