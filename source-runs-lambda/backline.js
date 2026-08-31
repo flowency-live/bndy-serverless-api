@@ -79,6 +79,31 @@ const SOURCE_FAMILIES = {
     description: 'North East source reconnaissance, not yet production-enabled',
     sourceIds: ['insangel-daily-import'],
   },
+  livebandphotos: {
+    id: 'livebandphotos',
+    label: 'Live Band Photos',
+    description: 'South East gig, Venue and Artist intelligence, canonical-first and fixture-gated',
+    sourceIds: [
+      'livebandphotos-gig-listing',
+      'livebandphotos-county-index',
+      'livebandphotos-band-index',
+      'livebandphotos-band-hydration',
+      'livebandphotos-venue-hydration',
+      'livebandphotos-full-reconcile',
+    ],
+  },
+  fizgig: {
+    id: 'fizgig',
+    label: 'Fizgig',
+    description: 'Lincolnshire and East Midlands gig intelligence, canonical-first and fixture-gated',
+    sourceIds: [
+      'fizgig-gig-index',
+      'fizgig-artist-index',
+      'fizgig-venue-index',
+      'fizgig-detail-hydration',
+      'fizgig-full-reconcile',
+    ],
+  },
 };
 
 const KNOWN_SOURCE_IDS = new Set(Object.values(SOURCE_FAMILIES).flatMap((family) => family.sourceIds));
@@ -142,6 +167,21 @@ async function getStateTableName() {
     start = result.LastEvaluatedTableName;
   } while (start);
   throw new Error('BndyEnrichmentStack StateTable not found');
+}
+
+async function getProjectionControl(tableName) {
+  const result = await dynamodb.get({
+    TableName: tableName,
+    Key: { pk: 'CONTROL#PROJECTION', sk: 'GLOBAL' },
+    ConsistentRead: true,
+  }).promise();
+  const record = result.Item || null;
+  const enabled = record?.canonicalWritesEnabled === true;
+  return {
+    enabled,
+    state: enabled ? 'enabled' : record ? 'disabled-explicit' : 'disabled-default',
+    updatedAt: record?.updatedAt || null,
+  };
 }
 
 function encodeCursor(key) {
@@ -340,10 +380,11 @@ async function getRunMetrics(tableName, family, limit = 20) {
 async function summary(tableName, event) {
   const family = familyFromEvent(event);
   if (!family) return { status: 400, body: { error: 'Unknown Backline source family' } };
-  const [sources, runMetrics, families] = await Promise.all([
+  const [sources, runMetrics, families, projectionControl] = await Promise.all([
     getSources(tableName, family),
     getRunMetrics(tableName, family),
     getFamilyCards(tableName),
+    getProjectionControl(tableName),
   ]);
   return {
     status: 200,
@@ -355,10 +396,241 @@ async function summary(tableName, event) {
       sources,
       runMetrics,
       readOnly: true,
-      canonicalWritesEnabled: false,
+      canonicalWritesEnabled: projectionControl.enabled,
+      projectionControl,
       computedAt: new Date().toISOString(),
     },
   };
+}
+
+const GRAPH_NODE_KINDS = new Set(['source', 'obs', 'claim', 'candidate', 'entity']);
+const GRAPH_CANDIDATE_TYPES = new Set(['artist-candidate', 'venue-candidate', 'event-candidate']);
+const GRAPH_ENTITY_TYPES = new Set(['artist', 'venue', 'event', 'festival']);
+
+function parseGraphNodeRef(value) {
+  const [kind, ...parts] = String(value || '').split(':');
+  if (!GRAPH_NODE_KINDS.has(kind)) throw new Error(`Unknown node ref: ${value}`);
+  if ((kind === 'source' || kind === 'obs' || kind === 'claim') && parts.join(':')) {
+    return { kind, id: parts.join(':') };
+  }
+  if (kind === 'candidate') {
+    const [subjectType, ...keyParts] = parts;
+    const subjectKey = keyParts.join(':');
+    if (GRAPH_CANDIDATE_TYPES.has(subjectType) && subjectKey) return { kind, subjectType, subjectKey };
+  }
+  if (kind === 'entity') {
+    const [entityType, ...idParts] = parts;
+    const entityId = idParts.join(':');
+    if (GRAPH_ENTITY_TYPES.has(entityType) && entityId) return { kind, entityType, entityId };
+  }
+  throw new Error(`Invalid node ref: ${value}`);
+}
+
+function graphClaimLabel(claim) {
+  const value = typeof claim.value === 'string' ? claim.value : JSON.stringify(claim.value);
+  return `${claim.predicate} = ${String(value).slice(0, 60)}`;
+}
+
+function shortGraphKey(value) {
+  const text = String(value);
+  return text.length > 48 ? `${text.slice(0, 45)}...` : text;
+}
+
+function graphCollector(limit) {
+  const nodes = new Map();
+  const edges = new Map();
+  let truncated = false;
+  return {
+    node(node) {
+      if (nodes.has(node.ref)) {
+        if (node.data) {
+          const previous = nodes.get(node.ref);
+          nodes.set(node.ref, { ...previous, ...node, data: { ...(previous.data || {}), ...node.data } });
+        }
+        return;
+      }
+      if (nodes.size >= limit) { truncated = true; return; }
+      nodes.set(node.ref, node);
+    },
+    edge(edge) {
+      if (!nodes.has(edge.from) || !nodes.has(edge.to)) return;
+      edges.set(`${edge.from}|${edge.kind}|${edge.to}`, edge);
+    },
+    result(center) { return { center, nodes: [...nodes.values()], edges: [...edges.values()], truncated }; },
+  };
+}
+
+function addGraphClaim(collector, claim) {
+  const ref = `claim:${claim.id}`;
+  collector.node({ ref, kind: 'claim', label: graphClaimLabel(claim), data: publicClaim(claim) });
+  return ref;
+}
+
+function addGraphCandidate(collector, subjectType, subjectKey) {
+  const ref = `candidate:${subjectType}:${subjectKey}`;
+  collector.node({ ref, kind: 'candidate', label: shortGraphKey(subjectKey), data: { subjectType, subjectKey } });
+  return ref;
+}
+
+async function queryClaimsByObservation(tableName, observationId, limit) {
+  const result = await dynamodb.query({
+    TableName: tableName,
+    IndexName: OBSERVATION_INDEX,
+    KeyConditionExpression: 'GSI1PK = :pk',
+    ExpressionAttributeValues: { ':pk': `OBS#${observationId}` },
+    ScanIndexForward: true,
+    Limit: limit,
+  }).promise();
+  return result.Items || [];
+}
+
+async function queryClaimsBySubject(tableName, subjectType, subjectKey, limit) {
+  const result = await dynamodb.query({
+    TableName: tableName,
+    IndexName: SUBJECT_INDEX,
+    KeyConditionExpression: 'GSI2PK = :pk',
+    ExpressionAttributeValues: { ':pk': `SUBJECT#${subjectType}#${subjectKey}` },
+    ScanIndexForward: true,
+    Limit: limit,
+  }).promise();
+  return result.Items || [];
+}
+
+async function graphNeighborhood(tableName, event) {
+  const nodeText = event.queryStringParameters?.node;
+  if (!nodeText) return { status: 400, body: { error: 'node is required' } };
+  let ref;
+  try { ref = parseGraphNodeRef(nodeText); } catch (error) {
+    return { status: 400, body: { error: error.message } };
+  }
+  const limit = Math.min(Math.max(Number(event.queryStringParameters?.limit || 60), 5), 120);
+  const collector = graphCollector(limit);
+  const center = nodeText;
+
+  if (ref.kind === 'source') {
+    if (!KNOWN_SOURCE_IDS.has(ref.id)) return { status: 400, body: { error: 'valid Backline source node is required' } };
+    const [config, observations] = await Promise.all([
+      dynamodb.get({ TableName: tableName, Key: { pk: `SOURCE#${ref.id}`, sk: 'CONFIG' } }).promise(),
+      dynamodb.query({
+        TableName: tableName,
+        IndexName: OBSERVATION_INDEX,
+        KeyConditionExpression: 'GSI1PK = :pk AND begins_with(GSI1SK, :prefix)',
+        ExpressionAttributeValues: { ':pk': `SOURCE#${ref.id}`, ':prefix': 'OBS#' },
+        ScanIndexForward: false,
+        Limit: Math.min(limit, 20),
+      }).promise(),
+    ]);
+    collector.node({ ref: center, kind: 'source', label: config.Item?.name || ref.id, data: config.Item || undefined });
+    for (const observation of observations.Items || []) {
+      const observationRef = `obs:${observation.id}`;
+      collector.node({ ref: observationRef, kind: 'observation', label: observation.observedAt || observation.id, data: observation });
+      collector.edge({ from: center, to: observationRef, kind: 'PRODUCED' });
+    }
+  }
+
+  if (ref.kind === 'obs') {
+    const [observation, claims] = await Promise.all([
+      dynamodb.get({ TableName: tableName, Key: { pk: `OBS#${ref.id}`, sk: 'META' } }).promise(),
+      queryClaimsByObservation(tableName, ref.id, limit),
+    ]);
+    collector.node({ ref: center, kind: 'observation', label: observation.Item?.observedAt || ref.id, data: observation.Item || undefined });
+    if (observation.Item?.sourceId) {
+      const sourceRef = `source:${observation.Item.sourceId}`;
+      collector.node({ ref: sourceRef, kind: 'source', label: observation.Item.sourceId });
+      collector.edge({ from: sourceRef, to: center, kind: 'PRODUCED' });
+    }
+    for (const claim of claims) {
+      const claimRef = addGraphClaim(collector, claim);
+      collector.edge({ from: center, to: claimRef, kind: 'ASSERTS' });
+      if (claim.subject?.type && claim.subject?.key) {
+        const candidateRef = addGraphCandidate(collector, claim.subject.type, claim.subject.key);
+        collector.edge({ from: claimRef, to: candidateRef, kind: 'ABOUT' });
+      }
+    }
+  }
+
+  if (ref.kind === 'claim') {
+    const claimResult = await dynamodb.get({ TableName: tableName, Key: { pk: `CLAIM#${ref.id}`, sk: 'META' } }).promise();
+    const claim = claimResult.Item;
+    if (!claim) collector.node({ ref: center, kind: 'claim', label: ref.id });
+    else {
+      addGraphClaim(collector, claim);
+      const observationRef = `obs:${claim.observationId}`;
+      collector.node({ ref: observationRef, kind: 'observation', label: claim.observedAt || claim.observationId });
+      collector.edge({ from: observationRef, to: center, kind: 'ASSERTS' });
+      const sourceRef = `source:${claim.sourceId}`;
+      collector.node({ ref: sourceRef, kind: 'source', label: claim.sourceId });
+      collector.edge({ from: sourceRef, to: observationRef, kind: 'PRODUCED' });
+      if (claim.subject?.type && claim.subject?.key) {
+        const candidateRef = addGraphCandidate(collector, claim.subject.type, claim.subject.key);
+        collector.edge({ from: center, to: candidateRef, kind: 'ABOUT' });
+      }
+    }
+  }
+
+  if (ref.kind === 'candidate') {
+    addGraphCandidate(collector, ref.subjectType, ref.subjectKey);
+    const [claims, resolution] = await Promise.all([
+      queryClaimsBySubject(tableName, ref.subjectType, ref.subjectKey, limit),
+      dynamodb.get({
+        TableName: tableName,
+        Key: { pk: `RESOLUTION#${ref.subjectType.replace(/-candidate$/, '')}#${ref.subjectKey}`, sk: 'META' },
+      }).promise(),
+    ]);
+    for (const claim of claims) {
+      const claimRef = addGraphClaim(collector, claim);
+      collector.edge({ from: claimRef, to: center, kind: 'ABOUT' });
+      const observationRef = `obs:${claim.observationId}`;
+      collector.node({ ref: observationRef, kind: 'observation', label: claim.observedAt || claim.observationId });
+      collector.edge({ from: observationRef, to: claimRef, kind: 'ASSERTS' });
+      const value = claim.value;
+      const nativeId = value && typeof value === 'object' ? value.sourceNativeId : undefined;
+      const linkedType = claim.predicate === 'occursAt' ? 'venue-candidate'
+        : claim.predicate === 'hasPerformer' ? 'artist-candidate' : null;
+      if (linkedType && typeof nativeId === 'string' && nativeId) {
+        const linkedRef = addGraphCandidate(collector, linkedType, nativeId);
+        collector.edge({ from: center, to: linkedRef, kind: 'REFERENCES' });
+      }
+    }
+    const resolved = resolution.Item;
+    if (resolved) collector.node({
+      ref: center,
+      kind: 'candidate',
+      label: shortGraphKey(ref.subjectKey),
+      data: resolved,
+    });
+    if (resolved?.status === 'resolved' && resolved.canonicalEntityId) {
+      const entityType = resolved.candidateType;
+      const entityRef = `entity:${entityType}:${resolved.canonicalEntityId}`;
+      collector.node({ ref: entityRef, kind: 'entity', label: `${entityType} ${shortGraphKey(resolved.canonicalEntityId)}`, data: resolved });
+      collector.edge({ from: center, to: entityRef, kind: 'RESOLVES_TO' });
+    }
+  }
+
+  if (ref.kind === 'entity') {
+    collector.node({ ref: center, kind: 'entity', label: `${ref.entityType} ${shortGraphKey(ref.entityId)}` });
+    const supports = await dynamodb.query({
+      TableName: tableName,
+      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+      ExpressionAttributeValues: { ':pk': `ENTITY#${ref.entityType}#${ref.entityId}`, ':prefix': 'SUPPORT#' },
+      ScanIndexForward: true,
+      Limit: Math.min(limit, 30),
+    }).promise();
+    for (const support of supports.Items || []) {
+      if (!support.claimId) continue;
+      const claimResult = await dynamodb.get({ TableName: tableName, Key: { pk: `CLAIM#${support.claimId}`, sk: 'META' } }).promise();
+      const claim = claimResult.Item;
+      if (!claim) continue;
+      const claimRef = addGraphClaim(collector, claim);
+      collector.edge({ from: claimRef, to: center, kind: 'SUPPORTS' });
+      if (claim.subject?.type && claim.subject?.key) {
+        const candidateRef = addGraphCandidate(collector, claim.subject.type, claim.subject.key);
+        collector.edge({ from: claimRef, to: candidateRef, kind: 'ABOUT' });
+      }
+    }
+  }
+
+  return { status: 200, body: collector.result(center) };
 }
 
 function publicTask(task) {
@@ -527,19 +799,23 @@ function publicTrustLoopRun(item) {
 
 async function trustLoop(tableName, event) {
   const limit = Math.min(Math.max(Number(event.queryStringParameters?.limit || 5), 1), 20);
-  const result = await dynamodb.query({
-    TableName: tableName,
-    KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-    ExpressionAttributeValues: { ':pk': 'TRUST_LOOP', ':prefix': 'RUN#' },
-    ScanIndexForward: false,
-    Limit: limit,
-  }).promise();
+  const [result, projectionControl] = await Promise.all([
+    dynamodb.query({
+      TableName: tableName,
+      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+      ExpressionAttributeValues: { ':pk': 'TRUST_LOOP', ':prefix': 'RUN#' },
+      ScanIndexForward: false,
+      Limit: limit,
+    }).promise(),
+    getProjectionControl(tableName),
+  ]);
   return {
     status: 200,
     body: {
       runs: (result.Items || []).map(publicTrustLoopRun),
       readOnly: true,
-      canonicalWritesEnabled: false,
+      canonicalWritesEnabled: projectionControl.enabled,
+      projectionControl,
     },
   };
 }
@@ -569,6 +845,10 @@ exports.handle = async (event, action) => {
       const result = await observationDetail(tableName, event);
       return response(result.status, result.body);
     }
+    if (action === 'graph') {
+      const result = await graphNeighborhood(tableName, event);
+      return response(result.status, result.body);
+    }
     if (action === 'trust-loop') {
       const result = await trustLoop(tableName, event);
       return response(result.status, result.body);
@@ -580,4 +860,15 @@ exports.handle = async (event, action) => {
   }
 };
 
-exports.__test = { SOURCE_FAMILIES, resolveFamily, taskStats, currentTasks, taskLedgerStatus, publicRunMetric, publicTrustLoopRun };
+exports.__test = {
+  SOURCE_FAMILIES,
+  resolveFamily,
+  taskStats,
+  currentTasks,
+  taskLedgerStatus,
+  publicRunMetric,
+  publicTrustLoopRun,
+  parseGraphNodeRef,
+  graphClaimLabel,
+  shortGraphKey,
+};
