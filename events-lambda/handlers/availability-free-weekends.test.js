@@ -34,7 +34,7 @@ describe('GET /api/artists/:artistId/public-availability - Free Weekends Mode', 
   const createEvent = (artistId, queryStringParameters = {}) => ({
     pathParameters: { artistId },
     queryStringParameters,
-    headers: { origin: 'https://gigmap.bndy.co.uk' }
+    headers: { origin: 'https://bndy.live' }
   });
 
   const deps = {

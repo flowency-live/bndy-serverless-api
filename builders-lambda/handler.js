@@ -57,9 +57,9 @@ const ALLOWED_ORIGINS = [
   'https://backstage.bndy.co.uk',
   'https://bndy.co.uk',
   'https://live.bndy.co.uk',
-  'https://gigmap.bndy.co.uk',
-  'https://map.bndy.co.uk',       // Map (canonical)
   'https://gigs.bndy.co.uk',      // Gigs
+  'https://bndy.live',             // Public maps domain
+  'https://stage.bndy.live',       // Backstage domain
   'http://localhost:3000',
   'http://localhost:5173',
 ];
