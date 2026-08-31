@@ -1,23 +1,26 @@
 # BNDY SAM Route Inventory
 
-Generated: 2026-08-09T19:07:42.438Z
+Generated: 2026-08-30T17:37:53.908Z
 
 > Baseline only. This report does not change production behaviour. A missing event-level authorizer is reported from the SAM declaration; handler-level checks require separate review.
 
 ## Summary
 
-- Total routes: 208
-- Mutation routes: 127
-- Mutation routes without a declared event authorizer: 127
-- HTTP routes containing /mcp: 7
+- Total routes: 270
+- Mutation routes: 170
+- Mutation routes without a declared event authorizer: 170
+- HTTP routes containing /mcp: 10
 - Duplicate method/path declarations: 0
 
 ## Routes
 
 | Method | Path | Resource | Event | Declared authorizer | Baseline zone | Risk |
 |---|---|---|---|---|---|---|
+| GET | `/api/admin/claims` | ClaimsFunction | ListPendingClaims | None | public-read-review-required |  |
+| PATCH | `/api/admin/claims/{id}` | ClaimsFunction | ReviewClaim | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/artists` | ArtistsFunction | GetAllArtists | None | public-read-review-required |  |
 | POST | `/api/artists` | ArtistsFunction | CreateArtist | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/artists/{artistId}/availability` | EventsFunction | GetManagedAvailability | None | public-read-review-required |  |
 | GET | `/api/artists/{artistId}/calendar` | CalendarFunction | GetArtistCalendar | None | public-read-review-required |  |
 | POST | `/api/artists/{artistId}/calendar/subscribe` | CalendarFunction | CreateCalendarSubscription | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/artists/{artistId}/calendar/subscriptions` | CalendarFunction | GetCalendarSubscriptions | None | public-read-review-required |  |
@@ -86,13 +89,17 @@ Generated: 2026-08-09T19:07:42.438Z
 | DELETE | `/api/artists/{id}` | ArtistsFunction | DeleteArtist | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/artists/{id}` | ArtistsFunction | GetArtistById | None | public-read-review-required |  |
 | PUT | `/api/artists/{id}` | ArtistsFunction | UpdateArtist | None | admin | unauthenticated-mutation-declared-in-sam |
+| PATCH | `/api/artists/{id}/enrichment` | ArtistsFunction | ArtistEnrichmentAction | None | admin | unauthenticated-mutation-declared-in-sam |
 | DELETE | `/api/artists/{id}/mcp` | ArtistsFunction | DeleteArtistMcp | None | deprecated | unauthenticated-mutation-declared-in-sam |
 | PUT | `/api/artists/{id}/mcp` | ArtistsFunction | UpdateArtistMcp | None | deprecated | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/artists/{id}/profile` | ArtistsFunction | GetOwnedArtistProfile | None | public-read-review-required |  |
+| PATCH | `/api/artists/{id}/profile` | ArtistsFunction | UpdateOwnedArtistProfile | None | admin | unauthenticated-mutation-declared-in-sam |
 | POST | `/api/artists/{id}/refresh-facebook-image` | ArtistsFunction | RefreshFacebookImage | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/artists/by-external-id` | ArtistsFunction | GetArtistByExternalId | None | public-read-review-required |  |
 | GET | `/api/artists/check-name` | ArtistsFunction | CheckArtistName | None | public-read-review-required |  |
 | POST | `/api/artists/community` | ArtistsFunction | CreateCommunityArtist | None | admin | unauthenticated-mutation-declared-in-sam |
 | POST | `/api/artists/find-or-create` | ArtistsFunction | FindOrCreateArtist | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/artists/find-or-create/mcp` | ArtistsFunction | FindOrCreateArtistMcp | None | deprecated | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/artists/list` | ArtistsFunction | ListArtistsMcp | None | public-read-review-required |  |
 | GET | `/api/artists/search` | ArtistsFunction | SearchArtists | None | public-read-review-required |  |
 | GET | `/api/builders` | BuildersFunction | GetMyBuilders | None | public-read-review-required |  |
@@ -106,11 +113,34 @@ Generated: 2026-08-09T19:07:42.438Z
 | PUT | `/api/builders/{id}/venues/{venueId}` | BuildersFunction | UpdateBuilderVenue | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/builders/by-subdomain/{slug}` | BuildersFunction | GetBuilderBySubdomain | None | public-read-review-required |  |
 | GET | `/api/calendar/ical/{token}` | CalendarFunction | GetCalendarIcal | None | public-read-review-required |  |
+| POST | `/api/claims` | ClaimsFunction | CreateClaim | None | admin | unauthenticated-mutation-declared-in-sam |
+| DELETE | `/api/claims/{id}` | ClaimsFunction | CancelClaim | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/claims/me` | ClaimsFunction | GetMyClaims | None | public-read-review-required |  |
 | POST | `/api/community/artists/find-or-create` | ArtistsFunction | CommunityFindOrCreateArtist | None | admin | unauthenticated-mutation-declared-in-sam |
 | POST | `/api/community/events` | EventsFunction | CommunityCreateEvent | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/community/flags` | UsersFunction | CreateCommunityFlag | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/community/places/autocomplete` | VenuesFunction | CommunityPlacesAutocomplete | None | public-read-review-required |  |
 | GET | `/api/community/places/details` | VenuesFunction | CommunityPlacesDetails | None | public-read-review-required |  |
 | POST | `/api/community/venues/find-or-create` | VenuesFunction | CommunityFindOrCreateVenue | None | admin | unauthenticated-mutation-declared-in-sam |
+| PUT | `/api/curator/artists/{id}` | ArtistsFunction | CuratorUpdateArtist | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/curator/artists/{id}/hide` | ArtistsFunction | CuratorHideArtist | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/curator/artists/{id}/restore` | ArtistsFunction | CuratorRestoreArtist | None | admin | unauthenticated-mutation-declared-in-sam |
+| PUT | `/api/curator/events/{id}` | EventsCuratorFunction | CuratorUpdateEvent | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/curator/events/{id}/cancel` | EventsCuratorFunction | CuratorCancelEvent | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/curator/events/{id}/hide` | EventsCuratorFunction | CuratorHideEvent | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/curator/events/{id}/restore` | EventsCuratorFunction | CuratorRestoreEvent | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/curator/events/{id}/uncancel` | EventsCuratorFunction | CuratorUncancelEvent | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/curator/events/festival-tag` | EventsCuratorFunction | CuratorFestivalTag | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/curator/festivals` | FestivalsFunction | CuratorCreateFestival | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/curator/festivals/{id}` | FestivalsFunction | CuratorGetFestival | None | public-read-review-required |  |
+| PATCH | `/api/curator/festivals/{id}` | FestivalsFunction | CuratorUpdateFestival | None | admin | unauthenticated-mutation-declared-in-sam |
+| PUT | `/api/curator/venues/{id}` | VenuesFunction | CuratorUpdateVenue | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/curator/venues/{id}/hide` | VenuesFunction | CuratorHideVenue | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/curator/venues/{id}/restore` | VenuesFunction | CuratorRestoreVenue | None | admin | unauthenticated-mutation-declared-in-sam |
+| DELETE | `/api/entity-invites/{token}` | EntityInvitesFunction | RevokeEntityInvite | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/entity-invites/{token}` | EntityInvitesFunction | GetEntityInvite | None | public-read-review-required |  |
+| POST | `/api/entity-invites/{token}/accept` | EntityInvitesFunction | AcceptEntityInvite | None | admin | unauthenticated-mutation-declared-in-sam |
+| PATCH | `/api/entity-memberships/{id}` | EntityMembershipsFunction | UpdateEntityMembership | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/events` | EventsFunction | GetAllEvents | None | public-read-review-required |  |
 | POST | `/api/events` | EventsFunction | CreateEvent | None | admin | unauthenticated-mutation-declared-in-sam |
 | DELETE | `/api/events/{id}` | EventsFunction | DeleteEvent | None | admin | unauthenticated-mutation-declared-in-sam |
@@ -122,8 +152,11 @@ Generated: 2026-08-09T19:07:42.438Z
 | POST | `/api/events/batch` | EventsFunction | BatchEventsWithJoins | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/events/by-external-id` | EventsFunction | GetEventByExternalId | None | public-read-review-required |  |
 | POST | `/api/events/community` | EventsFunction | CreateCommunityEvent | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/events/community/mcp` | EventsFunction | CreateCommunityEventMcp | None | deprecated | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/events/public` | EventsFunction | GetPublicEvents | None | public-read-review-required |  |
 | GET | `/api/events/public/geo` | EventsFunction | GetPublicEventsGeo | None | public-read-review-required |  |
+| GET | `/api/festivals/{id}` | FestivalsFunction | GetFestival | None | public-read-review-required |  |
+| GET | `/api/festivals/{id}/events` | FestivalsFunction | GetFestivalEvents | None | public-read-review-required |  |
 | GET | `/api/festivals/by-external-id` | FestivalsFunction | GetFestivalByExternalId | None | public-read-review-required |  |
 | GET | `/api/festivals/public` | FestivalsFunction | GetPublicFestivals | None | public-read-review-required |  |
 | GET | `/api/festivals/slug/{slug}` | FestivalsFunction | GetFestivalBySlug | None | public-read-review-required |  |
@@ -150,6 +183,15 @@ Generated: 2026-08-09T19:07:42.438Z
 | DELETE | `/api/issues/{id}` | IssuesFunction | DeleteIssue | None | admin | unauthenticated-mutation-declared-in-sam |
 | PUT | `/api/issues/{id}` | IssuesFunction | UpdateIssue | None | admin | unauthenticated-mutation-declared-in-sam |
 | POST | `/api/issues/batch` | IssuesFunction | CreateIssuesBatch | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/join/analytics` | JoinAnalyticsFunction | RecordJoinAnalytics | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/join/artists` | ArtistsFunction | JoinArtist | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/join/venues` | VenuesFunction | JoinVenue | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/managed-entities/{entityType}/{id}/relinquish` | OwnershipFunction | RelinquishManagedEntity | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/managed-entities/{id}/invites` | EntityInvitesFunction | CreateManagedEntityInvite | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/managed-entities/{id}/members` | EntityMembershipsFunction | ListManagedEntityMembers | None | public-read-review-required |  |
+| POST | `/api/managed-entities/{id}/members` | EntityMembershipsFunction | AddManagedEntityMember | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/managed-entities/{id}/transfer` | EntityMembershipsFunction | TransferManagedEntity | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/managed-entities/me` | EntityMembershipsFunction | ListMyManagedEntities | None | public-read-review-required |  |
 | GET | `/api/me` | AuthFunction | GetMe | None | public-read-review-required |  |
 | POST | `/api/memberships` | MembershipsFunction | CreateMembership | None | admin | unauthenticated-mutation-declared-in-sam |
 | DELETE | `/api/memberships/{membershipId}` | MembershipsFunction | DeleteMembership | None | admin | unauthenticated-mutation-declared-in-sam |
@@ -184,25 +226,38 @@ Generated: 2026-08-09T19:07:42.438Z
 | GET | `/api/source-runs/summaries` | SourceRunsFunc | B | None | public-read-review-required |  |
 | GET | `/api/source-runs/timeseries` | SourceRunsFunc | Timeseries | None | public-read-review-required |  |
 | GET | `/api/spotify/search` | SpotifyFunction | SpotifySearch | None | public-read-review-required |  |
+| POST | `/api/uploads/presigned-url` | UploadsFunction | ApiGetPresignedUrl | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/users/favourites` | UsersFunction | ApiGetUserFavourites | None | public-read-review-required |  |
+| POST | `/api/users/favourites/toggle` | UsersFunction | ApiToggleUserFavourite | None | admin | unauthenticated-mutation-declared-in-sam |
 | POST | `/api/users/me/unavailability` | CalendarFunction | CreateUserUnavailability | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/users/profile` | UsersFunction | ApiGetUserProfile | None | public-read-review-required |  |
+| PUT | `/api/users/profile` | UsersFunction | ApiUpdateUserProfile | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/venue-crm` | VenueCRMFunction | GetVenueCRM | None | public-read-review-required |  |
 | POST | `/api/venue-crm` | VenueCRMFunction | CreateVenueCRM | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/venue-groups` | VenuesFunction | ListVenueGroups | None | public-read-review-required |  |
+| POST | `/api/venue-groups` | VenuesFunction | CreateVenueGroup | None | admin | unauthenticated-mutation-declared-in-sam |
+| PUT | `/api/venue-groups/{id}` | VenuesFunction | UpdateVenueGroup | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/api/venue-groups/{slug}` | VenuesFunction | GetVenueGroup | None | public-read-review-required |  |
 | GET | `/api/venues` | VenuesFunction | GetAllVenues | None | public-read-review-required |  |
 | POST | `/api/venues` | VenuesFunction | CreateVenue | None | admin | unauthenticated-mutation-declared-in-sam |
 | DELETE | `/api/venues/{id}` | VenuesFunction | DeleteVenue | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/venues/{id}` | VenuesFunction | GetVenueById | None | public-read-review-required |  |
 | PUT | `/api/venues/{id}` | VenuesFunction | UpdateVenue | None | admin | unauthenticated-mutation-declared-in-sam |
 | POST | `/api/venues/{id}/enrich` | VenuesFunction | EnrichVenueMcp | None | admin | unauthenticated-mutation-declared-in-sam |
+| PATCH | `/api/venues/{id}/enrichment` | VenuesFunction | VenueEnrichmentAction | None | admin | unauthenticated-mutation-declared-in-sam |
+| PUT | `/api/venues/{id}/group` | VenuesFunction | SetVenueGroup | None | admin | unauthenticated-mutation-declared-in-sam |
 | DELETE | `/api/venues/{id}/mcp` | VenuesFunction | DeleteVenueMcp | None | deprecated | unauthenticated-mutation-declared-in-sam |
 | PUT | `/api/venues/{id}/mcp` | VenuesFunction | UpdateVenueMcp | None | deprecated | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/venues/{venueId}/events` | EventsFunction | GetVenueEvents | None | public-read-review-required |  |
 | GET | `/api/venues/by-external-id` | VenuesFunction | GetVenueByExternalId | None | public-read-review-required |  |
 | POST | `/api/venues/find-or-create` | VenuesFunction | FindOrCreateVenue | None | admin | unauthenticated-mutation-declared-in-sam |
+| POST | `/api/venues/find-or-create/mcp` | VenuesFunction | FindOrCreateVenueMcp | None | deprecated | unauthenticated-mutation-declared-in-sam |
 | GET | `/api/venues/list` | VenuesFunction | ListVenuesMcp | None | public-read-review-required |  |
 | GET | `/auth/apple` | AuthFunction | AppleOAuthInit | None | public-read-review-required |  |
 | GET | `/auth/callback` | AuthFunction | OAuthCallback | None | public-read-review-required |  |
 | POST | `/auth/check-identity` | AuthFunction | CheckIdentity | None | admin | unauthenticated-mutation-declared-in-sam |
 | POST | `/auth/email/request-magic` | AuthFunction | EmailRequestMagic | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/auth/facebook` | AuthFunction | FacebookOAuthInit | None | public-read-review-required |  |
 | GET | `/auth/facebook/callback` | AuthFunction | FacebookAuth | None | public-read-review-required |  |
 | GET | `/auth/google` | AuthFunction | GoogleOAuthInit | None | public-read-review-required |  |
 | GET | `/auth/google/callback` | AuthFunction | GoogleAuth | None | public-read-review-required |  |
@@ -222,6 +277,13 @@ Generated: 2026-08-09T19:07:42.438Z
 | DELETE | `/users/{userId}` | UsersFunction | DeleteUser | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/users/{userId}` | UsersFunction | GetUserById | None | public-read-review-required |  |
 | PUT | `/users/{userId}` | UsersFunction | UpdateUser | None | admin | unauthenticated-mutation-declared-in-sam |
+| PUT | `/users/{userId}/role` | UsersFunction | SetUserRole | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/users/activity` | UsersFunction | GetUserActivity | None | public-read-review-required |  |
+| GET | `/users/activity/all` | UsersFunction | GetAllUserActivity | None | public-read-review-required |  |
+| GET | `/users/favourites` | UsersFunction | GetUserFavourites | None | public-read-review-required |  |
+| POST | `/users/favourites/toggle` | UsersFunction | ToggleUserFavourite | None | admin | unauthenticated-mutation-declared-in-sam |
+| GET | `/users/flags` | UsersFunction | GetFlags | None | public-read-review-required |  |
+| PUT | `/users/flags/{flagId}/resolve` | UsersFunction | ResolveFlag | None | admin | unauthenticated-mutation-declared-in-sam |
 | GET | `/users/profile` | UsersFunction | GetUserProfile | None | public-read-review-required |  |
 | PUT | `/users/profile` | UsersFunction | UpdateUserProfile | None | admin | unauthenticated-mutation-declared-in-sam |
 

@@ -347,6 +347,7 @@ async function handleAnalytics(event) {
 }
 
 module.exports = {
+  requirePlatformAdmin,
   handleAnalytics,
   handleSetCuratorAccess,
   handleRecordCuratorCreation,

@@ -22,14 +22,12 @@ function jsonResponse(event, statusCode, data, options) {
     'Content-Type': 'application/json',
     ...corsHeaders
   };
+  // CRITICAL: API Gateway handles CORS with dynamic origin selection. Caches MUST
+  // vary by Origin so each origin gets the correct Access-Control-Allow-Origin header.
+  // Without this, backstage.bndy.co.uk can receive a cached response meant for map.bndy.co.uk.
   if (cacheControl) {
     headers['Cache-Control'] = cacheControl;
-    // CRITICAL: When caching and using dynamic CORS origin, Vary: Origin ensures
-    // the cache serves the correct response for each origin (fixes CORS failures
-    // where gigmap.bndy.co.uk's cached response was served to backstage.bndy.co.uk)
-    if (corsHeaders['Access-Control-Allow-Origin']) {
-      headers['Vary'] = 'Origin, Accept-Encoding';
-    }
+    headers['Vary'] = 'Origin, Accept-Encoding';
   }
 
   if (statusCode === 200 && Buffer.byteLength(body) >= MIN_COMPRESS_BYTES && acceptsGzip(event)) {
@@ -38,7 +36,9 @@ function jsonResponse(event, statusCode, data, options) {
       headers: {
         ...headers,
         'Content-Encoding': 'gzip',
-        'Vary': 'Accept-Encoding'
+        // Always tell caches to vary by encoding for gzipped responses.
+        // If cacheControl was set, Vary already includes Origin; otherwise just Accept-Encoding.
+        'Vary': cacheControl ? 'Origin, Accept-Encoding' : 'Accept-Encoding'
       },
       body: zlib.gzipSync(body).toString('base64'),
       isBase64Encoded: true

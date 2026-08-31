@@ -57,6 +57,16 @@ describe('jsonResponse', () => {
     expect(res.headers['Cache-Control']).toBe('public, max-age=60');
   });
 
+  it('preserves Vary: Origin when gzipping with CORS and cacheControl', () => {
+    // Regression test: gzipped responses must include Vary: Origin when CORS is used,
+    // otherwise browsers cache responses per-origin incorrectly (map.bndy.co.uk gets
+    // backstage.bndy.co.uk's cached response with wrong Access-Control-Allow-Origin)
+    const res = jsonResponse(gzipEvent, 200, bigData, { corsHeaders: cors, cacheControl: 'public, max-age=300' });
+    expect(res.isBase64Encoded).toBe(true);
+    expect(res.headers['Content-Encoding']).toBe('gzip');
+    expect(res.headers['Vary']).toBe('Origin, Accept-Encoding');
+  });
+
   it('omits Cache-Control when not provided', () => {
     const res = jsonResponse(gzipEvent, 200, { ok: true }, { corsHeaders: cors });
     expect(res.headers['Cache-Control']).toBeUndefined();

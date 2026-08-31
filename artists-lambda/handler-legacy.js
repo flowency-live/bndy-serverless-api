@@ -134,9 +134,9 @@ const ALLOWED_ORIGINS = [
   'https://backstage.bndy.co.uk', // Legacy domain
   'https://bndy.co.uk',            // Apex domain
   'https://live.bndy.co.uk',      // Frontstage
-  'https://gigmap.bndy.co.uk',    // GigMap
-  'https://map.bndy.co.uk',       // Map (canonical)
   'https://gigs.bndy.co.uk',      // Gigs
+  'https://bndy.live',             // Public maps domain
+  'https://stage.bndy.live',       // Backstage domain
   'http://localhost:3000'          // Local development
 ];
 
