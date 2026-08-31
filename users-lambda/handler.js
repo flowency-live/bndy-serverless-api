@@ -11,6 +11,7 @@ const AWS = require('aws-sdk');
 const jwt = require('jsonwebtoken');
 const legacy = require('./handler-legacy');
 const godmodeAccess = require('./lib/godmode-access');
+const captureReviews = require('./lib/capture-reviews');
 const {
   GENRES,
   ARTIST_TYPES,
@@ -333,6 +334,10 @@ async function handleGigFilterUpdate(event, context, body) {
 exports.handler = async (event, context) => {
   const method = methodOf(event).toUpperCase();
   const path = pathOf(event);
+
+  if (path === '/api/admin/captures' || path.startsWith('/api/admin/captures/')) {
+    return captureReviews.handle(event);
+  }
 
   // These use existing API Gateway parameterised routes, so no SAM route
   // changes are needed: /users/analytics matches GET /users/{userId}, and the

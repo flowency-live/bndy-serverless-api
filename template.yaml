@@ -1270,6 +1270,8 @@ Resources:
       Environment:
         Variables:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+          CAPTURE_API_BASE: https://capture.bndy.co.uk
+          CAPTURE_TOKEN: '{{resolve:secretsmanager:bndy/capture-service:SecretString:token}}'
       Events:
         GetUserById:
           Type: HttpApi
@@ -1379,6 +1381,24 @@ Resources:
           Properties:
             ApiId: !Ref BndyHttpApi
             Path: /api/users/favourites/toggle
+            Method: POST
+        ListCaptureReviews:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/admin/captures
+            Method: GET
+        GetCaptureReview:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/admin/captures/{id}
+            Method: GET
+        ReviewCaptureSubmission:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/admin/captures/{id}/review
             Method: POST
 
   # Memberships Lambda

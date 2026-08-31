@@ -72,6 +72,7 @@ const MUTATION_ROUTE_BASELINE = {
   'POST /api/claims': 'handler-auth',
   'DELETE /api/claims/{id}': 'handler-auth',
   'PATCH /api/admin/claims/{id}': 'handler-auth',
+  'POST /api/admin/captures/{id}/review': 'handler-auth',
   'POST /api/managed-entities/{id}/members': 'handler-auth',
   'PATCH /api/entity-memberships/{id}': 'handler-auth',
   'POST /api/managed-entities/{id}/transfer': 'handler-auth',
