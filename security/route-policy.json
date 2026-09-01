@@ -41,6 +41,16 @@
       "authentication": "not-public-api",
       "allowedMethods": [],
       "description": "Non-API or direct invocation only"
+    },
+    "authenticated-user": {
+      "authentication": "handler-auth",
+      "allowedMethods": ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+      "description": "User-facing routes protected by the bndy session inside the Lambda handler"
+    },
+    "oauth-callback": {
+      "authentication": "opaque-one-time-state",
+      "allowedMethods": ["GET", "OPTIONS"],
+      "description": "OAuth callback protected by a short-lived, one-time, server-stored state value"
     }
   },
   "classificationRules": [
@@ -80,6 +90,30 @@
     { "method": "POST", "path": "/api/ai/events/find-or-create" }
   ],
   "explicitRoutes": [
+    {
+      "method": "GET",
+      "path": "/api/claims/facebook/status",
+      "zone": "authenticated-user",
+      "reason": "Reports whether the fail-closed Facebook Page verification capability is configured for a signed-in user.",
+      "addedBy": "JOIN-16",
+      "addedDate": "2026-08-31"
+    },
+    {
+      "method": "GET",
+      "path": "/api/claims/facebook/start",
+      "zone": "authenticated-user",
+      "reason": "Starts a Page-only Meta OAuth flow bound to the signed-in user and selected entity.",
+      "addedBy": "JOIN-16",
+      "addedDate": "2026-08-31"
+    },
+    {
+      "method": "GET",
+      "path": "/api/claims/facebook/callback",
+      "zone": "oauth-callback",
+      "reason": "Consumes one-time OAuth state, exchanges the code server-side and returns only sanitised managed Page evidence.",
+      "addedBy": "JOIN-16",
+      "addedDate": "2026-08-31"
+    },
     {
       "method": "POST",
       "path": "/api/community/source/inspect",

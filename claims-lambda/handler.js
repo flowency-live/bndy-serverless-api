@@ -4,10 +4,17 @@ const crypto = require('crypto');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 const ssm = new AWS.SSM({ region: 'eu-west-2' });
+const secretsManager = new AWS.SecretsManager({ region: 'eu-west-2' });
+const facebookVerification = require('./facebook-page-verification');
 const CLAIMS_TABLE = process.env.ENTITY_CLAIMS_TABLE || 'bndy-entity-claims';
 const ENTITY_MEMBERSHIPS_TABLE = process.env.ENTITY_MEMBERSHIPS_TABLE || 'bndy-entity-memberships';
 const ARTIST_MEMBERSHIPS_TABLE = 'bndy-artist-memberships';
+const OAUTH_STATE_TABLE = process.env.OAUTH_STATE_TABLE || 'bndy-oauth-states';
+const FACEBOOK_SECRET_ID = process.env.FACEBOOK_META_SECRET_ID || 'bndy/meta-page-verification';
+const FACEBOOK_CALLBACK_URI = process.env.FACEBOOK_PAGE_CALLBACK_URI || 'https://bndy.live/api/claims/facebook/callback';
+const FACEBOOK_GRAPH_API_VERSION = process.env.FACEBOOK_GRAPH_API_VERSION || 'v26.0';
 let JWT_SECRET = null;
+let FACEBOOK_CONFIG = null;
 
 async function getJWTSecret() {
   if (JWT_SECRET) return JWT_SECRET;
@@ -18,6 +25,26 @@ async function getJWTSecret() {
   } catch (error) {
     if (process.env.JWT_SECRET) { JWT_SECRET = process.env.JWT_SECRET; return JWT_SECRET; }
     throw error;
+  }
+}
+
+async function getFacebookConfig() {
+  if (process.env.FACEBOOK_PAGE_VERIFICATION_ENABLED !== 'true') return null;
+  if (FACEBOOK_CONFIG) return FACEBOOK_CONFIG;
+  if (!/^v\d+\.\d+$/.test(FACEBOOK_GRAPH_API_VERSION)) return null;
+  try {
+    const callback = new URL(FACEBOOK_CALLBACK_URI);
+    if (callback.protocol !== 'https:' || callback.origin !== 'https://bndy.live') return null;
+    const result = await secretsManager.getSecretValue({ SecretId: FACEBOOK_SECRET_ID }).promise();
+    const secret = JSON.parse(result.SecretString || '{}');
+    const appId = String(secret.app_id || '').trim();
+    const appSecret = String(secret.app_secret || '').trim();
+    if (!/^\d+$/.test(appId) || !appSecret) return null;
+    FACEBOOK_CONFIG = { appId, appSecret, callbackUri: callback.toString(), graphApiVersion: FACEBOOK_GRAPH_API_VERSION };
+    return FACEBOOK_CONFIG;
+  } catch (error) {
+    console.warn('[CLAIMS] Facebook Page verification configuration is unavailable:', error.code || error.name || 'configuration_error');
+    return null;
   }
 }
 
@@ -59,6 +86,20 @@ function response(statusCode, body) {
   return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
 
+function htmlResponse(statusCode, body) {
+  return {
+    statusCode,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
+    },
+    body,
+  };
+}
+
 function parseBody(event) {
   if (!event.body) return {};
   return typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
@@ -72,6 +113,180 @@ function entityTable(entityType) {
 
 function claimId(userId, entityType, entityId) {
   return `claim-${crypto.createHash('sha256').update(`${userId}|${entityType}|${entityId}`).digest('hex').slice(0, 28)}`;
+}
+
+async function putOAuthRecord(item) {
+  await dynamodb.put({
+    TableName: OAUTH_STATE_TABLE,
+    Item: item,
+    ConditionExpression: 'attribute_not_exists(#state)',
+    ExpressionAttributeNames: { '#state': 'state' },
+  }).promise();
+}
+
+async function consumeOAuthState(state) {
+  if (typeof state !== 'string' || state.length < 32 || state.length > 200) return null;
+  try {
+    const result = await dynamodb.delete({
+      TableName: OAUTH_STATE_TABLE,
+      Key: { state },
+      ConditionExpression: 'record_kind = :kind AND ttl >= :now',
+      ExpressionAttributeValues: {
+        ':kind': 'facebook_page_oauth_state',
+        ':now': Math.floor(Date.now() / 1000),
+      },
+      ReturnValues: 'ALL_OLD',
+    }).promise();
+    return result.Attributes || null;
+  } catch (error) {
+    if (error.code === 'ConditionalCheckFailedException') return null;
+    throw error;
+  }
+}
+
+async function getFacebookReceipt(receiptId) {
+  const state = `facebook-page-receipt#${receiptId}`;
+  const result = await dynamodb.get({ TableName: OAUTH_STATE_TABLE, Key: { state } }).promise();
+  const record = result.Item;
+  if (!record || record.record_kind !== 'facebook_page_receipt' || record.ttl < Math.floor(Date.now() / 1000)) return null;
+  return record;
+}
+
+async function consumeFacebookReceipt(receiptId) {
+  const state = `facebook-page-receipt#${receiptId}`;
+  try {
+    const result = await dynamodb.delete({
+      TableName: OAUTH_STATE_TABLE,
+      Key: { state },
+      ConditionExpression: 'record_kind = :kind AND ttl >= :now',
+      ExpressionAttributeValues: {
+        ':kind': 'facebook_page_receipt',
+        ':now': Math.floor(Date.now() / 1000),
+      },
+      ReturnValues: 'ALL_OLD',
+    }).promise();
+    return result.Attributes || null;
+  } catch (error) {
+    if (error.code === 'ConditionalCheckFailedException') return null;
+    throw error;
+  }
+}
+
+async function parseMetaResponse(metaResponse) {
+  const body = await metaResponse.json().catch(() => ({}));
+  if (!metaResponse.ok) {
+    throw Object.assign(new Error('Facebook did not complete Page verification.'), { code: 'META_REQUEST_FAILED' });
+  }
+  return body;
+}
+
+async function getManagedFacebookPages(config, accessToken) {
+  const proof = facebookVerification.appSecretProof(config.appSecret, accessToken);
+  let after = null;
+  const pages = [];
+  for (let requestCount = 0; requestCount < 5 && pages.length < 100; requestCount += 1) {
+    const url = new URL(`https://graph.facebook.com/${config.graphApiVersion}/me/accounts`);
+    url.searchParams.set('fields', 'id,name,tasks');
+    url.searchParams.set('limit', '100');
+    url.searchParams.set('appsecret_proof', proof);
+    if (after) url.searchParams.set('after', after);
+    const graphResponse = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const graphBody = await parseMetaResponse(graphResponse);
+    pages.push(...facebookVerification.sanitisePages(graphBody.data));
+    after = graphBody?.paging?.cursors?.after || null;
+    if (!after || !graphBody?.paging?.next) break;
+  }
+  return facebookVerification.sanitisePages(pages);
+}
+
+async function facebookVerificationStatus(event) {
+  const auth = await requireAuth(event);
+  if (auth.error) return response(auth.statusCode, { error: auth.error, code: 'AUTH_REQUIRED' });
+  return response(200, { available: Boolean(await getFacebookConfig()) });
+}
+
+async function startFacebookVerification(event) {
+  const auth = await requireAuth(event);
+  if (auth.error) return response(auth.statusCode, { error: auth.error, code: 'AUTH_REQUIRED' });
+  const query = event.queryStringParameters || {};
+  const entity = facebookVerification.normaliseEntity(query.entityType, query.entityId);
+  const targetOrigin = facebookVerification.validateTargetOrigin(query.targetOrigin);
+  if (!entity || !targetOrigin) return response(400, { error: 'A valid entity and bndy return origin are required.', code: 'INVALID_FACEBOOK_PAGE_REQUEST' });
+  const config = await getFacebookConfig();
+  if (!config) return response(503, { error: 'Facebook Page verification is not available.', code: 'FACEBOOK_PAGE_VERIFICATION_UNAVAILABLE' });
+
+  const table = entityTable(entity.entityType);
+  const entityResult = await dynamodb.get({ TableName: table, Key: { id: entity.entityId } }).promise();
+  if (!entityResult.Item) return response(404, { error: 'Entity not found', code: 'ENTITY_NOT_FOUND' });
+
+  const state = facebookVerification.generateOpaqueState();
+  await putOAuthRecord(facebookVerification.stateRecord({
+    state,
+    userId: auth.user.userId,
+    entityType: entity.entityType,
+    entityId: entity.entityId,
+    targetOrigin,
+    callbackUri: config.callbackUri,
+  }));
+
+  const authUrl = new URL(`https://www.facebook.com/${config.graphApiVersion}/dialog/oauth`);
+  authUrl.searchParams.set('client_id', config.appId);
+  authUrl.searchParams.set('redirect_uri', config.callbackUri);
+  authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('scope', 'pages_show_list');
+  authUrl.searchParams.set('auth_type', 'rerequest');
+  authUrl.searchParams.set('display', 'popup');
+  return { statusCode: 302, headers: { Location: authUrl.toString(), 'Cache-Control': 'no-store' }, body: '' };
+}
+
+async function finishFacebookVerification(event) {
+  const query = event.queryStringParameters || {};
+  const stateRecord = await consumeOAuthState(query.state);
+  const targetOrigin = stateRecord?.target_origin || 'https://bndy.live';
+  const failure = (message) => htmlResponse(200, facebookVerification.callbackHtml(targetOrigin, { ok: false, error: message }));
+  if (!stateRecord) return failure('This Facebook verification request expired. Return to bndy and try again.');
+  if (query.error || !query.code) return failure('Facebook Page verification was cancelled. You can use manual evidence instead.');
+  const config = await getFacebookConfig();
+  if (!config || stateRecord.callback_uri !== config.callbackUri) return failure('Facebook Page verification is not available.');
+
+  try {
+    const tokenResponse = await fetch(`https://graph.facebook.com/${config.graphApiVersion}/oauth/access_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: config.appId,
+        client_secret: config.appSecret,
+        redirect_uri: config.callbackUri,
+        code: query.code,
+      }),
+    });
+    const tokenBody = await parseMetaResponse(tokenResponse);
+    const accessToken = String(tokenBody.access_token || '');
+    if (!accessToken) throw Object.assign(new Error('Facebook returned no access token.'), { code: 'META_TOKEN_MISSING' });
+    const pages = await getManagedFacebookPages(config, accessToken);
+    const receiptId = facebookVerification.generateReceiptId();
+    const jwtSecret = await getJWTSecret();
+    const receipt = facebookVerification.signReceipt({
+      receiptId,
+      userId: stateRecord.user_id,
+      entityType: stateRecord.entity_type,
+      entityId: stateRecord.entity_id,
+      pages,
+      secret: jwtSecret,
+    });
+    await putOAuthRecord(facebookVerification.receiptRecord({
+      receiptId,
+      userId: stateRecord.user_id,
+      entityType: stateRecord.entity_type,
+      entityId: stateRecord.entity_id,
+      pages,
+    }));
+    return htmlResponse(200, facebookVerification.callbackHtml(targetOrigin, { ok: true, pages, receipt }));
+  } catch (error) {
+    console.warn('[CLAIMS] Facebook Page verification failed:', error.code || error.name || 'meta_error');
+    return failure('Facebook did not complete Page verification. Return to bndy and try again.');
+  }
 }
 
 async function createClaim(event) {
@@ -106,20 +321,44 @@ async function createClaim(event) {
   if (verificationMethod === 'manual' && !relationshipExplanation) {
     return response(400, { error: 'Tell us how you are connected to this artist or venue.', code: 'EVIDENCE_REQUIRED' });
   }
-  if (verificationMethod === 'facebook_page') {
-    // Never trust client-supplied Page-control assertions. This method remains
-    // closed until a server-side Meta verification flow issues the evidence.
-    return response(409, { error: 'Facebook Page verification is not available until Meta Page access is approved.', code: 'FACEBOOK_PAGE_VERIFICATION_UNAVAILABLE' });
-  }
 
   const now = new Date().toISOString();
-  const evidenceItem = {
-    evidence_id: crypto.randomUUID(), method: 'manual_explanation', status: 'submitted', strength: 'weak',
-    observed_at: now, verifier: null, public_reference: supportingUrl || null,
-    metadata: { explanation: relationshipExplanation, official_email: officialEmail || null }
-  };
+  let evidenceItem;
+  let facebookReceiptId = null;
+  if (verificationMethod === 'facebook_page') {
+    const receiptToken = String(body.facebookVerificationReceipt || '');
+    const selectedPageId = String(body.facebookEvidence?.verifiedPageId || '').trim();
+    if (!receiptToken || !selectedPageId) {
+      return response(400, { error: 'Connect Facebook and choose a managed Page first.', code: 'FACEBOOK_PAGE_EVIDENCE_REQUIRED' });
+    }
+    try {
+      const verified = facebookVerification.verifyReceipt({ token: receiptToken, selectedPageId, userId, entityType, entityId, secret: await getJWTSecret() });
+      const storedReceipt = await getFacebookReceipt(verified.receiptId);
+      const storedPage = storedReceipt?.pages?.find((page) => page.id === verified.pageId);
+      if (!storedReceipt || storedReceipt.user_id !== userId || storedReceipt.entity_type !== entityType || storedReceipt.entity_id !== entityId || !storedPage) {
+        return response(409, { error: 'This Facebook Page verification expired or was already used.', code: 'FACEBOOK_PAGE_RECEIPT_UNAVAILABLE' });
+      }
+      facebookReceiptId = verified.receiptId;
+      evidenceItem = {
+        evidence_id: crypto.randomUUID(), method: 'facebook_page_control', status: 'verified', strength: 'strong',
+        observed_at: now, verifier: 'meta_graph_api', public_reference: storedPage.pageUrl,
+        metadata: { page_id: storedPage.id, page_name: storedPage.name, page_url: storedPage.pageUrl, page_tasks: storedPage.tasks, entity_page_match: facebookVerification.entityPageMatch(entity, storedPage.id), verified_at: now }
+      };
+    } catch (error) {
+      return response(400, {
+        error: error.name === 'TokenExpiredError' ? 'This Facebook Page verification expired. Connect Facebook again.' : 'Facebook Page verification does not match this claim.',
+        code: error.code || 'INVALID_FACEBOOK_PAGE_RECEIPT'
+      });
+    }
+  } else {
+    evidenceItem = {
+      evidence_id: crypto.randomUUID(), method: 'manual_explanation', status: 'submitted', strength: 'weak',
+      observed_at: now, verifier: null, public_reference: supportingUrl || null,
+      metadata: { explanation: relationshipExplanation, official_email: officialEmail || null }
+    };
+  }
   const currentOwnerUserId = entity.owner_user_id || entity.claimedByUserId || entity.claimedBy || null;
-  const initialStatus = requestedRole === 'owner' && currentOwnerUserId && currentOwnerUserId !== userId ? 'conflict' : 'pending_review';
+  const initialStatus = requestedRole === 'owner' && currentOwnerUserId && currentOwnerUserId !== userId ? 'conflict' : verificationMethod === 'facebook_page' ? 'verified_pending' : 'pending_review';
 
   const id = claimId(userId, entityType, entityId);
   const existing = await dynamodb.get({ TableName: CLAIMS_TABLE, Key: { claim_id: id } }).promise();
@@ -127,13 +366,17 @@ async function createClaim(event) {
     return response(200, { action: 'existing', claim: existing.Item });
   }
   if (existing.Item?.status === 'more_evidence_required') {
-    const nextStatus = requestedRole === 'owner' && currentOwnerUserId && currentOwnerUserId !== userId ? 'conflict' : 'pending_review';
+    if (facebookReceiptId && !await consumeFacebookReceipt(facebookReceiptId)) {
+      return response(409, { error: 'This Facebook Page verification expired or was already used.', code: 'FACEBOOK_PAGE_RECEIPT_UNAVAILABLE' });
+    }
+    const nextStatus = requestedRole === 'owner' && currentOwnerUserId && currentOwnerUserId !== userId ? 'conflict' : verificationMethod === 'facebook_page' ? 'verified_pending' : 'pending_review';
+    const evidenceSummary = verificationMethod === 'facebook_page' ? { strongest_strength: 'strong', verified_count: 1, methods: ['facebook_page_control'] } : { strongest_strength: 'weak', verified_count: 0, methods: ['manual_explanation'] };
     const updated = await dynamodb.update({
       TableName: CLAIMS_TABLE, Key: { claim_id: id },
-      UpdateExpression: 'SET evidence = list_append(if_not_exists(evidence, :empty), :evidence), #status = :status, requested_role = :role, relationship_kind = :kind, evidence_hints = :hints, verification_method = :method, updated_at = :now, evidence_revision = if_not_exists(evidence_revision, :zero) + :one REMOVE reviewed_at',
+      UpdateExpression: 'SET evidence = list_append(if_not_exists(evidence, :empty), :evidence), evidence_summary = :summary, #status = :status, requested_role = :role, relationship_kind = :kind, evidence_hints = :hints, verification_method = :method, updated_at = :now, evidence_revision = if_not_exists(evidence_revision, :zero) + :one REMOVE reviewed_at',
       ConditionExpression: '#status = :moreEvidence',
       ExpressionAttributeNames: { '#status': 'status' },
-      ExpressionAttributeValues: { ':empty': [], ':evidence': [evidenceItem], ':status': nextStatus, ':role': requestedRole, ':kind': relationshipKind || null, ':hints': evidenceHints, ':method': verificationMethod, ':now': now, ':zero': 0, ':one': 1, ':moreEvidence': 'more_evidence_required' },
+      ExpressionAttributeValues: { ':empty': [], ':evidence': [evidenceItem], ':summary': evidenceSummary, ':status': nextStatus, ':role': requestedRole, ':kind': relationshipKind || null, ':hints': evidenceHints, ':method': verificationMethod, ':now': now, ':zero': 0, ':one': 1, ':moreEvidence': 'more_evidence_required' },
       ReturnValues: 'ALL_NEW'
     }).promise();
     return response(200, { action: 'evidence_updated', claim: updated.Attributes });
@@ -145,11 +388,15 @@ async function createClaim(event) {
     const recentCount = (recent.Items || []).filter((claim) => Date.parse(claim.created_at || 0) >= cutoff).length;
     if (recentCount >= 20) return response(429, { error: 'Too many Claim attempts. Try again later.', code: 'CLAIM_RATE_LIMITED' });
   }
+  if (facebookReceiptId && !await consumeFacebookReceipt(facebookReceiptId)) {
+    return response(409, { error: 'This Facebook Page verification expired or was already used.', code: 'FACEBOOK_PAGE_RECEIPT_UNAVAILABLE' });
+  }
+  const evidenceSummary = verificationMethod === 'facebook_page' ? { strongest_strength: 'strong', verified_count: 1, methods: ['facebook_page_control'] } : { strongest_strength: 'weak', verified_count: 0, methods: ['manual_explanation'] };
   const item = {
     claim_id: id, entity_type: entityType, entity_id: entityId, entity_name: entity.name || '', user_id: userId,
     requested_role: requestedRole, relationship_kind: relationshipKind || null, status: initialStatus,
     verification_method: verificationMethod, evidence: [evidenceItem], evidence_hints: evidenceHints, source: 'join_bndy_v2',
-    evidence_revision: 1, evidence_summary: { strongest_strength: 'weak', verified_count: 0, methods: ['manual_explanation'] },
+    evidence_revision: 1, evidence_summary: evidenceSummary,
     owner_at_claim_time: currentOwnerUserId, prior_claim_summary: existing.Item ? { status: existing.Item.status, reviewed_at: existing.Item.reviewed_at || null, review_note: existing.Item.review_note || null } : null,
     created_at: now, updated_at: now, entity_key: entityType+'#'+entityId, user_key: userId
   };
@@ -315,6 +562,9 @@ exports.handler = async (event) => {
   const method = event.requestContext?.http?.method || event.httpMethod;
   const path = event.requestContext?.http?.path || event.rawPath || event.path || '';
   try {
+    if (method === 'GET' && path === '/api/claims/facebook/status') return await facebookVerificationStatus(event);
+    if (method === 'GET' && path === '/api/claims/facebook/start') return await startFacebookVerification(event);
+    if (method === 'GET' && path === '/api/claims/facebook/callback') return await finishFacebookVerification(event);
     if (method === 'POST' && path === '/api/claims') return await createClaim(event);
     if (method === 'GET' && path === '/api/claims/me') return await listMyClaims(event);
     if (method === 'GET' && path === '/api/admin/claims') return await listPendingClaims(event);

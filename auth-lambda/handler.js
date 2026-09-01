@@ -4,6 +4,7 @@
 const AWS = require('aws-sdk');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { displayNameFromClaims } = require('./profile-utils');
 
 // AWS Services
 const dynamodb = new AWS.DynamoDB.DocumentClient();
@@ -370,6 +371,7 @@ const handleOAuthCallback = async (event) => {
     const userId = decodedIdToken.sub;
     const email = decodedIdToken.email;
     const username = decodedIdToken['cognito:username'];
+    const displayName = displayNameFromClaims(decodedIdToken);
 
     console.log('AUTH CALLBACK: User authenticated', {
       userId: userId.substring(0, 8) + '...',
@@ -389,6 +391,7 @@ const handleOAuthCallback = async (event) => {
       cognitoId: userId,
       email,
       username,
+      displayName,
       userSource
     });
 
@@ -923,7 +926,7 @@ const handlePhoneVerifyAndOnboard = async (event) => {
 
 // Helper function to create or update user in DynamoDB
 const createOrUpdateUser = async (userData) => {
-  const { cognitoId, email, username, userSource } = userData;
+  const { cognitoId, email, username, displayName, userSource } = userData;
 
   try {
     // Check if user exists
@@ -936,14 +939,16 @@ const createOrUpdateUser = async (userData) => {
       console.log('DB: User exists, updating');
 
       // Update existing user (don't change user_source on existing users)
+      const shouldFillDisplayName = Boolean(displayName) && !existingUser.Item.display_name;
       await dynamodb.update({
         TableName: USERS_TABLE,
         Key: { cognito_id: cognitoId },
-        UpdateExpression: 'SET email = :email, username = :username, updated_at = :updatedAt',
+        UpdateExpression: `SET email = :email, username = :username, updated_at = :updatedAt${shouldFillDisplayName ? ', display_name = :displayName' : ''}`,
         ExpressionAttributeValues: {
           ':email': email,
           ':username': username,
-          ':updatedAt': new Date().toISOString()
+          ':updatedAt': new Date().toISOString(),
+          ...(shouldFillDisplayName ? { ':displayName': displayName } : {})
         }
       }).promise();
     } else {
@@ -962,7 +967,7 @@ const createOrUpdateUser = async (userData) => {
           username,
           first_name: null,
           last_name: null,
-          display_name: null,
+          display_name: displayName || null,
           avatar_url: null,
           instrument: null,
           profile_complete: false,
