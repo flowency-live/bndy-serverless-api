@@ -16,6 +16,13 @@ Parameters:
     NoEcho: true
     Default: "unused-jwt-secret-fetched-from-ssm-at-runtime"
     Description: JWT secret for authentication (not used - Lambdas fetch from SSM)
+  FacebookPageVerificationEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Enable only after the Meta secret, callback URI and Lambda permissions are configured
 
 Globals:
   Function:
@@ -954,7 +961,30 @@ Resources:
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
           ENTITY_CLAIMS_TABLE: !Ref EntityClaimsTable
           ENTITY_MEMBERSHIPS_TABLE: !Ref EntityMembershipsTable
+          OAUTH_STATE_TABLE: bndy-oauth-states
+          FACEBOOK_PAGE_VERIFICATION_ENABLED: !Ref FacebookPageVerificationEnabled
+          FACEBOOK_META_SECRET_ID: bndy/meta-page-verification
+          FACEBOOK_PAGE_CALLBACK_URI: https://bndy.live/api/claims/facebook/callback
+          FACEBOOK_GRAPH_API_VERSION: v26.0
       Events:
+        FacebookPageVerificationStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/claims/facebook/status
+            Method: GET
+        StartFacebookPageVerification:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/claims/facebook/start
+            Method: GET
+        FinishFacebookPageVerification:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/claims/facebook/callback
+            Method: GET
         CreateClaim:
           Type: HttpApi
           Properties:
