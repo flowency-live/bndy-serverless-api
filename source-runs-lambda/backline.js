@@ -7,6 +7,7 @@ const ssm = new AWS.SSM({ region: 'eu-west-2' });
 const USERS_TABLE = 'bndy-users';
 const SUBJECT_INDEX = 'SubjectClaimsIndex';
 const OBSERVATION_INDEX = 'ObservationClaimsIndex';
+const DEFAULT_CANONICAL_BASELINE = 'bndy-baseline-2026-08-24-v1';
 
 // This is deliberately an allow-list rather than a table scan. Adding a Backline
 // source family is therefore an explicit, reviewable change to the admin surface.
@@ -181,6 +182,83 @@ async function getProjectionControl(tableName) {
     enabled,
     state: enabled ? 'enabled' : record ? 'disabled-explicit' : 'disabled-default',
     updatedAt: record?.updatedAt || null,
+  };
+}
+
+function corpusConvergenceState(baseline, latest) {
+  if (latest?.status === 'running') return 'hydrating';
+  if (latest?.status === 'failed') return 'attention';
+  if (latest?.status === 'complete') return 'converged';
+  if (baseline?.status === 'complete') return 'baseline-stale';
+  return 'not-ready';
+}
+
+function publicBaseline(item) {
+  if (!item) return null;
+  return {
+    snapshotId: item.snapshotId,
+    startedAt: item.startedAt,
+    completedAt: item.completedAt,
+    status: item.status,
+    shadow: item.shadow,
+    canonicalWritesEnabled: item.canonicalWritesEnabled === true,
+    totals: item.totals || null,
+    claims: item.claims,
+    observations: item.observations,
+    errors: item.errors || [],
+  };
+}
+
+function publicHydration(item) {
+  if (!item) return null;
+  return {
+    runId: item.runId,
+    baselineSnapshotId: item.baselineSnapshotId,
+    startedAt: item.startedAt,
+    completedAt: item.completedAt,
+    updatedAt: item.updatedAt,
+    status: item.status,
+    mode: item.mode,
+    canonicalWritesEnabled: item.canonicalWritesEnabled === true,
+    scanned: item.scanned || 0,
+    unchanged: item.unchanged || 0,
+    inserted: item.inserted || 0,
+    modified: item.modified || 0,
+    removed: item.removed || 0,
+    claims: item.claims || 0,
+    checkpointsBackfilled: item.checkpointsBackfilled || 0,
+    skippedWithoutId: item.skippedWithoutId || 0,
+    errors: item.errors || [],
+  };
+}
+
+async function canonicalHydration(tableName) {
+  const [latestResult, projectionControl] = await Promise.all([
+    dynamodb.get({
+      TableName: tableName,
+      Key: { pk: 'HYDRATION#CANONICAL', sk: 'LATEST' },
+      ConsistentRead: true,
+    }).promise(),
+    getProjectionControl(tableName),
+  ]);
+  const latest = publicHydration(latestResult.Item);
+  const baselineSnapshotId = latest?.baselineSnapshotId || DEFAULT_CANONICAL_BASELINE;
+  const baselineResult = await dynamodb.get({
+    TableName: tableName,
+    Key: { pk: `BASELINE#${baselineSnapshotId}`, sk: 'META' },
+    ConsistentRead: true,
+  }).promise();
+  const baseline = publicBaseline(baselineResult.Item);
+  return {
+    status: 200,
+    body: {
+      state: corpusConvergenceState(baseline, latest),
+      baseline,
+      latest,
+      projectionControl,
+      readOnly: true,
+      computedAt: new Date().toISOString(),
+    },
   };
 }
 
@@ -849,6 +927,10 @@ exports.handle = async (event, action) => {
       const result = await graphNeighborhood(tableName, event);
       return response(result.status, result.body);
     }
+    if (action === 'hydration') {
+      const result = await canonicalHydration(tableName);
+      return response(result.status, result.body);
+    }
     if (action === 'trust-loop') {
       const result = await trustLoop(tableName, event);
       return response(result.status, result.body);
@@ -871,4 +953,7 @@ exports.__test = {
   parseGraphNodeRef,
   graphClaimLabel,
   shortGraphKey,
+  corpusConvergenceState,
+  publicBaseline,
+  publicHydration,
 };

@@ -40,6 +40,35 @@ test('Backline graph labels Claims without leaking unbounded values', () => {
   assert.equal(__test.shortGraphKey('x'.repeat(60)), `${'x'.repeat(45)}...`);
 });
 
+test('canonical corpus convergence state stays honest across the hydration lifecycle', () => {
+  assert.equal(__test.corpusConvergenceState(null, null), 'not-ready');
+  assert.equal(__test.corpusConvergenceState({ status: 'complete' }, null), 'baseline-stale');
+  assert.equal(__test.corpusConvergenceState({ status: 'complete' }, { status: 'running' }), 'hydrating');
+  assert.equal(__test.corpusConvergenceState({ status: 'complete' }, { status: 'failed' }), 'attention');
+  assert.equal(__test.corpusConvergenceState({ status: 'complete' }, { status: 'complete' }), 'converged');
+});
+
+test('canonical hydration responses expose counts but not DynamoDB keys', () => {
+  const hydration = __test.publicHydration({
+    pk: 'HYDRATION#CANONICAL',
+    sk: 'LATEST',
+    runId: 'delta-1',
+    baselineSnapshotId: 'baseline-1',
+    status: 'running',
+    scanned: 42,
+    inserted: 3,
+    canonicalWritesEnabled: false,
+  });
+  assert.deepEqual(hydration, {
+    runId: 'delta-1', baselineSnapshotId: 'baseline-1', startedAt: undefined,
+    completedAt: undefined, updatedAt: undefined, status: 'running', mode: undefined,
+    canonicalWritesEnabled: false, scanned: 42, unchanged: 0, inserted: 3,
+    modified: 0, removed: 0, claims: 0, checkpointsBackfilled: 0,
+    skippedWithoutId: 0, errors: [],
+  });
+  assert.equal('pk' in hydration, false);
+});
+
 test('On The Case band hydrations count as Artist activity', () => {
   const { stats } = __test.taskStats([
     { sourceId: 'onthecase-band-hydration', taskKey: 'band:1', taskKind: 'band', status: 'completed', updatedAt: '2026-08-28T08:00:00Z' },
