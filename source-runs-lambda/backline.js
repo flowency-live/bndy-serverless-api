@@ -898,6 +898,175 @@ async function trustLoop(tableName, event) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Operations: source freshness, projection runs and shadow would-write decisions.
+// Read-only. Bounded. Never returns supporting Claim bodies.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_MAX_STALENESS_HOURS = 26;
+const OPERATIONS_OBSERVATIONS_PER_SOURCE = 2;
+const PUBLIC_CANDIDATE_FIELDS = [
+  'sourceEventKey', 'artistName', 'artistExternalId', 'artistLocation',
+  'venueName', 'venueExternalId', 'venueLocation', 'venueAddress',
+  'date', 'startTime', 'endTime', 'title', 'eventUrl', 'ticketUrl',
+  'admissionStatus', 'price', 'status', 'observedAt',
+];
+
+function boundedLimit(value, fallback, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, 1), max);
+}
+
+function assessSourceFreshness(config, state, now = new Date()) {
+  const maxStalenessHours = typeof config.maxStalenessHours === 'number'
+    ? config.maxStalenessHours
+    : DEFAULT_MAX_STALENESS_HOURS;
+  const base = {
+    sourceId: config.id,
+    name: config.name,
+    enabled: config.enabled === true,
+    cadence: config.cadence,
+    sourceRole: config.sourceRole,
+    shadow: config.shadow !== false,
+    writerAuthority: config.writerAuthority,
+    nextScanAt: config.nextScanAt || null,
+    maxStalenessHours,
+    lastSuccessfulRunAt: state?.lastSuccessfulRunAt || null,
+    lastFailureAt: state?.lastFailureAt || null,
+    consecutiveFailures: Number(state?.consecutiveFailures || 0),
+    ageHours: null,
+  };
+  if (!base.enabled) return { ...base, status: 'disabled' };
+  if (!state?.lastSuccessfulRunAt) return { ...base, status: 'missing' };
+  const successAt = new Date(state.lastSuccessfulRunAt);
+  if (!Number.isFinite(successAt.getTime())) return { ...base, status: 'invalid' };
+  const ageHours = Number(Math.max(0, (now.getTime() - successAt.getTime()) / 3_600_000).toFixed(2));
+  return { ...base, ageHours, status: ageHours > maxStalenessHours ? 'stale' : 'healthy' };
+}
+
+function publicCandidate(candidate) {
+  if (!candidate || typeof candidate !== 'object') return null;
+  const out = {};
+  for (const field of PUBLIC_CANDIDATE_FIELDS) {
+    if (candidate[field] !== undefined) out[field] = candidate[field];
+  }
+  out.supportingClaims = Array.isArray(candidate.supportingClaims) ? candidate.supportingClaims.length : 0;
+  return out;
+}
+
+function publicProjectionItem(item) {
+  const details = item.details && typeof item.details === 'object' ? item.details : {};
+  const idempotencyKey = item.idempotencyKey
+    || (typeof item.pk === 'string' ? item.pk.replace(/^PROJECTION_ITEM#/, '') : undefined);
+  return {
+    idempotencyKey,
+    sourceId: item.sourceId,
+    observationId: item.observationId,
+    candidateKey: item.candidateKey,
+    action: item.action,
+    status: item.status,
+    completedAt: item.completedAt,
+    wouldWrite: typeof details.wouldWrite === 'string' ? details.wouldWrite : null,
+    reason: typeof details.reason === 'string' ? details.reason : null,
+    outcome: typeof details.outcome === 'string' ? details.outcome : null,
+    candidate: publicCandidate(details.candidate),
+    error: typeof item.error === 'string' ? item.error : undefined,
+  };
+}
+
+function publicProjectionRun(item) {
+  return {
+    observationId: item.observationId,
+    sourceId: item.sourceId,
+    runId: item.runId,
+    status: item.status,
+    expectedItems: Number(item.expectedItems || 0),
+    completedAt: item.completedAt,
+    counts: item.counts && typeof item.counts === 'object' ? item.counts : {},
+  };
+}
+
+function byCompletedAtDesc(a, b) {
+  return String(b.completedAt || '').localeCompare(String(a.completedAt || ''));
+}
+
+async function recentObservationIds(tableName, sourceId, limit) {
+  const result = await dynamodb.query({
+    TableName: tableName,
+    IndexName: OBSERVATION_INDEX,
+    KeyConditionExpression: 'GSI1PK = :pk AND begins_with(GSI1SK, :prefix)',
+    ExpressionAttributeValues: { ':pk': `SOURCE#${sourceId}`, ':prefix': 'OBS#' },
+    ScanIndexForward: false,
+    Limit: limit,
+  }).promise();
+  return (result.Items || []).map((item) => item.id).filter(Boolean);
+}
+
+async function projectionRunRows(tableName, observationId) {
+  const result = await dynamodb.query({
+    TableName: tableName,
+    KeyConditionExpression: 'pk = :pk',
+    ExpressionAttributeValues: { ':pk': `PROJECTION_RUN#${observationId}` },
+    Limit: 200,
+  }).promise();
+  return result.Items || [];
+}
+
+async function batchGetProjectionItems(tableName, idempotencyKeys) {
+  const items = [];
+  for (let index = 0; index < idempotencyKeys.length; index += 100) {
+    const keys = idempotencyKeys.slice(index, index + 100).map((key) => ({ pk: `PROJECTION_ITEM#${key}`, sk: 'META' }));
+    if (!keys.length) break;
+    const result = await dynamodb.batchGet({ RequestItems: { [tableName]: { Keys: keys } } }).promise();
+    items.push(...(result.Responses?.[tableName] || []));
+  }
+  return items;
+}
+
+async function operations(tableName, event) {
+  const family = familyFromEvent(event);
+  if (!family) return { status: 400, body: { error: 'Unknown Backline source family' } };
+  const limit = boundedLimit(event.queryStringParameters?.limit, 25, 50);
+  const now = new Date();
+  const [{ configs, states }, projectionControl] = await Promise.all([
+    getSourceRecords(tableName, family.sourceIds),
+    getProjectionControl(tableName),
+  ]);
+  const knownSourceIds = family.sourceIds.filter((id) => configs.has(id));
+  const freshness = knownSourceIds.map((id) => assessSourceFreshness(configs.get(id), states.get(id) || null, now));
+  const observationIds = (await Promise.all(
+    knownSourceIds.map((id) => recentObservationIds(tableName, id, OPERATIONS_OBSERVATIONS_PER_SOURCE)),
+  )).flat();
+  const runRows = (await Promise.all(observationIds.map((id) => projectionRunRows(tableName, id)))).flat();
+  const projectionRuns = runRows.filter((row) => row.sk === 'META').map(publicProjectionRun).sort(byCompletedAtDesc);
+  const itemRows = runRows
+    .filter((row) => typeof row.sk === 'string' && row.sk.startsWith('ITEM#'))
+    .sort(byCompletedAtDesc);
+  const selected = itemRows.slice(0, limit);
+  const items = await batchGetProjectionItems(tableName, selected.map((row) => row.idempotencyKey).filter(Boolean));
+  const wouldWrite = items.map(publicProjectionItem).sort(byCompletedAtDesc);
+  return {
+    status: 200,
+    body: {
+      sourceFamily: family.id,
+      freshness,
+      projectionRuns,
+      wouldWrite,
+      truncated: itemRows.length > selected.length,
+      observationsSampled: observationIds.length,
+      exceptions: {
+        available: false,
+        reason: 'Projection exceptions are stored without a source index. Exposing them needs a GSI in the enrichment stack.',
+      },
+      readOnly: true,
+      canonicalWritesEnabled: projectionControl.enabled,
+      projectionControl,
+      computedAt: now.toISOString(),
+    },
+  };
+}
+
 exports.handle = async (event, action) => {
   const auth = await requirePlatformAdmin(event);
   if (auth.error) return response(auth.status, { error: auth.error });
@@ -935,6 +1104,10 @@ exports.handle = async (event, action) => {
       const result = await trustLoop(tableName, event);
       return response(result.status, result.body);
     }
+    if (action === 'operations') {
+      const result = await operations(tableName, event);
+      return response(result.status, result.body);
+    }
     return response(404, { error: 'Unknown Backline Explorer action' });
   } catch (error) {
     console.error('[BACKLINE] request failed', error);
@@ -956,4 +1129,8 @@ exports.__test = {
   corpusConvergenceState,
   publicBaseline,
   publicHydration,
+  assessSourceFreshness,
+  publicProjectionItem,
+  publicProjectionRun,
+  boundedLimit,
 };
