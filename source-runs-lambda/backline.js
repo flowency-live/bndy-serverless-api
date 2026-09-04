@@ -436,6 +436,8 @@ function publicRunMetric(item) {
     updated: item.updated || 0,
     withdrawn: item.withdrawn || 0,
     unchanged: item.unchanged || 0,
+    reobservedUnchanged: item.reobservedUnchanged || 0,
+    projectionSkipped: item.projectionSkipped || 0,
     fanoutQueued: item.fanoutQueued || 0,
     warnings: item.warnings || 0,
     errors: item.errors || 0,

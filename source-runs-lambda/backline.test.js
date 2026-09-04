@@ -214,3 +214,14 @@ test('operations route is registered in the handler dispatch pattern', () => {
   const source = fs.readFileSync(require.resolve('./handler.js'), 'utf8');
   assert.match(source, /\|operations\)\$\//);
 });
+
+test('run metrics expose the testimony savings counters', () => {
+  const value = __test.publicRunMetric({
+    runId: 'run-1', sourceId: 'onthecase-gig-index', startedAt: '2026-09-04T13:00:00Z', completedAt: '2026-09-04T13:00:03Z',
+    status: 'completed', reason: 'manual', shadow: true, writerAuthority: 'cowork',
+    claims: 0, unchanged: 250, projectionWorkItems: 0, reobservedUnchanged: 250, projectionSkipped: 0,
+  });
+  assert.equal(value.reobservedUnchanged, 250);
+  assert.equal(value.projectionSkipped, 0);
+  assert.equal(__test.publicRunMetric({ runId: 'r', sourceId: 's' }).reobservedUnchanged, 0);
+});
