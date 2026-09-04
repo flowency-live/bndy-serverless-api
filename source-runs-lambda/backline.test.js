@@ -225,3 +225,13 @@ test('run metrics expose the testimony savings counters', () => {
   assert.equal(value.projectionSkipped, 0);
   assert.equal(__test.publicRunMetric({ runId: 'r', sourceId: 's' }).reobservedUnchanged, 0);
 });
+
+test('would-write candidate count reads the compact record and the legacy embedded array alike', () => {
+  const compact = __test.publicProjectionItem({ sourceId: 's', observationId: 'o', candidateKey: 'k', action: 'create', status: 'shadow',
+    details: { wouldWrite: 'create', reason: 'r', candidate: { artistName: 'A', supportingClaimIds: ['c1', 'c2', 'c3'], supportingClaimCount: 3 } } });
+  assert.equal(compact.candidate.supportingClaims, 3);
+  assert.equal(JSON.stringify(compact).includes('supportingClaimIds'), false);
+  const legacy = __test.publicProjectionItem({ sourceId: 's', observationId: 'o', candidateKey: 'k', action: 'create', status: 'shadow',
+    details: { wouldWrite: 'create', reason: 'r', candidate: { artistName: 'A', supportingClaims: [{ id: 'c1' }, { id: 'c2' }] } } });
+  assert.equal(legacy.candidate.supportingClaims, 2);
+});

@@ -953,7 +953,10 @@ function publicCandidate(candidate) {
   for (const field of PUBLIC_CANDIDATE_FIELDS) {
     if (candidate[field] !== undefined) out[field] = candidate[field];
   }
-  out.supportingClaims = Array.isArray(candidate.supportingClaims) ? candidate.supportingClaims.length : 0;
+  if (Array.isArray(candidate.supportingClaims)) out.supportingClaims = candidate.supportingClaims.length;
+  else if (typeof candidate.supportingClaimCount === 'number') out.supportingClaims = candidate.supportingClaimCount;
+  else if (Array.isArray(candidate.supportingClaimIds)) out.supportingClaims = candidate.supportingClaimIds.length;
+  else out.supportingClaims = 0;
   return out;
 }
 
