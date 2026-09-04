@@ -123,3 +123,94 @@ test('Trust Loop output is bounded to the read-only decision and health contract
   assert.equal(value.reviewCases.length, 1);
   assert.equal(value.decisions, undefined);
 });
+
+test('operations freshness verdict follows the 26 hour coverage contract', () => {
+  const now = new Date('2026-09-04T12:00:00Z');
+  const config = { id: 'klma-stoke-gig-list', name: 'KLMA', enabled: true, cadence: 'daily', shadow: true, writerAuthority: 'cowork', sourceRole: 'coverage-root', nextScanAt: '2026-09-05T08:00:00.000Z' };
+  const healthy = __test.assessSourceFreshness(config, { lastSuccessfulRunAt: '2026-09-04T08:54:53.361Z', consecutiveFailures: 0 }, now);
+  assert.equal(healthy.status, 'healthy');
+  assert.equal(healthy.ageHours, 3.09);
+  assert.equal(healthy.maxStalenessHours, 26);
+  assert.equal(healthy.nextScanAt, '2026-09-05T08:00:00.000Z');
+
+  const stale = __test.assessSourceFreshness(config, { lastSuccessfulRunAt: '2026-09-02T08:00:00Z', consecutiveFailures: 2 }, now);
+  assert.equal(stale.status, 'stale');
+  assert.equal(stale.consecutiveFailures, 2);
+
+  assert.equal(__test.assessSourceFreshness(config, null, now).status, 'missing');
+  assert.equal(__test.assessSourceFreshness(config, { lastSuccessfulRunAt: 'not-a-date' }, now).status, 'invalid');
+  assert.equal(__test.assessSourceFreshness({ ...config, enabled: false }, { lastSuccessfulRunAt: '2026-09-04T08:00:00Z' }, now).status, 'disabled');
+  assert.equal(__test.assessSourceFreshness({ ...config, maxStalenessHours: 2 }, { lastSuccessfulRunAt: '2026-09-04T08:54:53.361Z' }, now).status, 'stale');
+});
+
+test('operations exposes a would-write decision without leaking the supporting Claim bodies', () => {
+  const item = __test.publicProjectionItem({
+    pk: 'PROJECTION_ITEM#lemonrock-gig-hydration:obs-1:event:lemonrock-gig-hydration:lemonrock:gig:973876:create',
+    sk: 'META',
+    sourceId: 'lemonrock-gig-hydration',
+    observationId: 'obs-1',
+    candidateKey: 'event:lemonrock-gig-hydration:lemonrock:gig:973876',
+    action: 'create',
+    status: 'shadow',
+    completedAt: '2026-09-04T11:17:33.651Z',
+    details: {
+      wouldWrite: 'create',
+      reason: 'source is in shadow mode',
+      candidate: {
+        candidateKey: 'event:lemonrock-gig-hydration:lemonrock:gig:973876',
+        sourceEventKey: 'lemonrock:gig:973876',
+        artistName: 'Basher Tate',
+        artistExternalId: 'lemonrock:artist:1',
+        venueName: 'Cowick Street Railway Club',
+        venueExternalId: 'lemonrock:venue:2',
+        venueLocation: 'Exeter',
+        date: '2027-05-01',
+        startTime: '20:30',
+        title: 'Basher Tate gig at Cowick Street Railway Club, Exeter',
+        eventUrl: 'https://www.lemonrock.com/gig.php?id=973876',
+        observedAt: '2026-09-04T11:17:00Z',
+        supportingClaims: [{ id: 'c1', value: 'x'.repeat(5000) }, { id: 'c2' }],
+      },
+    },
+  });
+  assert.equal(item.idempotencyKey, 'lemonrock-gig-hydration:obs-1:event:lemonrock-gig-hydration:lemonrock:gig:973876:create');
+  assert.equal(item.status, 'shadow');
+  assert.equal(item.wouldWrite, 'create');
+  assert.equal(item.reason, 'source is in shadow mode');
+  assert.equal(item.candidate.artistName, 'Basher Tate');
+  assert.equal(item.candidate.venueLocation, 'Exeter');
+  assert.equal(item.candidate.supportingClaims, 2);
+  assert.equal(JSON.stringify(item).includes('xxxxx'), false);
+  assert.equal(item.details, undefined);
+
+  const failed = __test.publicProjectionItem({ sourceId: 's', observationId: 'o', candidateKey: 'k', action: 'create', status: 'failed', error: 'boom', completedAt: '2026-09-04T00:00:00Z' });
+  assert.equal(failed.status, 'failed');
+  assert.equal(failed.error, 'boom');
+  assert.equal(failed.wouldWrite, null);
+  assert.equal(failed.candidate, null);
+});
+
+test('operations projection run summary is bounded to counts and status', () => {
+  const run = __test.publicProjectionRun({
+    pk: 'PROJECTION_RUN#obs-1', sk: 'META', entityType: 'ProjectionRun', sourceId: 'lemonrock-gig-hydration', observationId: 'obs-1',
+    runId: 'run-1', status: 'success', expectedItems: 1, completedAt: '2026-09-04T11:17:33.651Z',
+    counts: { itemsSeen: 1, claims: 156, artistsCreated: 0, artistsMatched: 0, venuesCreated: 0, venuesMatched: 0, eventsCreated: 0, eventsUpdated: 0, eventsCancelled: 0, projectionFailures: 0 },
+    secret: 'never',
+  });
+  assert.deepEqual(Object.keys(run).sort(), ['completedAt', 'counts', 'expectedItems', 'observationId', 'runId', 'sourceId', 'status']);
+  assert.equal(run.counts.claims, 156);
+});
+
+test('operations limit is bounded and defaults sensibly', () => {
+  assert.equal(__test.boundedLimit(undefined, 25, 50), 25);
+  assert.equal(__test.boundedLimit('10', 25, 50), 10);
+  assert.equal(__test.boundedLimit('500', 25, 50), 50);
+  assert.equal(__test.boundedLimit('0', 25, 50), 1);
+  assert.equal(__test.boundedLimit('abc', 25, 50), 25);
+});
+
+test('operations route is registered in the handler dispatch pattern', () => {
+  const fs = require('node:fs');
+  const source = fs.readFileSync(require.resolve('./handler.js'), 'utf8');
+  assert.match(source, /\|operations\)\$\//);
+});
