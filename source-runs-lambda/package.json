@@ -4,7 +4,7 @@
   "description": "BNDY Source Runs Lambda - Source runner observability API (admin only)",
   "main": "handler.js",
   "scripts": {
-    "test": "node --test backline.test.js"
+    "test": "node --test backline.test.js intelligence.test.js"
   },
   "dependencies": {
     "aws-sdk": "^2.1000.0",
