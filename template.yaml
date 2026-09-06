@@ -2574,18 +2574,30 @@ Resources:
             Schedule: rate(15 minutes)
             Description: Rebuild search index every 15 minutes
 
-  # S3 bucket for search index
-  DiscoverSearchBucket:
-    Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      BucketName: bndy-search
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
+  # =========================================================================
+  # S3 bucket for Discover search index: bndy-search
+  # =========================================================================
+  # This bucket is INTENTIONALLY NOT in the CloudFormation stack.
+  #
+  # Why: The bucket was retained (DeletionPolicy: Retain) from a previous
+  # deployment. CloudFormation IMPORT requires an exact template match,
+  # but SAM regenerates Lambda permission resources on each build, making
+  # import impossible without manual intervention.
+  #
+  # The bucket:
+  # - Exists in AWS as 's3://bndy-search'
+  # - Is referenced by name in discover-lambda code, not by !Ref
+  # - Has public access blocked and correct permissions via IAM role
+  #
+  # If recreating from scratch: create the bucket manually first with:
+  #   aws s3api create-bucket --bucket bndy-search --region eu-west-2 \
+  #     --create-bucket-configuration LocationConstraint=eu-west-2
+  #   aws s3api put-public-access-block --bucket bndy-search \
+  #     --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+  #
+  # DO NOT add DiscoverSearchBucket back to this template - it will fail
+  # the SAM deploy with ResourceExistenceCheck errors.
+  # =========================================================================
 
 Outputs:
   BndyHttpApiUrl:
