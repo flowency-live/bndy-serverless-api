@@ -2495,6 +2495,98 @@ Resources:
           Projection:
             ProjectionType: ALL
 
+  # =============================================================================
+  # Discover Lambda - Gigging projection stream trigger
+  # =============================================================================
+  # Updates giggingStatus and giggingUntil on bndy-artists when events change.
+  # Stream must be enabled on bndy-events table (external) before deployment.
+  DiscoverStreamFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Discover - gigging projection stream trigger
+      CodeUri: ./discover-lambda/
+      Handler: handler.streamHandler
+      Timeout: 60
+      ReservedConcurrentExecutions: 5
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+
+  # EventSourceMapping for DynamoDB stream
+  DiscoverStreamMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 100
+      MaximumBatchingWindowInSeconds: 5
+      EventSourceArn: arn:aws:dynamodb:eu-west-2:771551874768:table/bndy-events/stream/2026-08-31T23:13:15.114
+      FunctionName: !GetAtt DiscoverStreamFunction.Arn
+      StartingPosition: LATEST
+      FilterCriteria:
+        Filters:
+          - Pattern: '{"eventName": ["INSERT", "MODIFY", "REMOVE"]}'
+
+  # Daily cleanup at 03:00 UTC - clears stale giggingStatus
+  DiscoverCleanupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Discover - daily gigging projection cleanup
+      CodeUri: ./discover-lambda/
+      Handler: handler.cleanupHandler
+      Timeout: 300
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Events:
+        DailyCleanup:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 3 * * ? *)
+            Description: Daily cleanup of stale gigging projections
+
+  # Browse endpoint for /api/artists/browse
+  DiscoverBrowseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Discover - /api/artists/browse faceted search
+      CodeUri: ./discover-lambda/
+      Handler: handler.browseHandler
+      Timeout: 30
+      MemorySize: 1024
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Events:
+        Browse:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/artists/browse
+            Method: GET
+
+  # Index builder - runs every 15 minutes
+  DiscoverIndexFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Discover - S3 search index builder
+      CodeUri: ./discover-lambda/
+      Handler: handler.indexHandler
+      Timeout: 300
+      MemorySize: 1024
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Events:
+        BuildIndex:
+          Type: Schedule
+          Properties:
+            Schedule: rate(15 minutes)
+            Description: Rebuild search index every 15 minutes
+
+  # S3 bucket for search index
+  DiscoverSearchBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: bndy-search
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
 Outputs:
   BndyHttpApiUrl:
     Description: HTTP API Gateway endpoint URL

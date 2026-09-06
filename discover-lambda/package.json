@@ -1,0 +1,9 @@
+{
+  "name": "discover-lambda",
+  "version": "1.0.0",
+  "description": "Discover feature - gigging projection stream trigger and browse endpoint",
+  "main": "handler.js",
+  "dependencies": {
+    "aws-sdk": "^2.1692.0"
+  }
+}
