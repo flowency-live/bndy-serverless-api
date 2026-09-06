@@ -26,17 +26,18 @@ const GEOGRAPHY_LIMIT = 40;
 const TABLES = {
   artists: {
     name: 'bndy-artists',
-    projection: 'id, createdAt, created_at, created_source, #src, external_ids, #loc, genres, artistType, facebookUrl, instagramUrl, websiteUrl, youtubeUrl, spotifyUrl, socialMediaUrls, needs_review, enrichment_status, hidden, publicationScopes',
-    names: { '#src': 'source', '#loc': 'location' },
+    projection: 'id, createdAt, created_at, created_source, #src, external_ids, #loc, genres, artistType, facebookUrl, instagramUrl, websiteUrl, youtubeUrl, spotifyUrl, socialMediaUrls, needs_review, enrichment_status, #hidden, publicationScopes',
+    names: { '#src': 'source', '#loc': 'location', '#hidden': 'hidden' },
   },
   venues: {
     name: 'bndy-venues',
-    projection: 'id, createdAt, created_at, created_source, external_ids, city, town, postcode, latitude, longitude, location_object, google_place_id, website, social_media_urls, validated, enrichment_status, hidden, publicationScopes',
+    projection: 'id, createdAt, created_at, created_source, external_ids, city, town, postcode, latitude, longitude, location_object, google_place_id, website, social_media_urls, validated, enrichment_status, #hidden, publicationScopes',
+    names: { '#hidden': 'hidden' },
   },
   events: {
     name: 'bndy-events',
-    projection: 'id, createdAt, created_at, created_source, external_ids, #date, venueId, artistId, collaboratingArtistIds, isPublic, #type, hidden, publicationScopes',
-    names: { '#date': 'date', '#type': 'type' },
+    projection: 'id, createdAt, created_at, created_source, external_ids, #date, venueId, artistId, collaboratingArtistIds, isPublic, #type, #hidden, publicationScopes',
+    names: { '#date': 'date', '#type': 'type', '#hidden': 'hidden' },
   },
   users: {
     name: 'bndy-users',
