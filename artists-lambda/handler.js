@@ -22,7 +22,7 @@ const { isPublishedInEdition, hasPrivilegedIngestionFields, validateScopedIngest
 const { requireRole: requireCuratorRole, logActivity: logCuratorActivity, pickFields: pickCuratorFields, hideEntity: hideArtistEntity, restoreEntity: restoreArtistEntity, normaliseCuratorAccess } = require('./curator-core');
 const { publishUserCreatedArtistClaims } = require('./backline-user-claims');
 const { pickOwnedProfileFields } = require('./lib/owned-profile');
-const { areLocationsCompatible, calculateLocationScore, buildResolutionAuditLog, isNationalLocation } = require('./lib/location-resolution');
+const { areLocationsCompatible, calculateLocationScore, buildResolutionAuditLog, isNationalLocation, areRegionsAdjacent } = require('./lib/location-resolution');
 
 /**
  * Sentinel keys for an artist record (2026-07-27 gate plan):
@@ -3061,7 +3061,7 @@ async function handleFindOrCreateArtist(event) {
   // resolveTo: when action:review was returned, caller can pick a candidate id
   // confirmNew: when action:review was returned, caller confirms this is genuinely new
   // dryRun: B3 - return full verdict (matched/review/clear + candidates with location), ZERO writes
-  const { name, canCreate = true, venueRegion, venueId, verifiedSourceName, resolveTo, confirmNew, dryRun } = body;
+  const { name, canCreate = true, venueRegion, venueId, venueReach, verifiedSourceName, resolveTo, confirmNew, dryRun } = body;
   const requestExternalIds = Array.isArray(body.externalIds) ? body.externalIds.filter((e) => e && e.source && e.id) : [];
 
   // RESOLUTION HANDLING (Blocker #1 fix): resolveTo + confirmNew params
@@ -3370,10 +3370,12 @@ async function handleFindOrCreateArtist(event) {
   // Phase 2: If venueRegion provided, use footprint scoring to break ties (ADR-021 Batch 3)
   let scored = simScored;
   let usedFootprintScoring = false;
+  // True when exactly one bndy record carries this name (owner ruling 06/09/2026, 1a).
+  let uniqueNamed = false;
 
-  // A single candidate still goes through footprint scoring when the caller names the
-  // venue, so venue history can vouch for a touring act whose home is elsewhere (H10).
-  if (venueRegion && simScored.length > 0 && (simScored.length > 1 || venueId)) {
+  // A single candidate goes through footprint scoring too when the caller names the
+  // venue: venue history, the literal-name rule and the unique-name rule all live here.
+  if (venueRegion && simScored.length > 0) {
     console.log(`[find-or-create artist] Using footprint scoring with venueRegion="${venueRegion}"`);
     usedFootprintScoring = true;
 
@@ -3451,6 +3453,7 @@ async function handleFindOrCreateArtist(event) {
     // Two weak look-alikes tying at zero ("Billy Black Band" and "Billy Liar" for
     // "Billy Bibby") mean the act is new, not ambiguous.
     const nameQualified = scored.filter(s => s.slugEqual || (s.sim >= 90 && s.sharedToken));
+    uniqueNamed = literalNamed.length === 1 || (literalNamed.length === 0 && exactNamed.length === 1 && nameQualified.length === 1);
 
     // Margin guard (ADR-021): if #2 within 10pts of #1 → REVIEW (ambiguous collision)
     if (scored.length >= 2 && !exactWins && nameQualified.length > 0) {
@@ -3538,9 +3541,24 @@ async function handleFindOrCreateArtist(event) {
   if (isConfidentMatch) {
     // Work Order 2026-08-30: Location-based resolution
     // Check location compatibility before confirming match
-    const inputLocation = body.location || '';
+    // With no home location the gig's region is the comparison (06/09/2026): the act's
+    // home is unknown to a gig list, and "missing location" was never a real hold.
+    const inputLocation = body.location || venueRegion || '';
     const candidateLocation = best.location || '';
-    const locationCompat = areLocationsCompatible(inputLocation, candidateLocation);
+    let locationCompat = areLocationsCompatible(inputLocation, candidateLocation);
+    // Owner ruling 06/09/2026, decision 1a: a name that exists once in bndy matches at a
+    // touring venue whatever its home says, and at any venue when its home is in the
+    // gig's region or a neighbouring one. Only a name that exists more than once holds.
+    if (!locationCompat.compatible && locationCompat.reason === 'conflict' && uniqueNamed) {
+      const gigRegion = regionBucket(venueRegion || inputLocation);
+      if (venueReach === 'touring') {
+        matchMethod = 'unique_name_touring';
+        locationCompat = { ...locationCompat, compatible: true, reason: 'unique_name_touring' };
+      } else if (areRegionsAdjacent(locationCompat.candidateRegion, gigRegion)) {
+        matchMethod = 'unique_name_adjacent';
+        locationCompat = { ...locationCompat, compatible: true, reason: 'unique_name_adjacent' };
+      }
+    }
     const locationScore = calculateLocationScore(locationCompat);
 
     // Audit log for resolution decision

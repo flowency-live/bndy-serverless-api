@@ -79,7 +79,100 @@ function dedupeArtistIds(records) {
 }
 
 /**
+ * Extract event data from a stream record image for gigging projection.
+ * Returns null if the event is not relevant (missing required fields).
+ *
+ * @param {Object} image - DynamoDB stream record image (marshalled format)
+ * @returns {{ id: string, date: string, hidden?: boolean, visibility?: string } | null}
+ */
+function extractEventFromImage(image) {
+  if (!image) return null;
+
+  const id = image.id?.S;
+  const date = image.date?.S;
+
+  if (!id || !date) return null;
+
+  return {
+    id,
+    date,
+    hidden: image.hidden?.BOOL,
+    visibility: image.visibility?.S,
+  };
+}
+
+/**
+ * Group stream record events by artist ID.
+ * Returns a map of artistId -> { inserts: Event[], removes: Set<eventId> }
+ *
+ * @param {Array} records - DynamoDB stream records
+ * @returns {Map<string, { inserts: Array, removes: Set<string> }>}
+ */
+function groupStreamEventsByArtist(records) {
+  const byArtist = new Map();
+
+  for (const record of records) {
+    const isRemove = record.eventName === 'REMOVE';
+    const image = isRemove ? record.dynamodb?.OldImage : record.dynamodb?.NewImage;
+
+    if (!image) continue;
+
+    const artistIds = extractArtistIdsFromImage(image);
+    const eventData = extractEventFromImage(image);
+
+    if (!eventData) continue;
+
+    for (const artistId of artistIds) {
+      if (!byArtist.has(artistId)) {
+        byArtist.set(artistId, { inserts: [], removes: new Set() });
+      }
+
+      const entry = byArtist.get(artistId);
+
+      if (isRemove) {
+        entry.removes.add(eventData.id);
+      } else {
+        entry.inserts.push(eventData);
+      }
+    }
+  }
+
+  return byArtist;
+}
+
+/**
+ * Merge GSI query results with stream record events.
+ * Handles eventual consistency by:
+ * - Adding INSERT/MODIFY events that may not be in GSI yet
+ * - Removing REMOVE events that may still be in GSI
+ *
+ * @param {Array} gsiEvents - Events from GSI query (unmarshalled, now includes id)
+ * @param {Array} insertedEvents - Events from stream records (INSERT/MODIFY)
+ * @param {Set<string>} removedEventIds - Event IDs from stream records (REMOVE)
+ * @returns {Array} Merged events for projection computation
+ */
+function mergeEventsWithStreamRecords(gsiEvents, insertedEvents, removedEventIds) {
+  const merged = new Map();
+
+  // Add GSI events, filtering out removed ones
+  for (const event of gsiEvents) {
+    if (event.id && removedEventIds.has(event.id)) {
+      continue; // Skip events that were removed in this batch
+    }
+    merged.set(event.id || event.date, event);
+  }
+
+  // Add inserted events (will overwrite GSI events with same id if present)
+  for (const event of insertedEvents) {
+    merged.set(event.id, event);
+  }
+
+  return Array.from(merged.values());
+}
+
+/**
  * Query all events for an artist to compute their gigging projection.
+ * Includes id for merging with stream records.
  */
 async function queryArtistEvents(dynamodb, artistId, today) {
   const params = {
@@ -91,7 +184,7 @@ async function queryArtistEvents(dynamodb, artistId, today) {
       ':artistId': artistId,
       ':today': today,
     },
-    ProjectionExpression: '#date, hidden, visibility',
+    ProjectionExpression: 'id, #date, hidden, visibility',
   };
 
   const result = await dynamodb.query(params).promise();
@@ -142,6 +235,11 @@ async function updateArtistProjection(dynamodb, artistId, projection) {
 /**
  * Process a batch of stream records and update affected artists.
  *
+ * Handles GSI eventual consistency by merging stream record event data
+ * with GSI query results. This ensures:
+ * - Newly inserted events are included even if GSI hasn't replicated yet
+ * - Removed events are excluded even if GSI still returns them
+ *
  * @param {Array} records - DynamoDB stream records
  * @param {Object} dynamodb - DynamoDB DocumentClient instance
  * @param {string} today - Today's date in ISO format (YYYY-MM-DD)
@@ -151,14 +249,27 @@ async function processStreamBatch(records, dynamodb, today) {
 
   if (artistIds.length === 0) return;
 
+  // Group stream events by artist for merging with GSI results
+  const streamEventsByArtist = groupStreamEventsByArtist(records);
+
   const promises = artistIds.map(async (artistId) => {
     try {
-      const [events, currentProjection] = await Promise.all([
+      const [gsiEvents, currentProjection] = await Promise.all([
         queryArtistEvents(dynamodb, artistId, today),
         getArtistProjection(dynamodb, artistId),
       ]);
 
-      const nextProjection = computeGiggingProjection(events, today);
+      // Get stream events for this artist (may be empty if artist was in collaborators)
+      const streamData = streamEventsByArtist.get(artistId) || { inserts: [], removes: new Set() };
+
+      // Merge GSI results with stream record data to handle eventual consistency
+      const mergedEvents = mergeEventsWithStreamRecords(
+        gsiEvents,
+        streamData.inserts.filter(e => e.date >= today), // Only future events
+        streamData.removes
+      );
+
+      const nextProjection = computeGiggingProjection(mergedEvents, today);
 
       if (shouldSkipWrite(currentProjection, nextProjection)) {
         return;
