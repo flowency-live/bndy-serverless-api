@@ -571,6 +571,29 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     });
   });
 
+  describe('A lone exact name is the candidate whatever its region (Backline finding 06/09/2026, third pass)', () => {
+    it('reports a region hold for the exact-name act, not a near-tie with a look-alike', async () => {
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.TableName === 'bndy-artists') {
+          return Promise.resolve({ Items: [
+            { id: 'aoh-nw', name: 'Angel Of Harlem', location: 'North West England' },
+            { id: 'aod', name: 'Angels Of Darkness', location: 'Staffordshire UK' },
+          ] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const event = createFindOrCreateRequest('Angel Of Harlem', { venueRegion: 'Haslington', location: 'Staffordshire' });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('review');
+      expect(body.locationConflict).toBe(true);
+      expect(body.candidates[0].id).toBe('aoh-nw');
+    });
+  });
+
   describe('Candidate lookup reads every page of a prefix (Backline finding 06/09/2026)', () => {
     it('finds an artist that sits beyond the first page of the "th" prefix', async () => {
       const firstPage = Array.from({ length: 3 }, (_, i) => ({ id: `the-${i}`, name: `The Other ${i}`, location: 'Stoke-on-Trent' }));
