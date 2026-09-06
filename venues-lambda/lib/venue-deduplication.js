@@ -157,6 +157,49 @@ async function handleFindOrCreateVenue(deps, venueData, event) {
       }
     }
 
+    // === LEVEL 1b: Name variant exact match (100% confidence) ===
+    // A venue's name_variants are the spellings sources use for it ("The Glebe Stoke"
+    // for The Glebe). They are explicit aliases, so an exact normalised match is a
+    // match, the same way the artist path treats artist name variants (06/09/2026).
+    const normaliseVenueName = (value) => String(value || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
+    const incomingVenueName = normaliseVenueName(venueData.name);
+    if (incomingVenueName) {
+      const variantMatch = existingVenues.find(v => {
+        const variants = Array.isArray(v.name_variants) ? v.name_variants : (Array.isArray(v.nameVariants) ? v.nameVariants : []);
+        return variants.some(variant => normaliseVenueName(variant) === incomingVenueName);
+      });
+      if (variantMatch) {
+        console.log(`[SUCCESS] LEVEL 1b MATCH: name variant "${venueData.name}" -> ${variantMatch.id} (${variantMatch.name})`);
+        const mergedExternalIds = mergeExternalIds(variantMatch.external_ids || [], venueData.externalIds || []);
+        if (venueData.externalIds && venueData.externalIds.length > 0) {
+          await dynamodb.update({
+            TableName: 'bndy-venues',
+            Key: { id: variantMatch.id },
+            UpdateExpression: 'SET external_ids = :extIds, updated_at = :now',
+            ExpressionAttributeValues: { ':extIds': mergedExternalIds, ':now': new Date().toISOString() }
+          }).promise();
+        }
+        return {
+          statusCode: 200,
+          headers: getCorsHeaders(event),
+          body: JSON.stringify({
+            id: variantMatch.id,
+            name: variantMatch.name,
+            address: variantMatch.address,
+            latitude: variantMatch.latitude,
+            longitude: variantMatch.longitude,
+            location: variantMatch.location_object || { lat: variantMatch.latitude, lng: variantMatch.longitude },
+            googlePlaceId: variantMatch.google_place_id,
+            validated: variantMatch.validated,
+            externalIds: mergedExternalIds,
+            matchConfidence: 100,
+            matchMethod: 'name_variant',
+            ...editionMetadata(variantMatch)
+          })
+        };
+      }
+    }
+
     // === LEVEL 2: Location + Name fuzzy match (90% confidence) ===
     if (venueData.latitude && venueData.longitude) {
       for (const venue of existingVenues) {

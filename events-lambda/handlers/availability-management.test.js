@@ -29,6 +29,14 @@ const deps = {
 };
 
 describe('managed artist availability', () => {
+  // Toggle and bulk writes refuse past dates, so these fixtures use a Friday to Sunday
+  // at least four weeks ahead rather than dates that expire (they did on 06/09/2026).
+  const iso = (date) => date.toISOString().slice(0, 10);
+  const nextFriday = new Date(Date.now() + 28 * 86400000);
+  while (nextFriday.getUTCDay() !== 5) nextFriday.setUTCDate(nextFriday.getUTCDate() + 1);
+  const FRI = iso(nextFriday);
+  const SAT = iso(new Date(nextFriday.getTime() + 86400000));
+  const SUN = iso(new Date(nextFriday.getTime() + 2 * 86400000));
   beforeEach(() => {
     jest.clearAllMocks();
     mockDynamoDB.query.mockResolvedValue({ Items: [] });
@@ -110,11 +118,11 @@ describe('managed artist availability', () => {
   test('does not create availability over an existing gig', async () => {
     mockDynamoDB.query
       .mockResolvedValueOnce({ Items: [{ artist_id: 'artist-1', user_id: 'user-1', role: 'admin', status: 'active' }] })
-      .mockResolvedValueOnce({ Items: [{ id: 'gig-1', date: '2026-09-05', type: 'public_gig' }] });
+      .mockResolvedValueOnce({ Items: [{ id: 'gig-1', date: SAT, type: 'public_gig' }] });
 
     const result = await handleToggleAvailability(deps, {
       pathParameters: { artistId: 'artist-1' },
-      body: JSON.stringify({ date: '2026-09-05' })
+      body: JSON.stringify({ date: SAT })
     }, { userId: 'user-1', platformAdmin: false });
 
     expect(result.statusCode).toBe(409);
@@ -129,8 +137,8 @@ describe('managed artist availability', () => {
       }
       if (params.IndexName === 'artistId-date-index') {
         return { Items: [
-          { id: 'rehearsal-1', artistId: 'artist-1', date: '2026-09-05', type: 'rehearsal' },
-          { id: 'unavailable-1', artistId: 'artist-1', date: '2026-09-05', type: 'unavailable' }
+          { id: 'rehearsal-1', artistId: 'artist-1', date: SAT, type: 'rehearsal' },
+          { id: 'unavailable-1', artistId: 'artist-1', date: SAT, type: 'unavailable' }
         ] };
       }
       return { Items: [] };
@@ -138,13 +146,13 @@ describe('managed artist availability', () => {
 
     const result = await handleToggleAvailability(deps, {
       pathParameters: { artistId: 'artist-1' },
-      body: JSON.stringify({ date: '2026-09-05' })
+      body: JSON.stringify({ date: SAT })
     }, { userId: 'user-1', platformAdmin: false });
 
     expect(result.statusCode).toBe(201);
     expect(JSON.parse(result.body)).toMatchObject({ action: 'created' });
     expect(mockDynamoDB.put).toHaveBeenCalledWith(expect.objectContaining({
-      Item: expect.objectContaining({ artistId: 'artist-1', date: '2026-09-05', type: 'available' })
+      Item: expect.objectContaining({ artistId: 'artist-1', date: SAT, type: 'available' })
     }));
     expect(mockDynamoDB.query).not.toHaveBeenCalledWith(expect.objectContaining({
       IndexName: 'artist_id-index'
@@ -158,9 +166,9 @@ describe('managed artist availability', () => {
     mockDynamoDB.query.mockImplementation(async (params) => {
       if (params.IndexName === 'artistId-date-index' && params.KeyConditionExpression.includes('BETWEEN')) {
         return { Items: [
-          { id: 'rehearsal-1', artistId: 'artist-1', date: '2026-09-04', type: 'rehearsal' },
-          { id: 'private-1', artistId: 'artist-1', date: '2026-09-05', type: 'gig', isPublic: false },
-          { id: 'public-1', artistId: 'artist-1', date: '2026-09-06', type: 'gig', isPublic: true }
+          { id: 'rehearsal-1', artistId: 'artist-1', date: FRI, type: 'rehearsal' },
+          { id: 'private-1', artistId: 'artist-1', date: SAT, type: 'gig', isPublic: false },
+          { id: 'public-1', artistId: 'artist-1', date: SUN, type: 'gig', isPublic: true }
         ] };
       }
       return { Items: [] };
@@ -170,8 +178,8 @@ describe('managed artist availability', () => {
     const result = await handleBulkAvailability(deps, {
       pathParameters: { artistId: 'artist-1' },
       body: JSON.stringify({
-        startDate: '2026-09-04',
-        endDate: '2026-09-06',
+        startDate: FRI,
+        endDate: SUN,
         rules: ['weekends']
       })
     }, { userId: 'staff-1', platformAdmin: true });
@@ -180,7 +188,7 @@ describe('managed artist availability', () => {
     expect(JSON.parse(result.body)).toMatchObject({ created: 1, skipped: 2 });
     expect(mockDynamoDB.put).toHaveBeenCalledTimes(1);
     expect(mockDynamoDB.put).toHaveBeenCalledWith(expect.objectContaining({
-      Item: expect.objectContaining({ artistId: 'artist-1', date: '2026-09-04', type: 'available' })
+      Item: expect.objectContaining({ artistId: 'artist-1', date: FRI, type: 'available' })
     }));
   });
 

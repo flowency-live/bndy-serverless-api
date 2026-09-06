@@ -470,6 +470,69 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     });
   });
 
+  describe('Exact name wins over a look-alike (Backline finding 06/09/2026)', () => {
+    it('matches the one exact-name candidate in the same region even when footprints tie', async () => {
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.TableName === 'bndy-artists') {
+          return Promise.resolve({ Items: [
+            { id: 'relentless-lincoln', name: 'Relentless', location: 'Lincoln' },
+            { id: 'reckless-exeter', name: 'Reckless', location: 'Exeter' },
+          ] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const event = createFindOrCreateRequest('Relentless', { venueRegion: 'Lincoln', location: 'Lincolnshire' });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(200);
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('relentless-lincoln');
+    });
+
+    it('still reviews when two exact-name candidates tie', async () => {
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.TableName === 'bndy-artists') {
+          return Promise.resolve({ Items: [
+            { id: 'alibi-ne', name: 'Alibi', location: 'North East UK' },
+            { id: 'alibi-stoke', name: 'Alibi', location: 'Stoke-on-Trent' },
+          ] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const event = createFindOrCreateRequest('Alibi', { venueRegion: 'London', location: 'London' });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('review');
+    });
+  });
+
+  describe('Candidate lookup reads every page of a prefix (Backline finding 06/09/2026)', () => {
+    it('finds an artist that sits beyond the first page of the "th" prefix', async () => {
+      const firstPage = Array.from({ length: 3 }, (_, i) => ({ id: `the-${i}`, name: `The Other ${i}`, location: 'Stoke-on-Trent' }));
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.TableName === 'bndy-artists' && params.ExpressionAttributeValues[':prefix'] === 'th') {
+          if (!params.ExclusiveStartKey) return Promise.resolve({ Items: firstPage, LastEvaluatedKey: { id: 'the-2' } });
+          return Promise.resolve({ Items: [{ id: 'the-vanz', name: 'The Vanz', location: 'Staffordshire UK' }] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const event = createFindOrCreateRequest('The Vanz', { location: 'Staffordshire' });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('the-vanz');
+    });
+  });
+
   // =========================================================================
   // RESOLUTION PARAMS (Blocker #1 fix): resolveTo + confirmNew
   // When action:review is returned, caller can retry with resolution params

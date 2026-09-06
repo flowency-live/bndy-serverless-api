@@ -3263,23 +3263,31 @@ async function handleFindOrCreateArtist(event) {
 
   for (const prefix of prefixes) {
     try {
-      const res = await dynamodb.query({
-        TableName: 'bndy-artists',
-        IndexName: 'name-search-index',
-        KeyConditionExpression: 'name_prefix = :prefix',
-        ExpressionAttributeValues: { ':prefix': prefix },
-        ProjectionExpression: 'id, #name, bio, #location, name_variants, publicationScopes, discoveryScopes, performerKind',
-        ExpressionAttributeNames: { '#name': 'name', '#location': 'location' },
-        Limit: 500
-      }).promise();
+      // Read every page of the prefix. A two-letter prefix such as "th" holds well over
+      // 500 artists; a single page hid The Vanz and reported it as new (06/09/2026).
+      let exclusiveStartKey;
+      let pages = 0;
+      do {
+        const res = await dynamodb.query({
+          TableName: 'bndy-artists',
+          IndexName: 'name-search-index',
+          KeyConditionExpression: 'name_prefix = :prefix',
+          ExpressionAttributeValues: { ':prefix': prefix },
+          ProjectionExpression: 'id, #name, bio, #location, name_variants, publicationScopes, discoveryScopes, performerKind',
+          ExpressionAttributeNames: { '#name': 'name', '#location': 'location' },
+          ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {})
+        }).promise();
 
-      // Deduplicate by ID (in case same artist appears in multiple prefixes)
-      for (const item of (res.Items || [])) {
-        if (!seenIds.has(item.id)) {
-          seenIds.add(item.id);
-          candidates.push(item);
+        // Deduplicate by ID (in case same artist appears in multiple prefixes)
+        for (const item of (res.Items || [])) {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            candidates.push(item);
+          }
         }
-      }
+        exclusiveStartKey = res.LastEvaluatedKey;
+        pages += 1;
+      } while (exclusiveStartKey && pages < 20);
     } catch (err) {
       console.error(`[find-or-create artist] candidate query failed for prefix "${prefix}":`, err.message);
     }
@@ -3359,8 +3367,20 @@ async function handleFindOrCreateArtist(event) {
     // Re-sort by composite score (footprint-weighted)
     scored = scoredWithFootprint.sort((x, y) => y.footprintScore - x.footprintScore);
 
+    // Exact name wins (06/09/2026): when exactly one candidate carries this exact
+    // normalised name and it sits in the listing's region, a look-alike ("Reckless"
+    // beside "Relentless") must not drag it into a near-tie. Two exact names still tie.
+    const exactNamed = scored.filter(s => s.slugEqual);
+    const exactInRegion = exactNamed.filter(s => s.sameRegion || incomingRegion === 'unknown');
+    const exactWins = exactNamed.length === 1 && exactInRegion.length === 1;
+    if (exactWins) {
+      const winner = { ...exactInRegion[0], footprintScore: Math.max(exactInRegion[0].footprintScore, SCORE_THRESHOLD_HIGH) };
+      scored = [winner, ...scored.filter(s => s.id !== winner.id)];
+      console.log(`[find-or-create artist] EXACT_NAME_IN_REGION: "${name}" -> ${winner.id} outranks ${scored.length - 1} look-alike(s)`);
+    }
+
     // Margin guard (ADR-021): if #2 within 10pts of #1 → REVIEW (ambiguous collision)
-    if (scored.length >= 2) {
+    if (scored.length >= 2 && !exactWins) {
       const margin = scored[0].footprintScore - scored[1].footprintScore;
       if (margin < MARGIN_THRESHOLD) {
         console.log(`[find-or-create artist] REVIEW "${name}" - margin guard triggered (${margin}pt margin)`);
