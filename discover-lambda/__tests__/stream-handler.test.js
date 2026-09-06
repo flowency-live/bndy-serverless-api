@@ -185,7 +185,7 @@ describe('processStreamBatch', () => {
       Item: { giggingStatus: null, giggingUntil: null },
     }));
     mockDynamoDB.query.mockReturnValue(mockPromise({
-      Items: [{ date: '2026-12-25', hidden: false, visibility: 'public' }],
+      Items: [{ id: 'event-1', date: '2026-12-25', hidden: false, visibility: 'public' }],
     }));
 
     const records = [
@@ -243,5 +243,98 @@ describe('processStreamBatch', () => {
 
     expect(mockDynamoDB.query).not.toHaveBeenCalled();
     expect(mockDynamoDB.update).not.toHaveBeenCalled();
+  });
+
+  test('uses stream record event data when GSI returns empty due to eventual consistency', async () => {
+    // Simulate GSI eventual consistency lag: query returns empty even though event was just written
+    mockDynamoDB.query.mockReturnValue(mockPromise({ Items: [] }));
+    mockDynamoDB.get.mockReturnValue(mockPromise({ Item: {} }));
+
+    const records = [
+      {
+        eventName: 'INSERT',
+        dynamodb: {
+          NewImage: {
+            id: { S: 'event-123' },
+            artistId: { S: 'artist-1' },
+            date: { S: '2026-12-25' },
+            isPublic: { BOOL: true },
+            // hidden and visibility not present - defaults apply
+          },
+        },
+      },
+    ];
+
+    await processStreamBatch(records, mockDynamoDB, '2026-08-31');
+
+    // Should still update artist because stream record event is merged
+    expect(mockDynamoDB.update).toHaveBeenCalledTimes(1);
+    expect(mockDynamoDB.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'bndy-artists',
+        Key: { id: 'artist-1' },
+        UpdateExpression: expect.stringContaining('SET'),
+      })
+    );
+  });
+
+  test('deduplicates stream record event with GSI results', async () => {
+    // GSI returns the same event that's in the stream record (normal case when GSI is consistent)
+    mockDynamoDB.query.mockReturnValue(mockPromise({
+      Items: [{ id: 'event-123', date: '2026-12-25', hidden: false, visibility: 'public' }],
+    }));
+    mockDynamoDB.get.mockReturnValue(mockPromise({ Item: {} }));
+
+    const records = [
+      {
+        eventName: 'INSERT',
+        dynamodb: {
+          NewImage: {
+            id: { S: 'event-123' },
+            artistId: { S: 'artist-1' },
+            date: { S: '2026-12-25' },
+            isPublic: { BOOL: true },
+          },
+        },
+      },
+    ];
+
+    await processStreamBatch(records, mockDynamoDB, '2026-08-31');
+
+    // Should update with giggingUntil = '2026-12-25' (not duplicated)
+    expect(mockDynamoDB.update).toHaveBeenCalledTimes(1);
+  });
+
+  test('excludes REMOVE event from merged results', async () => {
+    // GSI still returns the deleted event (eventual consistency lag)
+    // Note: GSI now includes id in projection for proper merge handling
+    mockDynamoDB.query.mockReturnValue(mockPromise({
+      Items: [{ id: 'event-123', date: '2026-12-25', hidden: false, visibility: 'public' }],
+    }));
+    mockDynamoDB.get.mockReturnValue(mockPromise({
+      Item: { giggingStatus: 'Y', giggingUntil: '2026-12-25' },
+    }));
+
+    const records = [
+      {
+        eventName: 'REMOVE',
+        dynamodb: {
+          OldImage: {
+            id: { S: 'event-123' },
+            artistId: { S: 'artist-1' },
+            date: { S: '2026-12-25' },
+          },
+        },
+      },
+    ];
+
+    await processStreamBatch(records, mockDynamoDB, '2026-08-31');
+
+    // Should clear gigging status because the event was removed
+    expect(mockDynamoDB.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        UpdateExpression: expect.stringContaining('REMOVE'),
+      })
+    );
   });
 });
