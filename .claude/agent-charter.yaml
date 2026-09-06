@@ -11,8 +11,8 @@
 role: bndy-serverless-api
 
 owns:
-  # Lambda function code (except auth and critical handlers)
-  - lambda/**
+  # Lambda function code lives in <domain>-lambda/ at the repo root (except auth, carved out below)
+  - "*-lambda/**"
   - scripts/**
   - docs/**
   - tests/**

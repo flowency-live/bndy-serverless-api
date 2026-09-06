@@ -8,3 +8,4 @@
 
 | Date | Decided By | Decision | File(s) | Status | Notes / ADR |
 |------|-----------|----------|---------|--------|-------------|
+| 06/09/2026 | Jason (owner ruling), drafted by Claude | Charter `owns` glob corrected from `lambda/**` to `*-lambda/**`; the old glob matched no code directory, so the guardian would have blocked every lambda write once it fired | .claude/agent-charter.yaml | validated | Charter amendment, own PR ahead of the venue-rules work; no ADR |
