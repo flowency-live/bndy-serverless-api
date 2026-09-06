@@ -9,7 +9,7 @@ exports.handler = async (event, context) => {
     context.callbackWaitsForEmptyEventLoop = false;
     return await intelligence.handle(event);
   }
-  const match = path.match(/^\/api\/source-runs\/backline\/(summary|tasks|subject|source|observation|graph|hydration|trust-loop|operations)$/);
+  const match = path.match(/^\/api\/source-runs\/backline\/(summary|tasks|subject|source|observation|graph|hydration|trust-loop|holds|operations)$/);
   if (method === 'GET' && match) {
     context.callbackWaitsForEmptyEventLoop = false;
     return await backline.handle(event, match[1]);

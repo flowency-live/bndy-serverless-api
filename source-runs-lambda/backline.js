@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk');
 const jwt = require('jsonwebtoken');
+const crypto = require('node:crypto');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-west-2' });
 const rawDynamo = new AWS.DynamoDB({ region: 'eu-west-2' });
@@ -1072,6 +1073,222 @@ async function operations(tableName, event) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Godmode holds inbox, read side.
+//
+// A hold is a ProjectionException record: Backline could not finish a gig
+// safely and stopped. The record is keyed by a digest of the projection item
+// (EXCEPTION#projection-exception-<32 hex>) and carries no index attributes,
+// so it cannot be listed directly and the state table is far too large to
+// scan (4.1 million items on 06/09/2026). Holds are therefore reached the way
+// the engine left them: source -> recent observations -> projection run items
+// -> projection items whose outcome was 'exception' -> the exception record.
+// The window is bounded by `since` on observation time. A complete listing
+// needs the exception sink to write GSI1 keys; that request is in the PR.
+// ---------------------------------------------------------------------------
+
+const HOLDS_OBSERVATIONS_PER_SOURCE = 12;
+const HOLDS_MAX_ITEMS = 3000;
+const HOLDS_DEFAULT_WINDOW_DAYS = 30;
+
+const HOLD_KINDS = new Set([
+  'near-tie',
+  'location-differs',
+  'ambiguous',
+  'awaiting-verification',
+  'rejected-by-canonical',
+  'existing-event-bill-differs',
+  'existing-event-venue-differs',
+  'bill-too-large',
+  'other',
+]);
+
+function exceptionIdFor(idempotencyKey) {
+  return `projection-exception-${crypto.createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 32)}`;
+}
+
+function parseHoldFilters(params = {}, now = new Date()) {
+  const query = params || {};
+  let since;
+  if (query.since) {
+    const parsed = new Date(query.since);
+    if (Number.isNaN(parsed.getTime())) throw new Error('since must be an ISO date');
+    since = parsed.toISOString();
+  } else {
+    since = new Date(now.getTime() - HOLDS_DEFAULT_WINDOW_DAYS * 86_400_000).toISOString();
+  }
+  return {
+    source: typeof query.source === 'string' && query.source ? query.source : null,
+    classification: typeof query.classification === 'string' && query.classification ? query.classification : null,
+    since,
+    limit: boundedLimit(query.limit, 100, 200),
+  };
+}
+
+function holdKind(details, reason) {
+  const classification = details && typeof details.classification === 'string' ? details.classification : null;
+  const text = `${reason || ''} ${details && typeof details.reason === 'string' ? details.reason : ''}`;
+  if (classification === 'unresolved-entity') {
+    if (/near-tie/i.test(text)) return 'near-tie';
+    if (/location differs/i.test(text)) return 'location-differs';
+    return 'ambiguous';
+  }
+  if (classification && HOLD_KINDS.has(classification)) return classification;
+  return 'other';
+}
+
+function publicHoldCandidate(candidate) {
+  if (!candidate || typeof candidate !== 'object') return null;
+  return {
+    id: typeof candidate.id === 'string' ? candidate.id : undefined,
+    name: typeof candidate.name === 'string' ? candidate.name : undefined,
+    location: typeof candidate.location === 'string' ? candidate.location : undefined,
+    confidence: typeof candidate.confidence === 'number' ? candidate.confidence : undefined,
+  };
+}
+
+function publicHoldGig(candidate) {
+  if (!candidate || typeof candidate !== 'object') return null;
+  const pick = (field) => (typeof candidate[field] === 'string' ? candidate[field] : undefined);
+  return {
+    artistName: pick('artistName') || pick('displayName'),
+    venueName: pick('venueName'),
+    venueLocation: pick('venueLocation'),
+    date: pick('date'),
+    startTime: pick('startTime'),
+    eventUrl: pick('eventUrl'),
+  };
+}
+
+function publicHold(exception, candidate) {
+  const details = exception.details && typeof exception.details === 'object' ? exception.details : {};
+  const id = typeof exception.pk === 'string' ? exception.pk.replace(/^EXCEPTION#/, '') : undefined;
+  return {
+    id,
+    status: exception.status,
+    createdAt: exception.createdAt,
+    sourceId: exception.sourceId,
+    observationId: exception.observationId,
+    candidateKey: exception.candidateKey,
+    action: exception.projectionAction,
+    classification: typeof details.classification === 'string' ? details.classification : null,
+    kind: holdKind(details, exception.reason),
+    reason: exception.reason,
+    entityType: typeof details.entityType === 'string' ? details.entityType : null,
+    entityName: typeof details.entityName === 'string' ? details.entityName : null,
+    gig: publicHoldGig(candidate),
+    candidates: Array.isArray(details.candidates) ? details.candidates.map(publicHoldCandidate).filter(Boolean) : [],
+    details: {
+      eventId: typeof details.eventId === 'string' ? details.eventId : undefined,
+      eventVenueId: typeof details.eventVenueId === 'string' ? details.eventVenueId : undefined,
+      venueId: typeof details.venueId === 'string' ? details.venueId : undefined,
+      missingArtistIds: Array.isArray(details.missingArtistIds) ? details.missingArtistIds : undefined,
+      acts: typeof details.acts === 'number' ? details.acts : undefined,
+      code: typeof details.code === 'string' ? details.code : undefined,
+      detail: typeof details.detail === 'string' ? details.detail : undefined,
+      subjectKey: typeof details.subjectKey === 'string' ? details.subjectKey : undefined,
+    },
+  };
+}
+
+function summariseHolds(rows) {
+  const byKind = {};
+  const bySource = {};
+  for (const row of rows) {
+    byKind[row.kind] = (byKind[row.kind] || 0) + 1;
+    bySource[row.sourceId] = (bySource[row.sourceId] || 0) + 1;
+  }
+  return { total: rows.length, byKind, bySource };
+}
+
+function isHeldProjectionItem(item) {
+  return item?.status === 'success' && item?.details?.outcome === 'exception';
+}
+
+async function observationIdsSince(tableName, sourceId, since, limit) {
+  const result = await dynamodb.query({
+    TableName: tableName,
+    IndexName: OBSERVATION_INDEX,
+    KeyConditionExpression: 'GSI1PK = :pk AND GSI1SK BETWEEN :from AND :to',
+    ExpressionAttributeValues: { ':pk': `SOURCE#${sourceId}`, ':from': `OBS#${since}`, ':to': 'OBS#\uffff' },
+    ScanIndexForward: false,
+    Limit: limit,
+  }).promise();
+  return (result.Items || []).map((item) => item.id).filter(Boolean);
+}
+
+async function batchGetByKeys(tableName, keys) {
+  const items = [];
+  for (let index = 0; index < keys.length; index += 100) {
+    const chunk = keys.slice(index, index + 100);
+    if (!chunk.length) break;
+    let request = { [tableName]: { Keys: chunk } };
+    do {
+      const result = await dynamodb.batchGet({ RequestItems: request }).promise();
+      items.push(...(result.Responses?.[tableName] || []));
+      request = result.UnprocessedKeys && result.UnprocessedKeys[tableName]?.Keys?.length ? result.UnprocessedKeys : null;
+    } while (request);
+  }
+  return items;
+}
+
+async function holds(tableName, event) {
+  let filters;
+  try {
+    filters = parseHoldFilters(event.queryStringParameters);
+  } catch (error) {
+    return { status: 400, body: { error: error.message } };
+  }
+  const allSourceIds = Object.values(SOURCE_FAMILIES).flatMap((family) => family.sourceIds);
+  if (filters.source && !allSourceIds.includes(filters.source)) {
+    return { status: 400, body: { error: 'Unknown Backline source' } };
+  }
+  const sourceIds = filters.source ? [filters.source] : allSourceIds;
+  const now = new Date();
+
+  const observationIds = (await Promise.all(
+    sourceIds.map((id) => observationIdsSince(tableName, id, filters.since, HOLDS_OBSERVATIONS_PER_SOURCE)),
+  )).flat();
+  const runRows = (await Promise.all(observationIds.map((id) => projectionRunRows(tableName, id)))).flat();
+  const itemRows = runRows
+    .filter((row) => typeof row.sk === 'string' && row.sk.startsWith('ITEM#') && row.idempotencyKey)
+    .sort(byCompletedAtDesc);
+  const examined = itemRows.slice(0, HOLDS_MAX_ITEMS);
+  const projectionItems = await batchGetProjectionItems(tableName, examined.map((row) => row.idempotencyKey));
+  const heldKeys = projectionItems.filter(isHeldProjectionItem).map((item) => String(item.pk).replace(/^PROJECTION_ITEM#/, ''));
+
+  const exceptions = (await batchGetByKeys(tableName, heldKeys.map((key) => ({ pk: `EXCEPTION#${exceptionIdFor(key)}`, sk: 'META' }))))
+    .filter((record) => record.status === 'open');
+  const candidateKeys = [...new Set(exceptions.map((record) => record.candidateKey).filter(Boolean))];
+  const candidates = await batchGetByKeys(tableName, candidateKeys.map((key) => ({ pk: `CANDIDATE#event#${key}`, sk: 'META' })));
+  const candidateByKey = new Map(candidates.map((record) => [String(record.pk).replace(/^CANDIDATE#event#/, ''), record]));
+
+  const rows = exceptions
+    .map((record) => publicHold(record, candidateByKey.get(record.candidateKey) || null))
+    .filter((row) => !filters.classification || row.kind === filters.classification || row.classification === filters.classification)
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+
+  return {
+    status: 200,
+    body: {
+      holds: rows.slice(0, filters.limit),
+      summary: summariseHolds(rows),
+      truncated: rows.length > filters.limit || itemRows.length > examined.length,
+      window: {
+        since: filters.since,
+        sources: sourceIds.length,
+        observationsSampled: observationIds.length,
+        itemsExamined: examined.length,
+      },
+      listing: 'projection-runs',
+      listingNote: 'Holds are found through projection runs since the window start. Older holds need the exception sink to write index keys.',
+      kinds: [...HOLD_KINDS],
+      readOnly: true,
+      computedAt: now.toISOString(),
+    },
+  };
+}
+
 exports.handle = async (event, action) => {
   const auth = await requirePlatformAdmin(event);
   if (auth.error) return response(auth.status, { error: auth.error });
@@ -1113,6 +1330,10 @@ exports.handle = async (event, action) => {
       const result = await operations(tableName, event);
       return response(result.status, result.body);
     }
+    if (action === 'holds') {
+      const result = await holds(tableName, event);
+      return response(result.status, result.body);
+    }
     return response(404, { error: 'Unknown Backline Explorer action' });
   } catch (error) {
     console.error('[BACKLINE] request failed', error);
@@ -1138,4 +1359,10 @@ exports.__test = {
   publicProjectionItem,
   publicProjectionRun,
   boundedLimit,
+  exceptionIdFor,
+  parseHoldFilters,
+  holdKind,
+  publicHold,
+  summariseHolds,
+  isHeldProjectionItem,
 };
