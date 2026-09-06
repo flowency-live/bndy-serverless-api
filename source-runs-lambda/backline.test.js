@@ -235,3 +235,139 @@ test('would-write candidate count reads the compact record and the legacy embedd
     details: { wouldWrite: 'create', reason: 'r', candidate: { artistName: 'A', supportingClaims: [{ id: 'c1' }, { id: 'c2' }] } } });
   assert.equal(legacy.candidate.supportingClaims, 2);
 });
+
+// ---------------------------------------------------------------------------
+// Godmode holds inbox, read side (docs/delegation/TASK-godmode-holds-inbox-read.md)
+// ---------------------------------------------------------------------------
+
+test('holds route is registered in the handler dispatch pattern', () => {
+  const fs = require('node:fs');
+  const source = fs.readFileSync(require.resolve('./handler.js'), 'utf8');
+  assert.match(source, /\|holds\|operations\)\$\//);
+});
+
+test('exception id is the engine digest of the projection idempotency key', () => {
+  // sha256('abc') = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+  assert.equal(__test.exceptionIdFor('abc'), 'projection-exception-ba7816bf8f01cfea414140de5dae2223');
+});
+
+test('hold filters default to a thirty day window and bound the limit', () => {
+  const now = new Date('2026-09-06T12:00:00Z');
+  const defaults = __test.parseHoldFilters({}, now);
+  assert.equal(defaults.since, '2026-08-07T12:00:00.000Z');
+  assert.equal(defaults.limit, 100);
+  assert.equal(defaults.source, null);
+  assert.equal(defaults.classification, null);
+
+  const explicit = __test.parseHoldFilters({ source: 'lemonrock-gig-hydration', classification: 'near-tie', since: '2026-09-01', limit: '9999' }, now);
+  assert.equal(explicit.source, 'lemonrock-gig-hydration');
+  assert.equal(explicit.classification, 'near-tie');
+  assert.equal(explicit.since, '2026-09-01T00:00:00.000Z');
+  assert.equal(explicit.limit, 200);
+
+  assert.throws(() => __test.parseHoldFilters({ since: 'yesterday' }, now), /since/);
+});
+
+test('hold kind is derived from the classification and the reason text', () => {
+  const kind = (classification, reason) => __test.holdKind({ classification }, reason);
+  assert.equal(kind('unresolved-entity', "artist 'X' needs review: Near-tie margin guard: top 2 candidates within 10pt"), 'near-tie');
+  assert.equal(kind('unresolved-entity', 'Name matched but location differs - possible same-name collision'), 'location-differs');
+  assert.equal(kind('unresolved-entity', 'Same-name collision detected'), 'ambiguous');
+  assert.equal(kind('awaiting-verification', 'x'), 'awaiting-verification');
+  assert.equal(kind('rejected-by-canonical', 'x'), 'rejected-by-canonical');
+  assert.equal(kind('existing-event-bill-differs', 'x'), 'existing-event-bill-differs');
+  assert.equal(kind('existing-event-venue-differs', 'x'), 'existing-event-venue-differs');
+  assert.equal(kind('bill-too-large', 'x'), 'bill-too-large');
+  assert.equal(kind('match-only-violation', 'x'), 'other');
+  assert.equal(kind(undefined, 'Additive-only projection will not reinstate a tombstoned Event'), 'other');
+});
+
+test('public hold carries the gig, the reason and the bndy candidates without raw keys', () => {
+  const exception = {
+    pk: 'EXCEPTION#projection-exception-abc',
+    sk: 'META',
+    status: 'open',
+    sourceId: 'lemonrock-gig-hydration',
+    observationId: 'obs-1',
+    candidateKey: 'event:lemonrock-gig-hydration:lemonrock:gig:973876',
+    projectionAction: 'create',
+    reason: "artist 'Basher Tate' needs review: Near-tie margin guard: top 2 candidates within 10pt (margin=4)",
+    createdAt: '2026-09-05T10:00:00.000Z',
+    details: {
+      classification: 'unresolved-entity',
+      entityType: 'artist',
+      entityName: 'Basher Tate',
+      reason: 'Near-tie margin guard: top 2 candidates within 10pt (margin=4)',
+      candidates: [
+        { id: 'a1', name: 'Basher Tate', location: 'Exeter, UK', nameVariants: ['Basher'], confidence: 0.91, secret: 'no' },
+        { id: 'a2', name: 'Basher Tate Band', location: 'Plymouth, UK', confidence: 0.87 },
+      ],
+    },
+  };
+  const candidate = {
+    pk: 'CANDIDATE#event#event:lemonrock-gig-hydration:lemonrock:gig:973876',
+    sk: 'META',
+    artistName: 'Basher Tate',
+    venueName: 'Cowick Street Railway Club',
+    venueLocation: 'Exeter',
+    date: '2027-05-01',
+    startTime: '20:30',
+    eventUrl: 'https://www.lemonrock.com/gig.php?id=973876',
+    supportingClaimIds: ['c1', 'c2'],
+    GSI1PK: 'SOURCE#lemonrock-gig-hydration',
+  };
+  const hold = __test.publicHold(exception, candidate);
+  assert.deepEqual(hold, {
+    id: 'projection-exception-abc',
+    status: 'open',
+    createdAt: '2026-09-05T10:00:00.000Z',
+    sourceId: 'lemonrock-gig-hydration',
+    observationId: 'obs-1',
+    candidateKey: 'event:lemonrock-gig-hydration:lemonrock:gig:973876',
+    action: 'create',
+    classification: 'unresolved-entity',
+    kind: 'near-tie',
+    reason: "artist 'Basher Tate' needs review: Near-tie margin guard: top 2 candidates within 10pt (margin=4)",
+    entityType: 'artist',
+    entityName: 'Basher Tate',
+    gig: {
+      artistName: 'Basher Tate',
+      venueName: 'Cowick Street Railway Club',
+      venueLocation: 'Exeter',
+      date: '2027-05-01',
+      startTime: '20:30',
+      eventUrl: 'https://www.lemonrock.com/gig.php?id=973876',
+    },
+    candidates: [
+      { id: 'a1', name: 'Basher Tate', location: 'Exeter, UK', confidence: 0.91 },
+      { id: 'a2', name: 'Basher Tate Band', location: 'Plymouth, UK', confidence: 0.87 },
+    ],
+    details: { eventId: undefined, eventVenueId: undefined, venueId: undefined, missingArtistIds: undefined, acts: undefined, code: undefined, detail: undefined, subjectKey: undefined },
+  });
+  assert.equal(Object.keys(hold).includes('pk'), false);
+
+  const bare = __test.publicHold({ pk: 'EXCEPTION#projection-exception-x', status: 'open', reason: 'r', createdAt: '2026-09-01T00:00:00Z' }, null);
+  assert.equal(bare.kind, 'other');
+  assert.equal(bare.gig, null);
+  assert.deepEqual(bare.candidates, []);
+});
+
+test('hold summary counts open holds per kind and per source', () => {
+  const rows = [
+    { kind: 'near-tie', sourceId: 'a' },
+    { kind: 'near-tie', sourceId: 'b' },
+    { kind: 'awaiting-verification', sourceId: 'a' },
+  ];
+  assert.deepEqual(__test.summariseHolds(rows), {
+    total: 3,
+    byKind: { 'near-tie': 2, 'awaiting-verification': 1 },
+    bySource: { a: 2, b: 1 },
+  });
+});
+
+test('held projection items are the successes whose outcome was an exception', () => {
+  assert.equal(__test.isHeldProjectionItem({ status: 'success', details: { outcome: 'exception' } }), true);
+  assert.equal(__test.isHeldProjectionItem({ status: 'success', details: { outcome: 'projected' } }), false);
+  assert.equal(__test.isHeldProjectionItem({ status: 'shadow', details: { outcome: 'exception' } }), false);
+  assert.equal(__test.isHeldProjectionItem({ status: 'failed' }), false);
+});
