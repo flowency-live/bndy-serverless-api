@@ -704,12 +704,12 @@ Resources:
             Method: POST
 
   # =============================================================================
-  # Recurring Sessions Lambda (Slice 1+2: GET routes + Godmode projection)
+  # Recurring Sessions Lambda (Slice 1-3: GET routes + Godmode + Mutations)
   # =============================================================================
   RecurringSessionsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Description: BNDY Recurring Sessions API - handles recurring grassroots session reads and projection
+      Description: BNDY Recurring Sessions API - recurring grassroots sessions with Event materialisation
       Runtime: nodejs22.x
       CodeUri: ./recurring-sessions-lambda/
       Handler: handler.handler
@@ -717,11 +717,13 @@ Resources:
       Layers:
         - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
       MemorySize: 512
-      Timeout: 30
+      Timeout: 60
       Environment:
         Variables:
           RECURRING_SESSIONS_TABLE: !Ref RecurringSessionsTable
           UNIQUE_KEYS_TABLE: !Ref UniqueKeysTable
+          EVENTS_TABLE: bndy-events
+          GATE_MODE: enforce
           JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
       Events:
         # GET /api/venues/{venueId}/recurring-sessions
@@ -745,6 +747,13 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/recurring-sessions/search
             Method: GET
+        # POST /api/recurring-sessions (Slice 3 - Create + Materialise)
+        CreateRecurringSession:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/recurring-sessions
+            Method: POST
         # Godmode: GET /api/godmode/recurring-sessions
         GodmodeListSessions:
           Type: HttpApi

@@ -1,15 +1,17 @@
 /**
  * BNDY Recurring Sessions Lambda - Router
  *
- * Slice 1: GET routes only. No mutation routes.
+ * Slice 1: GET routes only.
  * Slice 2: Godmode projection routes.
+ * Slice 3: POST create route with Event materialisation.
  *
  * Routes:
- *   GET /api/venues/{venueId}/recurring-sessions
- *   GET /api/recurring-sessions/{id}
- *   GET /api/recurring-sessions/search
- *   GET /api/godmode/recurring-sessions
- *   GET /api/godmode/recurring-sessions/{id}/projection
+ *   GET  /api/venues/{venueId}/recurring-sessions
+ *   GET  /api/recurring-sessions/{id}
+ *   GET  /api/recurring-sessions/search
+ *   POST /api/recurring-sessions
+ *   GET  /api/godmode/recurring-sessions
+ *   GET  /api/godmode/recurring-sessions/{id}/projection
  */
 
 const AWS = require('aws-sdk');
@@ -33,6 +35,9 @@ const {
   handleGetProjection,
   handleListSessions
 } = require('./handlers/godmode');
+const {
+  handleCreateRecurringSession
+} = require('./handlers/mutations');
 
 // Dependency injection for testability
 const deps = { dynamodb, getCorsHeaders };
@@ -83,6 +88,15 @@ exports.handler = async (event, context) => {
     // GET /api/recurring-sessions/{id}
     if (method === 'GET' && /^\/api\/recurring-sessions\/[^/]+$/.test(path)) {
       return await handleGetRecurringSessionById(deps, event);
+    }
+
+    // ========================================
+    // MUTATION ROUTES (Slice 3)
+    // ========================================
+
+    // POST /api/recurring-sessions
+    if (method === 'POST' && path === '/api/recurring-sessions') {
+      return await handleCreateRecurringSession(event);
     }
 
     // ========================================
