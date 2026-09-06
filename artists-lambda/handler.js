@@ -3370,12 +3370,13 @@ async function handleFindOrCreateArtist(event) {
     // Exact name wins (06/09/2026): when exactly one candidate carries this exact
     // normalised name and it sits in the listing's region, a look-alike ("Reckless"
     // beside "Relentless") must not drag it into a near-tie. Two exact names still tie.
+    // The one exact name is the candidate whatever its region (06/09/2026, third pass):
+    // the location check that follows decides same act or region conflict, which is a
+    // truer answer than a near-tie with a look-alike.
     const exactNamed = scored.filter(s => s.slugEqual);
-    // A national act ("UK wide") has no home region to be outside of.
-    const exactInRegion = exactNamed.filter(s => s.sameRegion || incomingRegion === 'unknown' || isNationalLocation(s.location));
-    const exactWins = exactNamed.length === 1 && exactInRegion.length === 1;
+    const exactWins = exactNamed.length === 1;
     if (exactWins) {
-      const winner = { ...exactInRegion[0], footprintScore: Math.max(exactInRegion[0].footprintScore, SCORE_THRESHOLD_HIGH) };
+      const winner = { ...exactNamed[0], footprintScore: Math.max(exactNamed[0].footprintScore, SCORE_THRESHOLD_HIGH) };
       scored = [winner, ...scored.filter(s => s.id !== winner.id)];
       console.log(`[find-or-create artist] EXACT_NAME_IN_REGION: "${name}" -> ${winner.id} outranks ${scored.length - 1} look-alike(s)`);
     }
