@@ -30,6 +30,18 @@ function generateSeriesId() {
   return 'rs_' + crypto.randomBytes(12).toString('hex');
 }
 
+const CREATE_ROLES = ['curator', 'staff'];
+
+/**
+ * Same ladder as bndy-app AuthProvider.isCurator, plus the explicit flags
+ * requireAuth already reads from bndy-users.
+ * @param {Object} user
+ * @returns {boolean}
+ */
+function canCreateSeries(user) {
+  return CREATE_ROLES.includes(user.role) || !!user.platformAdmin || !!user.curatorAccess;
+}
+
 /**
  * POST /api/recurring-sessions
  *
@@ -45,6 +57,12 @@ async function handleCreateRecurringSession(event) {
   }
 
   const { user } = authResult;
+
+  // Curator tool (BNDY-CURATOR-CREATE-HUB-DESIGN.md 3.3). The UI hides the
+  // wizard from plain users; the server is the gate that counts.
+  if (!canCreateSeries(user)) {
+    return jsonResponse(event, 403, { error: 'Curator access required' }, { corsHeaders });
+  }
 
   // Parse request body
   let body;
@@ -83,11 +101,13 @@ async function handleCreateRecurringSession(event) {
     sessionType: body.sessionType || 'other',
     recurrence: body.recurrence,
     defaultStartTime: body.defaultStartTime,
-    defaultEndTime: body.defaultEndTime || null,
+    // Optionals are omitted, not nulled: validateRecurringSession treats a
+    // present null endsOn as a malformed date and rejects every request.
+    ...(body.defaultEndTime ? { defaultEndTime: body.defaultEndTime } : {}),
     startsOn: body.startsOn,
-    endsOn: body.endsOn || null,
+    ...(body.endsOn ? { endsOn: body.endsOn } : {}),
     timezone: body.timezone,
-    description: body.description || null,
+    ...(body.description ? { description: body.description } : {}),
     status: 'active',
     version: 1,
     exceptions: [],

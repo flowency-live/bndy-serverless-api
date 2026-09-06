@@ -5,7 +5,18 @@
  * Uses the bndy-unique-keys table for atomic reservation.
  */
 
+const { weekdayToIndex } = require('./recurrence-patterns');
+
 const UNIQUE_KEYS_TABLE = process.env.UNIQUE_KEYS_TABLE || 'bndy-unique-keys';
+
+/** Weekday name ('tuesday') or index (2) to index, so both forms share one key. */
+function dayIndex(weekday) {
+  const index = typeof weekday === 'number' ? weekday : weekdayToIndex(String(weekday));
+  if (!Number.isInteger(index) || index < 0 || index > 6) {
+    throw new Error(`Unknown weekday: ${weekday}`);
+  }
+  return index;
+}
 
 /**
  * Normalise session name for use in unique key.
@@ -70,14 +81,14 @@ function generateSeriesKey(session) {
     case 'weekly': {
       const interval = recurrence.interval || 1;
       const freq = interval === 2 ? 'fortnightly' : 'weekly';
-      const days = [...(recurrence.daysOfWeek || [])].sort((a, b) => a - b).join(',');
+      const days = (recurrence.daysOfWeek || []).map(dayIndex).sort((a, b) => a - b).join(',');
       parts.push(freq, days);
       break;
     }
 
     case 'monthly_by_weekday': {
       const ordStr = ordinalString(recurrence.ordinal);
-      parts.push('monthly', ordStr, String(recurrence.weekday));
+      parts.push('monthly', ordStr, String(dayIndex(recurrence.weekday)));
       break;
     }
 

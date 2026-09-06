@@ -7,6 +7,21 @@
 
 const { generateOccurrenceKey } = require('./occurrence-key');
 const { localToUTC } = require('./timezone-utils');
+const { weekdayToIndex } = require('./recurrence-patterns');
+
+/**
+ * The API contract carries weekday NAMES ('tuesday'); stored and test data may
+ * carry getUTCDay() indices (2). Resolve either to an index once, here.
+ * @param {string|number} weekday
+ * @returns {number}
+ */
+function dayIndex(weekday) {
+  const index = typeof weekday === 'number' ? weekday : weekdayToIndex(String(weekday));
+  if (!Number.isInteger(index) || index < 0 || index > 6) {
+    throw new Error(`Unknown weekday: ${weekday}`);
+  }
+  return index;
+}
 
 const PROJECTION_DEFAULTS = {
   horizonWeeks: 16,
@@ -89,7 +104,7 @@ function computeOccurrencesInRange(session, startDate, endDate, options = {}) {
 function generateWeeklyOccurrences(session, startDate, endDate, occurrences, maxOccurrences) {
   const { recurrence, startsOn, timezone } = session;
   const interval = recurrence.interval || 1;
-  const daysOfWeek = [...recurrence.daysOfWeek].sort((a, b) => a - b);
+  const daysOfWeek = recurrence.daysOfWeek.map(dayIndex).sort((a, b) => a - b);
 
   // Parse the anchor date (startsOn)
   const anchorDate = new Date(startsOn + 'T00:00:00Z');
@@ -145,7 +160,8 @@ function generateWeeklyOccurrences(session, startDate, endDate, occurrences, max
  */
 function generateMonthlyByWeekdayOccurrences(session, startDate, endDate, occurrences, maxOccurrences) {
   const { recurrence, startsOn, timezone } = session;
-  const { ordinal, weekday } = recurrence;
+  const { ordinal } = recurrence;
+  const weekday = dayIndex(recurrence.weekday);
 
   // Start from the month containing startDate or startsOn, whichever is later
   const effectiveStart = startsOn > startDate ? startsOn : startDate;
