@@ -726,6 +726,40 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     });
   });
 
+  describe('A source key bndy already holds wins before any name scoring (holds walk-through H11)', () => {
+    it('matches on external id when a candidate carries the request\'s source key', async () => {
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.TableName === 'bndy-artists') {
+          return Promise.resolve({ Items: [
+            { id: 'danny-brab', name: 'Danny Brab', location: 'Stoke-on-Trent', external_ids: [{ source: 'klma-stoke-gig-list', id: 'klma-artist-741b176f1969' }] },
+            { id: 'danny-t', name: 'Danny T', location: 'Poole' },
+          ] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const event = createFindOrCreateRequest('Danny & Friends', {
+        venueRegion: 'Dilhorne', location: 'Staffordshire', canCreate: false,
+        externalIds: [{ source: 'klma-stoke-gig-list', id: 'klma-artist-741b176f1969' }],
+      });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('danny-brab');
+      expect(body.matchedBy).toBe('external_id');
+    });
+
+    it('asks for external_ids when it reads candidates', async () => {
+      mockDynamoDB.query.mockResolvedValue({ Items: [] });
+      await handler(createFindOrCreateRequest('Danny & Friends', { venueRegion: 'Dilhorne', location: 'Staffordshire' }), {});
+      const candidateQueries = mockDynamoDB.query.mock.calls.map(([p]) => p).filter((p) => p.TableName === 'bndy-artists');
+      expect(candidateQueries.length).toBeGreaterThan(0);
+      candidateQueries.forEach((p) => expect(p.ProjectionExpression).toMatch(/external_ids/));
+    });
+  });
+
   describe('Candidate lookup reads every page of a prefix (Backline finding 06/09/2026)', () => {
     it('finds an artist that sits beyond the first page of the "th" prefix', async () => {
       const firstPage = Array.from({ length: 3 }, (_, i) => ({ id: `the-${i}`, name: `The Other ${i}`, location: 'Stoke-on-Trent' }));
