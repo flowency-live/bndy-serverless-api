@@ -115,6 +115,9 @@ const MUTATION_ROUTE_BASELINE = {
   'POST /api/users/me/unavailability': 'handler-auth',
   'POST /api/integration/events': 'handler-auth',
 
+  // === Recurring Sessions ===
+  'POST /api/recurring-sessions': 'handler-auth',
+
   // === Venues ===
   'POST /api/venues': 'handler-auth',
   'POST /api/venues/find-or-create': 'handler-auth',
