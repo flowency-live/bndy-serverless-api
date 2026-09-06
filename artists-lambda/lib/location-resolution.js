@@ -14,6 +14,16 @@ const { regionBucket } = require('./identity');
 
 const UNKNOWN_REGION = 'unknown';
 
+// An act that tours nationally has no home region to conflict with. Its stored
+// location says so explicitly; treat it as compatible with any resolvable region
+// rather than as missing (Backline finding 06/09/2026).
+const NATIONAL_LOCATIONS = new Set(['uk wide', 'ukwide', 'uk touring', 'national', 'nationwide', 'touring', 'uk and europe', 'uk europe']);
+
+function isNationalLocation(location) {
+  if (!location || typeof location !== 'string') return false;
+  return NATIONAL_LOCATIONS.has(location.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
+}
+
 /**
  * Check if two locations are compatible for artist identity matching.
  *
@@ -32,6 +42,13 @@ function areLocationsCompatible(inputLocation, candidateLocation) {
 
   const inputMissing = !inputLocation || inputLocation.trim() === '' || inputRegion === UNKNOWN_REGION;
   const candidateMissing = !candidateLocation || candidateLocation.trim() === '' || candidateRegion === UNKNOWN_REGION;
+
+  if (isNationalLocation(candidateLocation) && !inputMissing) {
+    return { compatible: true, inputRegion, candidateRegion: 'national', reason: 'national' };
+  }
+  if (isNationalLocation(inputLocation) && !candidateMissing) {
+    return { compatible: true, inputRegion: 'national', candidateRegion, reason: 'national' };
+  }
 
   // Both missing
   if (inputMissing && candidateMissing) {
@@ -130,6 +147,7 @@ function buildResolutionAuditLog({
 }
 
 module.exports = {
+  isNationalLocation,
   areLocationsCompatible,
   calculateLocationScore,
   buildResolutionAuditLog

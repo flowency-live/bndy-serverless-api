@@ -512,6 +512,65 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     });
   });
 
+  describe('Weak look-alikes never make a near-tie (Backline finding 06/09/2026, second pass)', () => {
+    it('reports likely-new when no candidate is a name match, even if two weak look-alikes tie', async () => {
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.TableName === 'bndy-artists') {
+          return Promise.resolve({ Items: [
+            { id: 'billy-black', name: 'Billy Black Band', location: 'North East UK' },
+            { id: 'billy-liar', name: 'Billy Liar', location: 'Essex' },
+          ] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const event = createFindOrCreateRequest('Billy Bibby', { venueRegion: 'Lincoln', location: 'Lincolnshire', canCreate: false });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('review');
+      expect(body.reason).toBe('likely-new');
+    });
+
+    it('lets a lone exact-name national act win over a look-alike', async () => {
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.TableName === 'bndy-artists') {
+          return Promise.resolve({ Items: [
+            { id: 'blaze', name: 'Blaze Bayley', location: 'UK wide' },
+            { id: 'blackballed', name: 'Blackballed', location: 'Essex' },
+          ] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const event = createFindOrCreateRequest('Blaze Bayley', { venueRegion: 'Lincoln', location: 'Lincolnshire' });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('blaze');
+    });
+
+    it('matches a national act from any region without a location hold', async () => {
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.TableName === 'bndy-artists') {
+          return Promise.resolve({ Items: [{ id: 'beans', name: 'Beans on Toast', location: 'UK wide' }] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const event = createFindOrCreateRequest('Beans on Toast', { venueRegion: 'Stoke-on-Trent', location: 'Staffordshire' });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('beans');
+    });
+  });
+
   describe('Candidate lookup reads every page of a prefix (Backline finding 06/09/2026)', () => {
     it('finds an artist that sits beyond the first page of the "th" prefix', async () => {
       const firstPage = Array.from({ length: 3 }, (_, i) => ({ id: `the-${i}`, name: `The Other ${i}`, location: 'Stoke-on-Trent' }));
@@ -616,11 +675,12 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     });
 
     it('should return review as before when neither resolveTo nor confirmNew provided', async () => {
-      // Standard behavior: candidates exist, no resolution → review
+      // Standard behavior: a genuine same-name collision, no resolution → review.
+      // (Two look-alikes with different names are no longer a collision: 06/09/2026.)
       mockDynamoDB.query.mockResolvedValue({
         Items: [
-          { id: 'midnight-shindig', name: 'Midnight Shindig', location: 'North West' },
-          { id: 'midnight-echoes', name: 'Midnight Echoes', location: 'Sunderland' },
+          { id: 'midnight-shift-nw', name: 'Midnight Shift', location: 'North West' },
+          { id: 'midnight-shift-ne', name: 'Midnight Shift', location: 'Sunderland' },
         ]
       });
 

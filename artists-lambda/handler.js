@@ -22,7 +22,7 @@ const { isPublishedInEdition, hasPrivilegedIngestionFields, validateScopedIngest
 const { requireRole: requireCuratorRole, logActivity: logCuratorActivity, pickFields: pickCuratorFields, hideEntity: hideArtistEntity, restoreEntity: restoreArtistEntity, normaliseCuratorAccess } = require('./curator-core');
 const { publishUserCreatedArtistClaims } = require('./backline-user-claims');
 const { pickOwnedProfileFields } = require('./lib/owned-profile');
-const { areLocationsCompatible, calculateLocationScore, buildResolutionAuditLog } = require('./lib/location-resolution');
+const { areLocationsCompatible, calculateLocationScore, buildResolutionAuditLog, isNationalLocation } = require('./lib/location-resolution');
 
 /**
  * Sentinel keys for an artist record (2026-07-27 gate plan):
@@ -3371,7 +3371,8 @@ async function handleFindOrCreateArtist(event) {
     // normalised name and it sits in the listing's region, a look-alike ("Reckless"
     // beside "Relentless") must not drag it into a near-tie. Two exact names still tie.
     const exactNamed = scored.filter(s => s.slugEqual);
-    const exactInRegion = exactNamed.filter(s => s.sameRegion || incomingRegion === 'unknown');
+    // A national act ("UK wide") has no home region to be outside of.
+    const exactInRegion = exactNamed.filter(s => s.sameRegion || incomingRegion === 'unknown' || isNationalLocation(s.location));
     const exactWins = exactNamed.length === 1 && exactInRegion.length === 1;
     if (exactWins) {
       const winner = { ...exactInRegion[0], footprintScore: Math.max(exactInRegion[0].footprintScore, SCORE_THRESHOLD_HIGH) };
@@ -3379,8 +3380,13 @@ async function handleFindOrCreateArtist(event) {
       console.log(`[find-or-create artist] EXACT_NAME_IN_REGION: "${name}" -> ${winner.id} outranks ${scored.length - 1} look-alike(s)`);
     }
 
+    // A near-tie is only a collision when the tied candidates could match on name at all.
+    // Two weak look-alikes tying at zero ("Billy Black Band" and "Billy Liar" for
+    // "Billy Bibby") mean the act is new, not ambiguous.
+    const nameQualified = scored.filter(s => s.slugEqual || (s.sim >= 90 && s.sharedToken));
+
     // Margin guard (ADR-021): if #2 within 10pts of #1 → REVIEW (ambiguous collision)
-    if (scored.length >= 2 && !exactWins) {
+    if (scored.length >= 2 && !exactWins && nameQualified.length > 0) {
       const margin = scored[0].footprintScore - scored[1].footprintScore;
       if (margin < MARGIN_THRESHOLD) {
         console.log(`[find-or-create artist] REVIEW "${name}" - margin guard triggered (${margin}pt margin)`);
@@ -3428,7 +3434,7 @@ async function handleFindOrCreateArtist(event) {
     // ADR-021 fallback: Apply margin guard even without venueRegion to prevent
     // arbitrary matches on same-name collisions (e.g., 3× "Ant Hill Mob").
     // If multiple candidates have high similarity, REVIEW instead of arbitrary match.
-    if (scored.length >= 2 && best.sim >= 60) {
+    if (scored.length >= 2 && (best.slugEqual || (best.sim >= 90 && best.sharedToken))) {
       const simMargin = best.sim - scored[1].sim;
       if (simMargin < MARGIN_THRESHOLD) {
         // Near-tie on similarity alone - this is likely a same-name collision
