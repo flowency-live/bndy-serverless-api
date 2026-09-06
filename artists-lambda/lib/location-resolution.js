@@ -19,6 +19,29 @@ const UNKNOWN_REGION = 'unknown';
 // rather than as missing (Backline finding 06/09/2026).
 const NATIONAL_LOCATIONS = new Set(['uk wide', 'ukwide', 'uk touring', 'national', 'nationwide', 'touring', 'uk and europe', 'uk europe']);
 
+// Neighbouring region buckets (owner ruling 06/09/2026, decision 1a): an act whose name
+// exists once in bndy matches a gig in its own or a neighbouring region without a person.
+const ADJACENT_REGIONS = {
+  'west-midlands': ['north-west', 'east-midlands', 'wales', 'south-west', 'south-east'],
+  'north-west': ['west-midlands', 'yorkshire', 'north-east', 'wales', 'east-midlands'],
+  'east-midlands': ['west-midlands', 'north-west', 'yorkshire', 'east', 'south-east'],
+  'yorkshire': ['north-west', 'north-east', 'east-midlands'],
+  'north-east': ['yorkshire', 'north-west', 'scotland'],
+  'east': ['east-midlands', 'london', 'south-east'],
+  'london': ['east', 'south-east'],
+  'south-east': ['london', 'east', 'east-midlands', 'west-midlands', 'south-west'],
+  'south-west': ['west-midlands', 'south-east', 'wales'],
+  'wales': ['north-west', 'west-midlands', 'south-west'],
+  'scotland': ['north-east', 'north-west'],
+  'northern-ireland': [],
+};
+
+function areRegionsAdjacent(a, b) {
+  if (!a || !b || a === UNKNOWN_REGION || b === UNKNOWN_REGION) return false;
+  if (a === b) return true;
+  return (ADJACENT_REGIONS[a] || []).includes(b);
+}
+
 function isNationalLocation(location) {
   if (!location || typeof location !== 'string') return false;
   return NATIONAL_LOCATIONS.has(location.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
@@ -147,6 +170,7 @@ function buildResolutionAuditLog({
 }
 
 module.exports = {
+  areRegionsAdjacent,
   isNationalLocation,
   areLocationsCompatible,
   calculateLocationScore,

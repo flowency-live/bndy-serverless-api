@@ -760,6 +760,79 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     });
   });
 
+  describe('Unique name, other region (owner ruling 06/09/2026, decision 1a)', () => {
+    const only = (artist) => mockDynamoDB.query.mockImplementation((params) => {
+      if (params.TableName === 'bndy-artists') return Promise.resolve({ Items: [artist] });
+      return Promise.resolve({ Items: [] });
+    });
+    const request = (name, options) => createFindOrCreateRequest(name, { location: undefined, ...options });
+
+    it('matches a unique name at a touring venue whatever its home says, with no home location sent', async () => {
+      only({ id: 'inme', name: 'InMe', location: 'Brentwood' });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const result = await handler(request('InMe', { venueRegion: 'Newcastle-under-Lyme', venueReach: 'touring' }), {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('inme');
+      expect(body.matchedBy).toBe('unique_name_touring');
+    });
+
+    it('matches a unique name from a neighbouring region at an ordinary venue', async () => {
+      only({ id: 'hlh', name: 'Hung Like Hanratty', location: 'North West, UK' });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const result = await handler(request('Hung Like Hanratty', { venueRegion: 'Newcastle-under-Lyme', venueReach: 'regional' }), {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('hlh');
+      expect(body.matchedBy).toBe('unique_name_adjacent');
+    });
+
+    it('still holds a unique name from a distant region at a local venue', async () => {
+      only({ id: 'petunia', name: 'Petunia', location: 'Canada' });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const result = await handler(request('Petunia', { venueRegion: 'Grimsby', venueReach: 'local' }), {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('review');
+      expect(body.locationConflict).toBe(true);
+      expect(body.candidates[0].id).toBe('petunia');
+    });
+
+    it('treats the venue region as the comparison when no home location is sent, so an in-region unique name matches outright', async () => {
+      only({ id: 'ng-stoke', name: 'Not Guilty', location: 'Stoke-on-Trent, UK' });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const result = await handler(request('Not Guilty', { venueRegion: 'Kidsgrove' }), {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('ng-stoke');
+    });
+
+    it('does not apply the unique-name rule when the name exists more than once', async () => {
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.TableName === 'bndy-artists') {
+          return Promise.resolve({ Items: [
+            { id: 'alibi-ne', name: 'Alibi', location: 'North East UK' },
+            { id: 'alibi-london', name: 'Alibi', location: 'London' },
+          ] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const result = await handler(request('Alibi', { venueRegion: 'Stone', venueReach: 'touring' }), {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('review');
+    });
+  });
+
   describe('Candidate lookup reads every page of a prefix (Backline finding 06/09/2026)', () => {
     it('finds an artist that sits beyond the first page of the "th" prefix', async () => {
       const firstPage = Array.from({ length: 3 }, (_, i) => ({ id: `the-${i}`, name: `The Other ${i}`, location: 'Stoke-on-Trent' }));

@@ -7,7 +7,7 @@
  * - Same name, missing location on either side → review
  */
 
-const { areLocationsCompatible, calculateLocationScore } = require('./location-resolution');
+const { areLocationsCompatible, calculateLocationScore, areRegionsAdjacent } = require('./location-resolution');
 
 describe('areLocationsCompatible', () => {
   describe('Lincolnshire is one region (Backline finding 06/09/2026)', () => {
@@ -113,5 +113,21 @@ describe('calculateLocationScore', () => {
   it('returns 0.0 for location conflict', () => {
     const compat = { compatible: false, reason: undefined };
     expect(calculateLocationScore(compat)).toBe(0.0);
+  });
+});
+
+describe('areRegionsAdjacent (owner ruling 06/09/2026: a unique name in a neighbouring region matches)', () => {
+  it.each([
+    ['west-midlands', 'north-west', true],
+    ['west-midlands', 'east-midlands', true],
+    ['north-west', 'yorkshire', true],
+    ['east-midlands', 'east', true],
+    ['west-midlands', 'scotland', false],
+    ['east-midlands', 'wales', false],
+    ['london', 'north-east', false],
+    ['west-midlands', 'west-midlands', true],
+    ['unknown', 'west-midlands', false],
+  ])('%s next to %s is %s', (a, b, expected) => {
+    expect(areRegionsAdjacent(a, b)).toBe(expected);
   });
 });
