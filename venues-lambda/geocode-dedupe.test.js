@@ -260,4 +260,32 @@ describe('Geocode-based Venue Deduplication (ADR-018)', () => {
       expect(mockPlacesClient.findPlaceFromText).not.toHaveBeenCalled();
     });
   });
+
+  describe('name variants (Backline finding 06/09/2026)', () => {
+    it('matches a venue by one of its name variants without asking Google', async () => {
+      const existingVenue = {
+        id: 'venue-glebe',
+        name: 'The Glebe',
+        city: 'Stoke-on-Trent',
+        address: '35 Glebe St, Stoke-on-Trent ST4 1HG, United Kingdom',
+        google_place_id: 'ChIJ_glebe',
+        latitude: 53.0049,
+        longitude: -2.1812,
+        name_variants: ['The Glebe, Stoke', 'The Glebe Stoke'],
+        external_ids: [],
+      };
+      mockDynamoDB.scan.mockResolvedValue({ Items: [existingVenue] });
+      mockDynamoDB.update.mockResolvedValue({});
+
+      const event = createFindOrCreateRequest({ name: 'The Glebe Stoke', city: 'Stoke-on-Trent' });
+      const result = await handler(event, {});
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(200);
+      expect(body.id).toBe('venue-glebe');
+      expect(body.matchMethod).toBe('name_variant');
+      expect(mockPlacesClient.findPlaceFromText).not.toHaveBeenCalled();
+      expect(mockDynamoDB.put).not.toHaveBeenCalled();
+    });
+  });
 });

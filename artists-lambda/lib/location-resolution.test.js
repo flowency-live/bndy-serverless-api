@@ -10,6 +10,24 @@
 const { areLocationsCompatible, calculateLocationScore } = require('./location-resolution');
 
 describe('areLocationsCompatible', () => {
+  describe('Lincolnshire is one region (Backline finding 06/09/2026)', () => {
+    it.each([
+      ['Grimsby', 'Lincolnshire'],
+      ['Lincoln', 'Grimsby'],
+      ['Market Rasen', 'Lincolnshire'],
+      ['Skegness', 'Lincoln'],
+      ['Barton upon Humber', 'Lincolnshire'],
+      ['Spalding', 'Louth'],
+      ['Gainsborough', 'Lincoln'],
+    ])('%s and %s are compatible', (a, b) => {
+      expect(areLocationsCompatible(a, b).compatible).toBe(true);
+    });
+
+    it('keeps Peterborough out of Lincolnshire', () => {
+      expect(areLocationsCompatible('Peterborough', 'Lincolnshire').compatible).toBe(false);
+    });
+  });
+
   describe('same region', () => {
     it('returns compatible when both locations resolve to same region', () => {
       // Essex and Southend both map to 'east' region
