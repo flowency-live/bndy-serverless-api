@@ -476,19 +476,23 @@ exports.handler = async (event, context) => {
     }
 
     if (method === 'PUT' && event.pathParameters?.id) {
+      const venueData = parseBody(event.body);
       // MCP routes bypass auth (machine-to-machine)
       if (!path.includes('/mcp')) {
-        // SEC-04: Require authentication for venue updates (non-MCP)
-        const authResult = await requireAuth(event);
+        // SEC-04: Require authentication for venue updates (non-MCP).
+        // venueRules is the special-venue register (owner ruling 06/09/2026):
+        // platform admin only, gated per field so the rest of the PUT is unchanged.
+        const writesRules = Object.prototype.hasOwnProperty.call(venueData, 'venueRules');
+        const authResult = writesRules ? await requirePlatformAdmin(event) : await requireAuth(event);
         if (authResult.error) {
           return {
-            statusCode: 401,
+            statusCode: authResult.statusCode || 401,
             headers: getCorsHeaders(event),
             body: JSON.stringify({ error: authResult.error })
           };
         }
       }
-      return await handleUpdateVenue(deps, event.pathParameters.id, parseBody(event.body), event);
+      return await handleUpdateVenue(deps, event.pathParameters.id, venueData, event);
     }
 
     // Enrichment action endpoint (2026-08-11) - accept/reject enrichment suggestions

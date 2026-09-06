@@ -9,6 +9,7 @@ const { normalizeForSearch, calculateSimilarity } = require('../lib/fuzzy-matche
 const { computeGeohashFields, cascadeLocationToEvents } = require('../lib/geohash');
 const { findPlaceFromGoogle, getPlaceDetails } = require('../lib/google-places');
 const { formatVenueResponse, triggerVenueEnrichment } = require('../lib/venue-deduplication');
+const { validateVenueRules, venueRulesOf } = require('./venue-rules');
 const { validateVenueAdmission } = require('../lib/venue-admission');
 const { jsonResponse } = require('../lib/http-response');
 const { scanAll } = require('../lib/scan-all');
@@ -84,6 +85,7 @@ async function handleGetAllVenues(deps, event) {
       website: venue.website || '',
       validated: venue.validated || false,
       nameVariants: venue.name_variants || [],
+      venueRules: venueRulesOf(venue),
       phone: venue.phone || '',
       postcode: venue.postcode || '',
       facilities: venue.facilities || [],
@@ -347,6 +349,7 @@ async function handleGetVenueById(deps, venueId, event) {
       website: result.Item.website || '',
       validated: result.Item.validated || false,
       nameVariants: result.Item.name_variants || [],
+      venueRules: venueRulesOf(result.Item),
       phone: result.Item.phone || '',
       postcode: result.Item.postcode || '',
       profileImageUrl: result.Item.profile_image_url,
@@ -445,6 +448,7 @@ async function handleGetVenueByExternalId(deps, event) {
       website: matchingVenue.website || '',
       validated: matchingVenue.validated || false,
       nameVariants: matchingVenue.name_variants || [],
+      venueRules: venueRulesOf(matchingVenue),
       phone: matchingVenue.phone || '',
       postcode: matchingVenue.postcode || '',
       profileImageUrl: matchingVenue.profile_image_url,
@@ -721,6 +725,19 @@ async function handleUpdateVenue(deps, venueId, venueData, event) {
     }
   }
 
+  // Venue rules (owner ruling 06/09/2026): a closed shape read by Backline's
+  // billing stage. The platform-admin gate for this field sits on the route.
+  if (venueData.venueRules !== undefined && venueData.venueRules !== null) {
+    const rules = validateVenueRules(venueData.venueRules);
+    if (!rules.ok) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(event),
+        body: JSON.stringify({ error: rules.error, code: 'INVALID_VENUE_RULES' })
+      };
+    }
+  }
+
   // Feature 19, change A. The only enum this route validates.
   // `tenure` drives who may claim a page later, so a typo must fail loudly here
   // rather than sit in the record as a value nothing recognises.
@@ -773,6 +790,7 @@ async function handleUpdateVenue(deps, venueId, venueData, event) {
     standardTicketUrl: 'standard_ticket_url',
     ticketUrl: 'standard_ticket_url',  // alias for backstage UI
     externalIds: 'external_ids',
+    venueRules: 'venue_rules',
     enrichment_status: 'enrichment_status',
     enrichment_data: 'enrichment_data',
     // Feature 19, change A. The owner group, writable through the MCP route.
@@ -859,6 +877,7 @@ async function handleUpdateVenue(deps, venueId, venueData, event) {
       website: result.Attributes.website || '',
       validated: result.Attributes.validated || false,
       nameVariants: result.Attributes.name_variants || [],
+      venueRules: venueRulesOf(result.Attributes),
       phone: result.Attributes.phone || '',
       postcode: result.Attributes.postcode || '',
       facilities: result.Attributes.facilities || [],
