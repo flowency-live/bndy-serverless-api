@@ -183,6 +183,13 @@ describe('venue read projections carry venueRules', () => {
     expect(venues.find((v) => v.id === 'v-plain').venueRules).toBeNull();
   });
 
+  test('GET /api/venues?withRules=1 returns only venues that carry rules', async () => {
+    mockDynamoDB.scan.mockResolvedValue({ Items: [storedVenue({ venue_rules: sugarmillRules }), storedVenue({ id: 'v-plain', name: 'Plain Pub' })] });
+    const res = await handler(makeEvent('GET', '/api/venues', { query: { withRules: '1' } }), {});
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).map((v) => v.id)).toEqual(['v-sugarmill']);
+  });
+
   test('GET /api/venues/by-external-id', async () => {
     mockDynamoDB.scan.mockResolvedValue({ Items: [storedVenue({ venue_rules: sugarmillRules, external_ids: [{ source: 'klma', id: 'sugarmill' }] })] });
     const res = await handler(makeEvent('GET', '/api/venues/by-external-id', { query: { source: 'klma', id: 'sugarmill' } }), {});

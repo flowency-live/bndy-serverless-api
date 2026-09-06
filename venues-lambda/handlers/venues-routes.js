@@ -67,6 +67,12 @@ async function handleGetAllVenues(deps, event) {
       console.log(`[Venues] Venues Lambda: Search for "${searchTerm}" returned ${validVenues.length} results`);
     }
 
+    // Venue rules (owner ruling 06/09/2026): Backline and the Godmode "Venue rules"
+    // page want only the special venues, not the whole estate.
+    if (event.queryStringParameters?.withRules === '1') {
+      validVenues = validVenues.filter(venue => Boolean(venue.venue_rules));
+    }
+
     // NOTE: per-venue event COUNT queries removed (N+1 - one query per venue
     // per request; measured 10.8s at 1,417 venues). No consumer reads eventCount
     // from this endpoint. If a count is ever needed, maintain a counter
