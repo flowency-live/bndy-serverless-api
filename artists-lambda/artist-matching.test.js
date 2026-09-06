@@ -594,6 +594,138 @@ describe('Artist Find-or-Create Matching (#50)', () => {
     });
   });
 
+  describe('Holds walk-through (Backline findings 06/09/2026, fourth pass)', () => {
+    const artists = (items) => mockDynamoDB.query.mockImplementation((params) => {
+      if (params.TableName === 'bndy-artists') return Promise.resolve({ Items: items });
+      return Promise.resolve({ Items: [] });
+    });
+
+    it('H1: reads gig footprint from the artistId-date-index that exists on bndy-events', async () => {
+      artists([
+        { id: 'rewired-staffs', name: 'ReWired', location: 'Staffordshire' },
+        { id: 'rewired-band-essex', name: 'Rewired Band', location: 'Brentwood, UK' },
+      ]);
+      mockDynamoDB.get.mockResolvedValue({});
+
+      await handler(createFindOrCreateRequest('Re Wired', { venueRegion: 'Meir', location: 'Staffordshire' }), {});
+
+      const eventQueries = mockDynamoDB.query.mock.calls.map(([p]) => p).filter((p) => p.TableName === 'bndy-events');
+      expect(eventQueries.length).toBeGreaterThan(0);
+      eventQueries.forEach((p) => expect(p.IndexName).toBe('artistId-date-index'));
+    });
+
+    it('H12: a literal name match outranks a suffix-stripped one', async () => {
+      artists([
+        { id: 'trilogy-tyne', name: 'Trilogy', location: 'Newcastle upon Tyne' },
+        { id: 'trilogy-stoke', name: 'Trilogy Rock Band', location: 'Stoke-on-Trent' },
+        { id: 'trilo3y', name: 'Trilo3y', location: 'Stockport' },
+      ]);
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const result = await handler(createFindOrCreateRequest('Trilogy Rock Band', { venueRegion: 'Forsbrook', location: 'Staffordshire' }), {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('trilogy-stoke');
+    });
+
+    it('H15: two exact names, only one in the gig region, no footprints: the in-region one matches', async () => {
+      artists([
+        { id: 'alibi-ne', name: 'Alibi', location: 'North East UK' },
+        { id: 'alibi-stoke', name: 'Alibi', location: 'Stoke-on-Trent' },
+        { id: 'alimo', name: 'Alimo', location: 'Congleton' },
+      ]);
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const result = await handler(createFindOrCreateRequest('ALIBI', { venueRegion: 'Stone', location: 'Staffordshire' }), {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('alibi-stoke');
+    });
+
+    it('H15: two exact names both in the gig region still go to a person', async () => {
+      artists([
+        { id: 'alibi-hanley', name: 'Alibi', location: 'Hanley' },
+        { id: 'alibi-stoke', name: 'Alibi', location: 'Stoke-on-Trent' },
+      ]);
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const result = await handler(createFindOrCreateRequest('Alibi', { venueRegion: 'Stone', location: 'Staffordshire' }), {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('review');
+    });
+
+    it('H19: locality compares region buckets, not town strings', async () => {
+      artists([
+        { id: 'ng-yorks', name: 'Not Guilty', location: 'Yorkshire and the Humber' },
+        { id: 'ng-stoke', name: 'Not Guilty', location: 'Stoke-on-Trent, UK' },
+      ]);
+      mockDynamoDB.get.mockResolvedValue({});
+
+      const result = await handler(createFindOrCreateRequest('Not Guilty', { venueRegion: 'Kidsgrove', location: 'Staffordshire' }), {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('ng-stoke');
+    });
+
+    it('H10: an act with a bndy gig at this venue is that act, whatever its home says', async () => {
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.TableName === 'bndy-artists') {
+          return Promise.resolve({ Items: [
+            { id: 'rewired-staffs', name: 'ReWired', location: 'Staffordshire' },
+            { id: 'rewired-band-essex', name: 'Rewired Band', location: 'Brentwood, UK' },
+            { id: 'reserved', name: 'Reserved', location: 'Stockport' },
+          ] });
+        }
+        if (params.TableName === 'bndy-events' && params.ExpressionAttributeValues[':artistId'] === 'rewired-staffs') {
+          return Promise.resolve({ Items: [
+            { id: 'evt-1', venueId: 'venue-swiftys' },
+            { id: 'evt-2', venueId: 'venue-swiftys' },
+            { id: 'evt-3', venueId: 'venue-eight-farmers' },
+          ] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+      mockDynamoDB.get.mockImplementation((params) => {
+        if (params.Key && params.Key.id === 'venue-swiftys') return Promise.resolve({ Item: { id: 'venue-swiftys', city: 'Stoke-on-Trent' } });
+        if (params.Key && params.Key.id === 'venue-eight-farmers') return Promise.resolve({ Item: { id: 'venue-eight-farmers', city: 'Crewe' } });
+        return Promise.resolve({});
+      });
+
+      const result = await handler(createFindOrCreateRequest('Re Wired', { venueRegion: 'Meir', venueId: 'venue-swiftys', location: 'Staffordshire' }), {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('rewired-staffs');
+      expect(body.matchedBy).toBe('venue_history');
+    });
+
+    it('H10: a touring act with a gig at this venue matches even when its home is another region', async () => {
+      mockDynamoDB.query.mockImplementation((params) => {
+        if (params.TableName === 'bndy-artists') {
+          return Promise.resolve({ Items: [{ id: 'inme', name: 'InMe', location: 'Brentwood' }] });
+        }
+        if (params.TableName === 'bndy-events' && params.ExpressionAttributeValues[':artistId'] === 'inme') {
+          return Promise.resolve({ Items: [{ id: 'evt-r1', venueId: 'venue-rigger' }] });
+        }
+        return Promise.resolve({ Items: [] });
+      });
+      mockDynamoDB.get.mockImplementation((params) => {
+        if (params.Key && params.Key.id === 'venue-rigger') return Promise.resolve({ Item: { id: 'venue-rigger', city: 'Newcastle-under-Lyme' } });
+        return Promise.resolve({});
+      });
+
+      const result = await handler(createFindOrCreateRequest('InMe', { venueRegion: 'Newcastle-under-Lyme', venueId: 'venue-rigger', location: 'Staffordshire' }), {});
+      const body = JSON.parse(result.body);
+
+      expect(body.action).toBe('matched');
+      expect(body.artist.id).toBe('inme');
+    });
+  });
+
   describe('Candidate lookup reads every page of a prefix (Backline finding 06/09/2026)', () => {
     it('finds an artist that sits beyond the first page of the "th" prefix', async () => {
       const firstPage = Array.from({ length: 3 }, (_, i) => ({ id: `the-${i}`, name: `The Other ${i}`, location: 'Stoke-on-Trent' }));

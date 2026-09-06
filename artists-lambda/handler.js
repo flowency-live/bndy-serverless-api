@@ -2877,7 +2877,7 @@ function similarityPct(a, b) {
  * @returns {Promise<{regions: Map<string, number>, totalEvents: number}>}
  */
 async function getArtistFootprint(artistId, venueRegionCache) {
-  const footprint = { regions: new Map(), totalEvents: 0 };
+  const footprint = { regions: new Map(), totalEvents: 0, venueIds: new Set() };
   // Use provided cache or create local one (cache is request-scoped, not cross-request)
   const cache = venueRegionCache || new Map();
 
@@ -2885,7 +2885,7 @@ async function getArtistFootprint(artistId, venueRegionCache) {
     // Query events by artistId (limit to last 50 for efficiency)
     const eventsResult = await dynamodb.query({
       TableName: 'bndy-events',
-      IndexName: 'artistId-index',
+      IndexName: 'artistId-date-index',
       KeyConditionExpression: 'artistId = :artistId',
       ExpressionAttributeValues: { ':artistId': artistId },
       ProjectionExpression: 'id, venueId, #date',
@@ -2903,6 +2903,7 @@ async function getArtistFootprint(artistId, venueRegionCache) {
 
     // Get unique venueIds
     const venueIds = [...new Set(events.map(e => e.venueId).filter(Boolean))];
+    venueIds.forEach((id) => footprint.venueIds.add(id));
 
     // Fetch venues for regions (with cache to avoid N+1 across candidates)
     for (const venueId of venueIds) {
@@ -3016,10 +3017,16 @@ function calculateCompositeScore(candidate, venueRegion, footprint) {
   score += footprintScore * weights.footprint;
 
   // Locality score (scaled to ~25%) - candidate's stored location vs venue region
+  // Locality compares region buckets, not town strings (Backline holds walk-through
+  // 06/09/2026, H19): "Stoke-on-Trent" never contained "Forsbrook", so a Stoke act at a
+  // Stoke-area venue scored the same as an act from Tyneside.
   if (candidate.location && venueRegion) {
+    const candidateBucket = regionBucket(candidate.location);
+    const venueBucket = regionBucket(venueRegion);
     const locLower = candidate.location.toLowerCase();
     const venueLower = venueRegion.toLowerCase();
-    if (locLower.includes(venueLower) || venueLower.includes(locLower)) {
+    const sameBucket = candidateBucket !== 'unknown' && candidateBucket === venueBucket;
+    if (sameBucket || locLower.includes(venueLower) || venueLower.includes(locLower)) {
       score += 100 * weights.locality;
     }
   }
@@ -3054,7 +3061,7 @@ async function handleFindOrCreateArtist(event) {
   // resolveTo: when action:review was returned, caller can pick a candidate id
   // confirmNew: when action:review was returned, caller confirms this is genuinely new
   // dryRun: B3 - return full verdict (matched/review/clear + candidates with location), ZERO writes
-  const { name, canCreate = true, venueRegion, verifiedSourceName, resolveTo, confirmNew, dryRun } = body;
+  const { name, canCreate = true, venueRegion, venueId, verifiedSourceName, resolveTo, confirmNew, dryRun } = body;
 
   // RESOLUTION HANDLING (Blocker #1 fix): resolveTo + confirmNew params
   // When action:review was previously returned, caller can resolve via these params
@@ -3341,7 +3348,9 @@ async function handleFindOrCreateArtist(event) {
   let scored = simScored;
   let usedFootprintScoring = false;
 
-  if (venueRegion && simScored.length > 1) {
+  // A single candidate still goes through footprint scoring when the caller names the
+  // venue, so venue history can vouch for a touring act whose home is elsewhere (H10).
+  if (venueRegion && simScored.length > 0 && (simScored.length > 1 || venueId)) {
     console.log(`[find-or-create artist] Using footprint scoring with venueRegion="${venueRegion}"`);
     usedFootprintScoring = true;
 
@@ -3357,6 +3366,7 @@ async function handleFindOrCreateArtist(event) {
       scoredWithFootprint.push({
         ...candidate,
         footprintScore: compositeScore,
+        venueHistory: Boolean(venueId && footprint.venueIds.has(venueId)),
         footprintRegions: footprint.totalEvents > 0
           ? [...footprint.regions.entries()].map(([r, w]) => `${r}(${w})`)
           : [],
@@ -3373,7 +3383,40 @@ async function handleFindOrCreateArtist(event) {
     // The one exact name is the candidate whatever its region (06/09/2026, third pass):
     // the location check that follows decides same act or region conflict, which is a
     // truer answer than a near-tie with a look-alike.
-    const exactNamed = scored.filter(s => s.slugEqual);
+    // Holds walk-through 06/09/2026 (H10, H12, H15), in this order:
+    // 1. Venue history. One candidate already has a bndy gig at this venue: it is that
+    //    act, whatever its home says. Two with history here is a genuine question.
+    const historied = scored.filter(s => s.venueHistory);
+    if (historied.length === 1) {
+      const known = historied[0];
+      console.log(`[find-or-create artist] VENUE_HISTORY: "${name}" -> ${known.id} (${known.name}) has ${known.totalEvents} gig(s) including this venue`);
+      return {
+        statusCode: 200,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          action: 'matched',
+          artist: { id: known.id, name: known.name, location: known.location, nameVariants: known.nameVariants || [], ...editionMetadata(known) },
+          confidence: 1,
+          matchedBy: 'venue_history',
+          venueId
+        })
+      };
+    }
+    // 2. A literal name match (case and punctuation only) outranks a suffix-stripped one:
+    //    "Trilogy Rock Band" is not "Trilogy". 3. Two literal matches: the one whose home
+    //    is in the gig's region wins when it is the only one there.
+    const queryKey = normaliseKey(name);
+    const venueBucket = regionBucket(venueRegion || '');
+    const literalNamed = scored.filter(s => normaliseKey(s.name) === queryKey);
+    const literalInRegion = literalNamed.filter(s => s.region !== 'unknown' && (s.region === venueBucket || s.sameRegion));
+    const literalWinner = literalNamed.length === 1 ? literalNamed[0]
+      : (literalNamed.length > 1 && literalInRegion.length === 1) ? literalInRegion[0]
+      : null;
+    if (literalWinner) {
+      console.log(`[find-or-create artist] LITERAL_NAME: "${name}" -> ${literalWinner.id} (${literalWinner.name}, ${literalWinner.location}) over ${scored.length - 1} other(s)`);
+    }
+
+    const exactNamed = literalWinner ? [literalWinner] : scored.filter(s => s.slugEqual);
     const exactWins = exactNamed.length === 1;
     if (exactWins) {
       const winner = { ...exactNamed[0], footprintScore: Math.max(exactNamed[0].footprintScore, SCORE_THRESHOLD_HIGH) };
