@@ -28,6 +28,15 @@ describe('areLocationsCompatible', () => {
     });
   });
 
+  describe('national acts', () => {
+    it.each(['UK wide', 'UK touring', 'National'])('%s is compatible with any resolvable region', (national) => {
+      const result = areLocationsCompatible('Staffordshire', national);
+      expect(result.compatible).toBe(true);
+      expect(result.reason).toBe('national');
+      expect(calculateLocationScore(result)).toBe(1);
+    });
+  });
+
   describe('same region', () => {
     it('returns compatible when both locations resolve to same region', () => {
       // Essex and Southend both map to 'east' region
