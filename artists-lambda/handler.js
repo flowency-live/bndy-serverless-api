@@ -3062,6 +3062,7 @@ async function handleFindOrCreateArtist(event) {
   // confirmNew: when action:review was returned, caller confirms this is genuinely new
   // dryRun: B3 - return full verdict (matched/review/clear + candidates with location), ZERO writes
   const { name, canCreate = true, venueRegion, venueId, verifiedSourceName, resolveTo, confirmNew, dryRun } = body;
+  const requestExternalIds = Array.isArray(body.externalIds) ? body.externalIds.filter((e) => e && e.source && e.id) : [];
 
   // RESOLUTION HANDLING (Blocker #1 fix): resolveTo + confirmNew params
   // When action:review was previously returned, caller can resolve via these params
@@ -3280,7 +3281,7 @@ async function handleFindOrCreateArtist(event) {
           IndexName: 'name-search-index',
           KeyConditionExpression: 'name_prefix = :prefix',
           ExpressionAttributeValues: { ':prefix': prefix },
-          ProjectionExpression: 'id, #name, bio, #location, name_variants, publicationScopes, discoveryScopes, performerKind',
+          ProjectionExpression: 'id, #name, bio, #location, name_variants, external_ids, publicationScopes, discoveryScopes, performerKind',
           ExpressionAttributeNames: { '#name': 'name', '#location': 'location' },
           ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {})
         }).promise();
@@ -3301,6 +3302,28 @@ async function handleFindOrCreateArtist(event) {
   }
 
   console.log(`[find-or-create artist] Searched ${prefixes.size} prefix(es): ${[...prefixes].join(', ')} -> ${candidates.length} candidates`);
+
+  // A source key bndy already holds settles identity before any name work (holds
+  // walk-through 06/09/2026, H11): {klma-stoke-gig-list, klma-artist-741b176f1969} on
+  // Danny Brab means "Danny & Friends (acoustic Night)" from that source is Danny Brab.
+  for (const candidate of candidates) {
+    const held = Array.isArray(candidate.external_ids) ? candidate.external_ids : [];
+    const hit = requestExternalIds.find((req) => held.some((ext) => ext && ext.source === req.source && ext.id === req.id));
+    if (hit) {
+      console.log(`[find-or-create artist] EXTERNAL_ID MATCH: "${name}" → ${candidate.id} (${candidate.name}) via ${hit.source}:${hit.id}`);
+      return {
+        statusCode: 200,
+        headers: getCommunityHeaders(),
+        body: JSON.stringify({
+          action: 'matched',
+          artist: { id: candidate.id, name: candidate.name, location: candidate.location, nameVariants: candidate.name_variants || [], ...editionMetadata(candidate) },
+          confidence: 1,
+          matchedBy: 'external_id',
+          externalId: hit
+        })
+      };
+    }
+  }
 
   // Fix #3b: Name variant check BEFORE similarity scoring (2026-07-29)
   // If incoming name matches any candidate's nameVariants, return matched immediately
