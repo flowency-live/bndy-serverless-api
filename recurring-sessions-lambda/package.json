@@ -1,0 +1,17 @@
+{
+  "name": "bndy-recurring-sessions-lambda",
+  "version": "1.0.0",
+  "description": "BNDY Recurring Sessions Lambda Function (Slice 1 - read-only)",
+  "main": "handler.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1450.0"
+  },
+  "devDependencies": {
+    "jest": "^30.3.0"
+  }
+}

@@ -170,6 +170,48 @@ Resources:
       Value: !GetAtt EntityClaimsTable.StreamArn
 
   # =============================================================================
+  # Recurring Sessions Table (Slice 1 - INERT foundation)
+  # =============================================================================
+  RecurringSessionsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: bndy-recurring-sessions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: venueId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: startsOn
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        # GET /api/venues/{venueId}/recurring-sessions
+        - IndexName: venueId-index
+          KeySchema:
+            - AttributeName: venueId
+              KeyType: HASH
+            - AttributeName: startsOn
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        # GET /api/recurring-sessions/search?status=active
+        - IndexName: status-index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: startsOn
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # =============================================================================
   # Lambda Functions - Core
   # =============================================================================
 
@@ -660,6 +702,63 @@ Resources:
             ApiId: !Ref BndyHttpApi
             Path: /api/integration/events
             Method: POST
+
+  # =============================================================================
+  # Recurring Sessions Lambda (Slice 1+2: GET routes + Godmode projection)
+  # =============================================================================
+  RecurringSessionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: BNDY Recurring Sessions API - handles recurring grassroots session reads and projection
+      Runtime: nodejs22.x
+      CodeUri: ./recurring-sessions-lambda/
+      Handler: handler.handler
+      Role: arn:aws:iam::771551874768:role/bndy-api-instance-role
+      Layers:
+        - arn:aws:lambda:eu-west-2:771551874768:layer:bndy-jwt:3
+      MemorySize: 512
+      Timeout: 30
+      Environment:
+        Variables:
+          RECURRING_SESSIONS_TABLE: !Ref RecurringSessionsTable
+          UNIQUE_KEYS_TABLE: !Ref UniqueKeysTable
+          JWT_SECRET: '{{resolve:secretsmanager:bndy/jwt-secret:SecretString:secret}}'
+      Events:
+        # GET /api/venues/{venueId}/recurring-sessions
+        GetVenueRecurringSessions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/venues/{venueId}/recurring-sessions
+            Method: GET
+        # GET /api/recurring-sessions/{id}
+        GetRecurringSessionById:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/recurring-sessions/{id}
+            Method: GET
+        # GET /api/recurring-sessions/search?status=active
+        SearchRecurringSessions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/recurring-sessions/search
+            Method: GET
+        # Godmode: GET /api/godmode/recurring-sessions
+        GodmodeListSessions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/godmode/recurring-sessions
+            Method: GET
+        # Godmode: GET /api/godmode/recurring-sessions/{id}/projection
+        GodmodeGetProjection:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BndyHttpApi
+            Path: /api/godmode/recurring-sessions/{id}/projection
+            Method: GET
 
   # Venues Lambda
   VenuesFunction:
