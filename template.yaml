@@ -2574,7 +2574,18 @@ Resources:
             Schedule: rate(15 minutes)
             Description: Rebuild search index every 15 minutes
 
-  # S3 bucket for search index: bndy-search (pre-existing, not managed by stack)
+  # S3 bucket for search index
+  DiscoverSearchBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: bndy-search
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
 
 Outputs:
   BndyHttpApiUrl:
