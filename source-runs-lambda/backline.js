@@ -106,6 +106,12 @@ const SOURCE_FAMILIES = {
       'fizgig-full-reconcile',
     ],
   },
+  venue: {
+    id: 'venue',
+    label: 'Venue listings',
+    description: 'Venues that publish their own gig list, one shadow source per venue (Backline ADR-119)',
+    sourceIds: ['venue-sugarmill', 'venue-eleven', 'venue-rigger'],
+  },
 };
 
 const KNOWN_SOURCE_IDS = new Set(Object.values(SOURCE_FAMILIES).flatMap((family) => family.sourceIds));
