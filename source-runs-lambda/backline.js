@@ -110,7 +110,7 @@ const SOURCE_FAMILIES = {
     id: 'venue',
     label: 'Venue listings',
     description: 'Venues that publish their own gig list, one shadow source per venue (Backline ADR-119)',
-    sourceIds: ['venue-sugarmill', 'venue-eleven', 'venue-rigger'],
+    sourceIds: ['venue-sugarmill', 'venue-eleven', 'venue-rigger', 'venue-flowerpot'],
   },
 };
 
