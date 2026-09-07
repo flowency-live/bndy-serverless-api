@@ -16,7 +16,7 @@ test('Backline Explorer exposes every known source family', () => {
     'venue',
   ]);
   assert.equal(__test.resolveFamily('klma').sourceIds[0], 'klma-stoke-gig-list');
-  assert.deepEqual(__test.resolveFamily('venue').sourceIds, ['venue-sugarmill', 'venue-eleven', 'venue-rigger']);
+  assert.deepEqual(__test.resolveFamily('venue').sourceIds, ['venue-sugarmill', 'venue-eleven', 'venue-rigger', 'venue-flowerpot']);
   assert.equal(__test.resolveFamily('missing'), null);
 });
 
